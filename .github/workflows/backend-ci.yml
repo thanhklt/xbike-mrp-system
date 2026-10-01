@@ -1,0 +1,65 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  backend-checks:
+    name: Backend Lint & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: xbike_test
+          POSTGRES_PASSWORD: xbike_test_password
+          POSTGRES_DB: xbike_mrp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pytest-asyncio httpx
+          pip install -e .
+
+      - name: Run Ruff Linter & Formatter Check
+        working-directory: ./backend
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Run Pytest Test Suite
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://xbike_test:xbike_test_password@localhost:5432/xbike_mrp_test
+          SECRET_KEY: test-secret-key-for-github-actions-continuous-integration-run
+          ENVIRONMENT: test
+        run: |
+          pytest -v

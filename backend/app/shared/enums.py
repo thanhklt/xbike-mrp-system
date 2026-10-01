@@ -1,0 +1,69 @@
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    MANAGER = "MANAGER"
+    WAREHOUSE = "WAREHOUSE"
+    PRODUCTION = "PRODUCTION"
+    QUALITY = "QUALITY"
+    AUDITOR = "AUDITOR"
+
+
+class ItemType(str, Enum):
+    RAW_MATERIAL = "RAW_MATERIAL"
+    SUB_ASSEMBLY = "SUB_ASSEMBLY"
+    FINISHED_GOOD = "FINISHED_GOOD"
+
+
+class PartCategory(str, Enum):
+    FRAME = "FRAME"
+    FORK = "FORK"
+    WHEEL = "WHEEL"
+    DRIVETRAIN = "DRIVETRAIN"
+    BRAKE = "BRAKE"
+    COCKPIT = "COCKPIT"
+    ELECTRICAL = "ELECTRICAL"
+    ACCESSORY = "ACCESSORY"
+    HARDWARE = "HARDWARE"
+
+
+class UnitOfMeasure(str, Enum):
+    PCS = "PCS"
+    SET = "SET"
+    KG = "KG"
+    METER = "METER"
+    LITER = "LITER"
+
+
+class WorkOrderStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PLANNED = "PLANNED"
+    RELEASED = "RELEASED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class MaterialIssueStatus(str, Enum):
+    REQUESTED = "REQUESTED"
+    APPROVED = "APPROVED"
+    PICKING = "PICKING"
+    ISSUED = "ISSUED"
+    CANCELLED = "CANCELLED"
+
+
+class StockMovementType(str, Enum):
+    RECEIPT = "RECEIPT"
+    ISSUANCE_TO_PRODUCTION = "ISSUANCE_TO_PRODUCTION"
+    PRODUCTION_RECEIPT = "PRODUCTION_RECEIPT"
+    DISPATCH = "DISPATCH"
+    SCRAP = "SCRAP"
+    ADJUSTMENT = "ADJUSTMENT"
+
+
+class GoodsReceiptStatus(str, Enum):
+    PENDING_INSPECTION = "PENDING_INSPECTION"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    PARTIALLY_ACCEPTED = "PARTIALLY_ACCEPTED"
