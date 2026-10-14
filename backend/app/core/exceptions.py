@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -23,7 +24,9 @@ class AppException(Exception):
 
 
 class NotFoundException(AppException):
-    def __init__(self, message: str = "Resource not found", details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, message: str = "Resource not found", details: Optional[Dict[str, Any]] = None
+    ):
         super().__init__(
             message=message,
             code="NOT_FOUND",
@@ -63,7 +66,9 @@ class ForbiddenException(AppException):
 
 
 class ConflictException(AppException):
-    def __init__(self, message: str = "Resource conflict", details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, message: str = "Resource conflict", details: Optional[Dict[str, Any]] = None
+    ):
         super().__init__(
             message=message,
             code="CONFLICT",
@@ -93,7 +98,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             content={
                 "success": False,
                 "error": {

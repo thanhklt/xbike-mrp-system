@@ -1,95 +1,64 @@
-from datetime import datetime, timezone
-from typing import List
-from fastapi import APIRouter, Depends, status
+"""Persisted finished goods issuing endpoints. Demo data lives only in seed.sql."""
 
-from app.core.exceptions import ConflictException, NotFoundException
-from app.core.security import require_roles
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.security import get_current_user_payload, require_roles
+from app.modules.finished_goods_issuing.models import DispatchItem, FinishedGoodsDispatch
 from app.modules.finished_goods_issuing.schemas import (
-    DispatchItemResponse,
     FinishedGoodsDispatchCreate,
     FinishedGoodsDispatchResponse,
 )
-from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response, get_pagination_params
+from app.shared.database_queries import create_record, get_record, list_records
+from app.shared.pagination import PageParams, PaginatedResponse, get_pagination_params
 
-router = APIRouter(prefix="/finished-goods-issuing", tags=["Finished Goods Dispatch"])
-
-SAMPLE_DISPATCHES: List[FinishedGoodsDispatchResponse] = [
-    FinishedGoodsDispatchResponse(
-        id=1,
-        dispatch_number="DSP-2026-0005",
-        destination_dealer="EuroBike Hub Berlin",
-        carrier_tracking_number="DHL-EX-992819",
-        status="DISPATCHED",
-        dispatched_by_user_id=1,
-        notes="Container #4 - Final QA checked",
-        created_at=datetime.now(timezone.utc),
-        dispatched_at=datetime.now(timezone.utc),
-        items=[
-            DispatchItemResponse(
-                id=1,
-                product_part_id=1,
-                product_part_number="XB-BIKE-URBAN-01",
-                product_name="xBike Urban Commuter E-Bike",
-                quantity_dispatched=10.0,
-                serial_numbers="XB26-00101 thru XB26-00110",
-            )
-        ],
-    )
-]
+router = APIRouter(
+    prefix="/finished-goods-issuing",
+    tags=["Finished Goods Issuing"],
+    dependencies=[Depends(get_current_user_payload)],
+)
 
 
 @router.get("", response_model=PaginatedResponse[FinishedGoodsDispatchResponse])
-async def list_dispatches(params: PageParams = Depends(get_pagination_params)):
-    """List outgoing finished goods dispatches."""
-    return create_paginated_response(
-        items=SAMPLE_DISPATCHES,
-        total_items=len(SAMPLE_DISPATCHES),
-        page=params.page,
-        page_size=params.page_size,
+async def list_entries(
+    params: Annotated[PageParams, Depends(get_pagination_params)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await list_records(
+        db,
+        FinishedGoodsDispatch,
+        FinishedGoodsDispatchResponse,
+        params,
+        FinishedGoodsDispatch.loai_phieu == "xuat_thanh_pham",
     )
 
 
 @router.get("/{dispatch_id}", response_model=FinishedGoodsDispatchResponse)
-async def get_dispatch(dispatch_id: int):
-    """Retrieve details of a single dispatch order."""
-    for d in SAMPLE_DISPATCHES:
-        if d.id == dispatch_id:
-            return d
-    raise NotFoundException(message=f"Dispatch {dispatch_id} not found")
-
-
-@router.post("", response_model=FinishedGoodsDispatchResponse, status_code=status.HTTP_201_CREATED)
-async def create_dispatch(
-    payload: FinishedGoodsDispatchCreate,
-    _=Depends(require_roles(["ADMIN", "WAREHOUSE"])),
-):
-    """Register finished bicycle dispatch to dealership or logistics center."""
-    for d in SAMPLE_DISPATCHES:
-        if d.dispatch_number == payload.dispatch_number:
-            raise ConflictException(message=f"Dispatch number {payload.dispatch_number} already exists")
-
-    items_res = [
-        DispatchItemResponse(
-            id=len(SAMPLE_DISPATCHES) * 10 + i,
-            product_part_id=it.product_part_id,
-            product_part_number=f"PROD-{it.product_part_id}",
-            product_name="xBike Model",
-            quantity_dispatched=it.quantity_dispatched,
-            serial_numbers=it.serial_numbers,
-        )
-        for i, it in enumerate(payload.items)
-    ]
-
-    new_dispatch = FinishedGoodsDispatchResponse(
-        id=len(SAMPLE_DISPATCHES) + 1,
-        dispatch_number=payload.dispatch_number,
-        destination_dealer=payload.destination_dealer,
-        carrier_tracking_number=payload.carrier_tracking_number,
-        status=payload.status,
-        dispatched_by_user_id=1,
-        notes=payload.notes,
-        created_at=datetime.now(timezone.utc),
-        items=items_res,
+async def get_entry(dispatch_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    return await get_record(
+        db,
+        FinishedGoodsDispatch,
+        dispatch_id,
+        FinishedGoodsDispatch.loai_phieu == "xuat_thanh_pham",
     )
-    SAMPLE_DISPATCHES.append(new_dispatch)
-    return new_dispatch
+
+
+@router.post("", response_model=FinishedGoodsDispatchResponse, status_code=201)
+async def create_entry(
+    payload: FinishedGoodsDispatchCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
+):
+    if payload.loai_phieu != "xuat_thanh_pham":
+        raise HTTPException(status_code=422, detail="Incorrect issue type for this endpoint")
+    return await create_record(
+        db,
+        FinishedGoodsDispatch,
+        payload,
+        actor,
+        "phieu_xuat",
+        child=(DispatchItem, "phieu_xuat_id"),
+    )

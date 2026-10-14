@@ -26,6 +26,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Backend tests
+backend/tests/
+
 # Virtual Environments
 venv/
 .venv/
@@ -68,3 +71,6 @@ docker-compose.override.yml
 
 # Database / Persistent volumes
 pgdata/
+
+# Poetry
+/backend/poetry.*

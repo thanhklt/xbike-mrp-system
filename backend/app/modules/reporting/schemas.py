@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List
+
 from pydantic import BaseModel
 
 
@@ -26,6 +27,6 @@ class MRPRunResult(BaseModel):
 class DashboardMetrics(BaseModel):
     active_work_orders: int
     total_parts_in_catalog: int
-    critical_shortages_count: int
+    critical_shortages_count: int | None
     today_dispatches_count: int
-    warehouse_capacity_utilization_pct: float
+    warehouse_capacity_utilization_pct: float | None

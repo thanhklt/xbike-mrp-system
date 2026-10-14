@@ -1,45 +1,77 @@
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text
+"""ORM mapping matching infra/postgres/init.sql."""
+
+from datetime import datetime
+
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.shared.enums import GoodsReceiptStatus
 
 
 class GoodsReceiptNote(Base):
-    __tablename__ = "goods_receipt_notes"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    grn_number: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    purchase_order_number: Mapped[str] = mapped_column(String(50), nullable=False)
-    supplier_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("suppliers.id"), nullable=False, index=True
-    )
-    status: Mapped[GoodsReceiptStatus] = mapped_column(
-        Enum(GoodsReceiptStatus, name="goods_receipt_status_enum"),
-        default=GoodsReceiptStatus.PENDING_INSPECTION,
-    )
-    received_by_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    notes: Mapped[str] = mapped_column(Text, nullable=True)
-
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    __tablename__ = "phieu_nhap"
+    __table_args__ = (
+        Index("ix_phieu_nhap_nhan_vien_id", "nhan_vien_id"),
+        Index("ix_phieu_nhap_ncc_id", "ncc_id"),
+        CheckConstraint("trang_thai IN ('nhap', 'hoan_thanh')", name="phieu_nhap_trang_thai_check"),
     )
 
-    items: Mapped[list["ReceiptItem"]] = relationship("ReceiptItem", back_populates="receipt", cascade="all, delete-orphan")
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    ma_phieu_nhap: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    nhan_vien_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("nhan_vien.id", name="fk_phieu_nhap_nhan_vien_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    ncc_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("nha_cung_cap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    tong_tien: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'nhap'"))
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+    items: Mapped[list["ReceiptItem"]] = relationship(
+        "ReceiptItem",
+        foreign_keys="ReceiptItem.phieu_nhap_id",
+        lazy="selectin",
+        passive_deletes="all",
+    )
 
 
 class ReceiptItem(Base):
-    __tablename__ = "goods_receipt_items"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    receipt_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("goods_receipt_notes.id", ondelete="CASCADE"), nullable=False
+    __tablename__ = "chi_tiet_phieu_nhap"
+    __table_args__ = (
+        CheckConstraint("so_luong > 0", name="ck_chi_tiet_phieu_nhap_1"),
+        UniqueConstraint("phieu_nhap_id", "mat_hang_id", name="uq_chi_tiet_phieu_nhap_source"),
+        Index("ix_chi_tiet_phieu_nhap_phieu_nhap_id", "phieu_nhap_id"),
+        Index("ix_chi_tiet_phieu_nhap_mat_hang_id", "mat_hang_id"),
     )
-    part_id: Mapped[int] = mapped_column(Integer, ForeignKey("catalog_parts.id"), nullable=False)
-    quantity_shipped: Mapped[float] = mapped_column(Float, nullable=False)
-    quantity_accepted: Mapped[float] = mapped_column(Float, default=0.0)
-    quantity_rejected: Mapped[float] = mapped_column(Float, default=0.0)
-    lot_number: Mapped[str] = mapped_column(String(50), nullable=True)
 
-    receipt: Mapped["GoodsReceiptNote"] = relationship("GoodsReceiptNote", back_populates="items")
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    phieu_nhap_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "phieu_nhap.id", name="fk_chi_tiet_phieu_nhap_phieu_nhap_id", ondelete="RESTRICT"
+        ),
+        nullable=False,
+    )
+    mat_hang_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("mat_hang.id", name="fk_chi_tiet_phieu_nhap_mat_hang_id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
+    don_gia_thuc: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tong_gia: Mapped[int | None] = mapped_column(Integer, nullable=True)

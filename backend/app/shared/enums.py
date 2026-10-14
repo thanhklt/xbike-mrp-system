@@ -1,69 +1,44 @@
+"""Business enum values used by init.sql and seed.sql."""
+
 from enum import Enum
 
 
 class UserRole(str, Enum):
-    ADMIN = "ADMIN"
-    MANAGER = "MANAGER"
-    WAREHOUSE = "WAREHOUSE"
-    PRODUCTION = "PRODUCTION"
-    QUALITY = "QUALITY"
-    AUDITOR = "AUDITOR"
+    ADMIN = "quan_tri_vien"
+    MANAGER = "quan_ly"
+    EMPLOYEE = "nhan_vien"
 
 
 class ItemType(str, Enum):
-    RAW_MATERIAL = "RAW_MATERIAL"
-    SUB_ASSEMBLY = "SUB_ASSEMBLY"
-    FINISHED_GOOD = "FINISHED_GOOD"
-
-
-class PartCategory(str, Enum):
-    FRAME = "FRAME"
-    FORK = "FORK"
-    WHEEL = "WHEEL"
-    DRIVETRAIN = "DRIVETRAIN"
-    BRAKE = "BRAKE"
-    COCKPIT = "COCKPIT"
-    ELECTRICAL = "ELECTRICAL"
-    ACCESSORY = "ACCESSORY"
-    HARDWARE = "HARDWARE"
-
-
-class UnitOfMeasure(str, Enum):
-    PCS = "PCS"
-    SET = "SET"
-    KG = "KG"
-    METER = "METER"
-    LITER = "LITER"
+    RAW_MATERIAL = "nguyen_vat_lieu"
+    COMPONENT = "linh_kien"
+    SUB_ASSEMBLY = "ban_thanh_pham"
+    FINISHED_GOOD = "thanh_pham"
 
 
 class WorkOrderStatus(str, Enum):
-    DRAFT = "DRAFT"
-    PLANNED = "PLANNED"
-    RELEASED = "RELEASED"
-    IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
+    DRAFT = "nhap"
+    SENT = "da_gui"
+    IN_PROGRESS = "dang_thuc_hien"
+    COMPLETED = "hoan_thanh"
+    CANCELLED = "da_huy"
 
 
 class MaterialIssueStatus(str, Enum):
-    REQUESTED = "REQUESTED"
-    APPROVED = "APPROVED"
-    PICKING = "PICKING"
-    ISSUED = "ISSUED"
-    CANCELLED = "CANCELLED"
-
-
-class StockMovementType(str, Enum):
-    RECEIPT = "RECEIPT"
-    ISSUANCE_TO_PRODUCTION = "ISSUANCE_TO_PRODUCTION"
-    PRODUCTION_RECEIPT = "PRODUCTION_RECEIPT"
-    DISPATCH = "DISPATCH"
-    SCRAP = "SCRAP"
-    ADJUSTMENT = "ADJUSTMENT"
+    DRAFT = "nhap"
+    PENDING = "cho_duyet"
+    APPROVED = "da_duyet"
+    REJECTED = "tu_choi"
 
 
 class GoodsReceiptStatus(str, Enum):
-    PENDING_INSPECTION = "PENDING_INSPECTION"
-    ACCEPTED = "ACCEPTED"
-    REJECTED = "REJECTED"
-    PARTIALLY_ACCEPTED = "PARTIALLY_ACCEPTED"
+    DRAFT = "nhap"
+    COMPLETED = "hoan_thanh"
+
+
+class StockMovementType(str, Enum):
+    RECEIPT = "nhap_vat_tu"
+    ISSUANCE_TO_PRODUCTION = "xuat_vat_tu"
+    PRODUCTION_RECEIPT = "nhap_san_pham_san_xuat"
+    DISPATCH = "xuat_thanh_pham"
+    ADJUSTMENT = "dieu_chinh_ton_kho"

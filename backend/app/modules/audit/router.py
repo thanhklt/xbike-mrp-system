@@ -1,48 +1,26 @@
-from datetime import datetime, timezone
-from typing import List
+"""Read the persisted database; no in-memory fixtures."""
+
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import require_roles
+from app.core.database import get_db
+from app.core.security import get_current_user_payload, require_roles
+from app.modules.audit.models import AuditTrailLog
 from app.modules.audit.schemas import AuditLogResponse
-from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response, get_pagination_params
+from app.shared.database_queries import list_records
+from app.shared.pagination import PageParams, PaginatedResponse, get_pagination_params
 
-router = APIRouter(prefix="/audit", tags=["Compliance & Audit Logs"])
-
-SAMPLE_AUDIT_LOGS: List[AuditLogResponse] = [
-    AuditLogResponse(
-        id=1,
-        user_id=1,
-        user_email="admin@xbike.local",
-        action="CREATE_WORK_ORDER",
-        resource_type="WORK_ORDER",
-        resource_id="WO-2026-0012",
-        details="Authorized batch production of 25 Urban Commuter bikes",
-        ip_address="192.168.1.50",
-        timestamp=datetime.now(timezone.utc),
-    ),
-    AuditLogResponse(
-        id=2,
-        user_id=2,
-        user_email="warehouse@xbike.local",
-        action="POST_GOODS_RECEIPT",
-        resource_type="GRN",
-        resource_id="GRN-2026-0089",
-        details="Received 50 units of 11-speed bicycle chains",
-        ip_address="192.168.1.62",
-        timestamp=datetime.now(timezone.utc),
-    ),
-]
+router = APIRouter(
+    prefix="/audit", tags=["Audit"], dependencies=[Depends(get_current_user_payload)]
+)
 
 
 @router.get("", response_model=PaginatedResponse[AuditLogResponse])
-async def list_audit_logs(
-    params: PageParams = Depends(get_pagination_params),
-    _=Depends(require_roles(["ADMIN", "AUDITOR"])),
+async def list_0(
+    params: Annotated[PageParams, Depends(get_pagination_params)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
 ):
-    """Retrieve immutable audit trail records."""
-    return create_paginated_response(
-        items=SAMPLE_AUDIT_LOGS,
-        total_items=len(SAMPLE_AUDIT_LOGS),
-        page=params.page,
-        page_size=params.page_size,
-    )
+    return await list_records(db, AuditTrailLog, AuditLogResponse, params)

@@ -1,47 +1,54 @@
+"""API schemas matching the PostgreSQL model; no generated sample values."""
+
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field
-from app.shared.enums import MaterialIssueStatus
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class MaterialIssueItemBase(BaseModel):
-    part_id: int
-    quantity_requested: float = Field(..., gt=0)
-    quantity_issued: float = Field(default=0.0, ge=0)
-    source_bin_location: Optional[str] = None
+class MaterialIssueItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class MaterialIssueItemCreate(MaterialIssueItemBase):
-    pass
-
-
-class MaterialIssueItemResponse(MaterialIssueItemBase):
     id: int
-    part_number: Optional[str] = None
-    part_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class MaterialIssueRequestBase(BaseModel):
-    request_number: str = Field(..., max_length=50, example="MIR-2026-0034")
-    work_order_id: int
-    status: MaterialIssueStatus = MaterialIssueStatus.REQUESTED
-    notes: Optional[str] = None
+    phieu_xuat_id: int
+    mat_hang_id: int
+    so_luong: int
+    don_gia_thuc: int | None
+    tong_gia: int | None
 
 
-class MaterialIssueRequestCreate(MaterialIssueRequestBase):
-    items: List[MaterialIssueItemCreate] = []
+class MaterialIssueItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_hang_id: int
+    so_luong: int = Field(gt=0)
+    don_gia_thuc: int | None = Field(default=None, ge=0)
+    tong_gia: int | None = Field(default=None, ge=0)
 
 
-class MaterialIssueRequestResponse(MaterialIssueRequestBase):
+class MaterialIssueRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    requested_by_user_id: int
-    issued_by_user_id: Optional[int] = None
-    created_at: datetime
-    issued_at: Optional[datetime] = None
-    items: List[MaterialIssueItemResponse] = []
+    ma_phieu_xuat: str
+    nhan_vien_id: int | None
+    loai_phieu: Literal["xuat_vat_tu", "xuat_thanh_pham"]
+    yeu_cau_san_xuat_id: int | None
+    lenh_san_xuat_id: int | None
+    tong_tien: int | None
+    trang_thai: Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
+    created_at: datetime | None
+    items: list[MaterialIssueItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+
+class MaterialIssueRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ma_phieu_xuat: str
+    nhan_vien_id: int | None = None
+    loai_phieu: Literal["xuat_vat_tu", "xuat_thanh_pham"]
+    yeu_cau_san_xuat_id: int | None = None
+    lenh_san_xuat_id: int | None = None
+    tong_tien: int | None = Field(default=None, ge=0)
+    trang_thai: Literal["nhap"] = "nhap"
+    items: list[MaterialIssueItemCreate] = Field(default_factory=list)

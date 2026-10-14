@@ -1,48 +1,50 @@
+"""API schemas matching the PostgreSQL model; no generated sample values."""
+
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field
-from app.shared.enums import GoodsReceiptStatus
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ReceiptItemBase(BaseModel):
-    part_id: int
-    quantity_shipped: float = Field(..., gt=0)
-    quantity_accepted: float = Field(default=0.0, ge=0)
-    quantity_rejected: float = Field(default=0.0, ge=0)
-    lot_number: Optional[str] = None
+class ReceiptItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class ReceiptItemCreate(ReceiptItemBase):
-    pass
-
-
-class ReceiptItemResponse(ReceiptItemBase):
     id: int
-    part_number: Optional[str] = None
-    part_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class GoodsReceiptNoteBase(BaseModel):
-    grn_number: str = Field(..., max_length=50, example="GRN-2026-0089")
-    purchase_order_number: str = Field(..., max_length=50, example="PO-2026-004")
-    supplier_id: int
-    status: GoodsReceiptStatus = GoodsReceiptStatus.PENDING_INSPECTION
-    notes: Optional[str] = None
+    phieu_nhap_id: int
+    mat_hang_id: int
+    so_luong: int
+    don_gia_thuc: int | None
+    tong_gia: int | None
 
 
-class GoodsReceiptNoteCreate(GoodsReceiptNoteBase):
-    items: List[ReceiptItemCreate] = []
+class ReceiptItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_hang_id: int
+    so_luong: int = Field(gt=0)
+    don_gia_thuc: int | None = Field(default=None, ge=0)
+    tong_gia: int | None = Field(default=None, ge=0)
 
 
-class GoodsReceiptNoteResponse(GoodsReceiptNoteBase):
+class GoodsReceiptNoteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    supplier_name: Optional[str] = None
-    received_by_user_id: int
-    received_at: datetime
-    items: List[ReceiptItemResponse] = []
+    ma_phieu_nhap: str
+    nhan_vien_id: int | None
+    ncc_id: int | None
+    tong_tien: int | None
+    trang_thai: Literal["nhap", "hoan_thanh"]
+    created_at: datetime | None
+    items: list[ReceiptItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+
+class GoodsReceiptNoteCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ma_phieu_nhap: str
+    nhan_vien_id: int | None = None
+    ncc_id: int | None = None
+    tong_tien: int | None = Field(default=None, ge=0)
+    trang_thai: Literal["nhap"] = "nhap"
+    items: list[ReceiptItemCreate] = Field(default_factory=list)

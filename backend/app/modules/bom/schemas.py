@@ -1,48 +1,44 @@
+"""API schemas matching the PostgreSQL model; no generated sample values."""
+
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class BOMItemBase(BaseModel):
-    component_part_id: int
-    quantity_required: float = Field(..., gt=0)
-    scrap_factor_percent: float = Field(default=0.0, ge=0.0)
-    notes: Optional[str] = None
+class BOMItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class BOMItemCreate(BOMItemBase):
-    pass
-
-
-class BOMItemResponse(BOMItemBase):
     id: int
-    component_part_number: Optional[str] = None
-    component_name: Optional[str] = None
-    unit: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+    bom_id: int
+    mat_hang_id: int
+    so_luong: int
 
 
-class BOMHeaderBase(BaseModel):
-    product_part_id: int
-    bom_code: str = Field(..., max_length=50, example="BOM-XB-URBAN-01-V1")
-    version: str = "1.0"
-    description: Optional[str] = None
-    is_active: bool = True
+class BOMItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_hang_id: int
+    so_luong: int = Field(gt=0)
 
 
-class BOMHeaderCreate(BOMHeaderBase):
-    items: List[BOMItemCreate] = []
+class BOMHeaderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class BOMHeaderResponse(BOMHeaderBase):
     id: int
-    product_name: Optional[str] = None
-    product_part_number: Optional[str] = None
-    items: List[BOMItemResponse] = []
-    created_at: datetime
-    updated_at: datetime
+    mat_hang_id: int
+    version: int
+    start_time: datetime | None
+    end_time: datetime | None
+    is_active: bool | None
+    items: list[BOMItemResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+
+class BOMHeaderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_hang_id: int
+    version: int
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    is_active: bool | None = None
+    items: list[BOMItemCreate] = Field(default_factory=list)

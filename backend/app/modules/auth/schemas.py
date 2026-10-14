@@ -1,9 +1,9 @@
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Demo .local emails and usernames in seed.sql are valid login identifiers.
+    email: str = Field(min_length=1)
     password: str
 
 
@@ -15,7 +15,7 @@ class TokenResponse(BaseModel):
 
 class AuthUserResponse(BaseModel):
     id: int
-    email: str
-    full_name: str
-    roles: List[str]
-    is_active: bool
+    email: str | None
+    full_name: str | None
+    ten_dang_nhap: str
+    roles: list[str]

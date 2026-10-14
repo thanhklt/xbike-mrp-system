@@ -1,5 +1,6 @@
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,9 +16,7 @@ class Settings(BaseSettings):
     )
 
     # JWT Authentication
-    SECRET_KEY: str = (
-        "super-secret-jwt-key-xbike-mrp-2026-production-ready-string-minimum-32-chars"
-    )
+    SECRET_KEY: str = "super-secret-jwt-key-xbike-mrp-2026-production-ready-string-minimum-32-chars"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 

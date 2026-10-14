@@ -1,72 +1,114 @@
-from datetime import datetime, timezone
-from typing import List
-from fastapi import APIRouter, Depends, status
+"""Register employee GET endpoints and delegate business logic to the service."""
 
-from app.core.exceptions import NotFoundException
-from app.core.security import require_roles
-from app.modules.users.schemas import UserCreate, UserResponse, UserUpdate
-from app.shared.enums import UserRole
-from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response, get_pagination_params
+from typing import Annotated
+from uuid import uuid4
 
-router = APIRouter(prefix="/users", tags=["Users"])
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# Sample in-memory data for initial template execution
-SAMPLE_USERS = [
-    UserResponse(
-        id=1,
-        email="admin@xbike.local",
-        full_name="System Admin",
-        roles=[UserRole.ADMIN, UserRole.MANAGER],
-        is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    ),
-    UserResponse(
-        id=2,
-        email="production.lead@xbike.local",
-        full_name="Jane Doe (Shopfloor Lead)",
-        roles=[UserRole.PRODUCTION],
-        is_active=True,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    ),
-]
+from app.core.database import get_db
+from app.core.security import get_current_user_payload
+from app.modules.users import service
+from app.modules.users.schemas import (
+    EmployeeSort,
+    EmployeeStatus,
+    NhanVienDetailResponse,
+    NhanVienListQuery,
+    NhanVienListResponse,
+)
+
+router = APIRouter(prefix="/nhan_vien", tags=["nhan_vien"])
 
 
-@router.get("", response_model=PaginatedResponse[UserResponse])
-async def list_users(
-    params: PageParams = Depends(get_pagination_params),
-    _=Depends(require_roles(["ADMIN", "MANAGER"])),
-):
-    """List system users with pagination."""
-    return create_paginated_response(
-        items=SAMPLE_USERS,
-        total_items=len(SAMPLE_USERS),
-        page=params.page,
-        page_size=params.page_size,
-    )
+def get_list_query(
+    request: Request,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[str | None, Query()] = None,
+    sort: Annotated[EmployeeSort, Query()] = "id",
+    vai_tro_id: Annotated[int | None, Query(gt=0)] = None,
+    trang_thai: Annotated[EmployeeStatus | None, Query()] = None,
+) -> NhanVienListQuery:
+    repeated = [key for key in request.query_params if len(request.query_params.getlist(key)) > 1]
+    if repeated:
+        raise RequestValidationError(
+            [
+                {
+                    "loc": ("query", key),
+                    "msg": "Query parameter must appear once",
+                    "type": "value_error",
+                }
+                for key in repeated
+            ]
+        )
+    try:
+        values = dict(request.query_params)
+        values.update(
+            page=page,
+            page_size=page_size,
+            q=q,
+            sort=sort,
+            vai_tro_id=vai_tro_id,
+            trang_thai=trang_thai,
+        )
+        return NhanVienListQuery.model_validate(values)
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [{**error, "loc": ("query", *error["loc"])} for error in exc.errors()]
+        ) from exc
 
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, _=Depends(require_roles(["ADMIN", "MANAGER"]))):
-    """Get user by ID."""
-    for user in SAMPLE_USERS:
-        if user.id == user_id:
-            return user
-    raise NotFoundException(message=f"User with ID {user_id} not found")
+def get_request_id(request: Request) -> str:
+    request_id = getattr(request.state, "request_id", None) or str(uuid4())
+    request.state.request_id = request_id
+    return request_id
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(payload: UserCreate, _=Depends(require_roles(["ADMIN"]))):
-    """Create a new user with assigned roles."""
-    new_user = UserResponse(
-        id=len(SAMPLE_USERS) + 1,
-        email=payload.email,
-        full_name=payload.full_name,
-        roles=payload.roles,
-        is_active=payload.is_active,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    )
-    SAMPLE_USERS.append(new_user)
-    return new_user
+def validate_detail_query(request: Request) -> None:
+    if request.query_params:
+        raise RequestValidationError(
+            [
+                {
+                    "loc": ("query", key),
+                    "msg": "Extra inputs are not permitted",
+                    "type": "extra_forbidden",
+                }
+                for key in request.query_params
+            ]
+        )
+
+
+@router.get("", response_model=NhanVienListResponse)
+async def list_entries(
+    actor: Annotated[dict, Depends(get_current_user_payload)],
+    params: Annotated[NhanVienListQuery, Depends(get_list_query)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request_id: Annotated[str, Depends(get_request_id)],
+) -> NhanVienListResponse:
+    return await service.list_employees(db, params, actor, request_id)
+
+
+@router.get(
+    "/{id}",
+    response_model=NhanVienDetailResponse,
+    dependencies=[Depends(validate_detail_query)],
+    responses={
+        200: {
+            "headers": {
+                "ETag": {"schema": {"type": "string"}, "description": "Strong resource ETag"}
+            }
+        }
+    },
+)
+async def get_entry(
+    id: Annotated[int, Path(gt=0)],
+    actor: Annotated[dict, Depends(get_current_user_payload)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    request_id: Annotated[str, Depends(get_request_id)],
+    response: Response,
+) -> NhanVienDetailResponse:
+    result, etag = await service.get_employee(db, id, actor, request_id)
+    response.headers["ETag"] = etag
+    return result

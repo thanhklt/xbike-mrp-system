@@ -37,18 +37,18 @@ frontend-shell:
 	docker compose exec frontend sh
 
 db-migrate:
-	docker compose exec backend alembic revision --autogenerate -m "$(MSG)"
+	docker compose exec backend poetry run alembic revision --autogenerate -m "$(MSG)"
 
 db-upgrade:
-	docker compose exec backend alembic upgrade head
+	docker compose exec backend poetry run alembic upgrade head
 
 test: test-backend
 
 test-backend:
-	docker compose exec backend pytest
+	docker compose exec backend poetry run pytest
 
 lint:
-	docker compose exec backend ruff check .
+	docker compose exec backend poetry run ruff check .
 	docker compose exec frontend npm run lint
 
 clean:

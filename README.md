@@ -1,5 +1,10 @@
 # 🚴 xBike MRP System
 
+## TO-DO:
+- Thống nhất business key của từng bảng
+- Chỉnh sửa lại seed data
+
+
 **xBike MRP System** is a modern, enterprise-grade Manufacturing Resource Planning (MRP) solution engineered specifically for bicycle manufacturing and assembly operations. It streamlines material requirements planning, multi-level Bills of Materials (BOM), inventory tracking, procurement, work order execution, and dispatching.
 
 ---
@@ -154,18 +159,29 @@ Access the services:
 ## 💻 Local Development Without Docker
 
 ### Backend
+
+Install Poetry 2.4.1 first: `python -m pip install "poetry==2.4.1"`.
+Poetry manages the virtual environment outside this repository, using
+[`backend/poetry.toml`](backend/poetry.toml). Dependency versions are locked
+in `backend/poetry.lock`; include that file when committing dependency changes.
+
 ```bash
 cd backend
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-pip install -e .
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+poetry env use python3.11
+poetry sync --with dev
+poetry run alembic upgrade head
+poetry run uvicorn app.main:app --reload --port 8000
 ```
+
+On Windows, use `poetry env use python` if Python 3.11 is available as `python`.
+Use `poetry add <package>` for runtime dependencies and
+`poetry add --group dev <package>` for development tools.
+Use `poetry run pytest`, `poetry run ruff check .`, and
+`poetry run ruff format --check .` inside `backend` to verify changes.
+See [Poetry environment documentation](https://python-poetry.org/docs/managing-environments/).
+
+Docker installs only runtime dependencies by default. The development Compose
+configuration enables the `dev` group so container test/lint commands work.
 
 ### Frontend
 ```bash

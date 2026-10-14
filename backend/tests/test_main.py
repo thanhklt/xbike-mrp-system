@@ -3,6 +3,14 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_application_lifespan_starts():
+    from app.main import app, lifespan
+
+    async with lifespan(app):
+        assert app.title == "xBike MRP System API"
+
+
+@pytest.mark.asyncio
 async def test_health_check(async_client: AsyncClient):
     """Test standard health check endpoint."""
     response = await async_client.get("/health")

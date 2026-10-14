@@ -1,29 +1,18 @@
-from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+"""ORM mapping matching infra/postgres/init.sql."""
+
+from sqlalchemy import Identity, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
 class Supplier(Base):
-    __tablename__ = "suppliers"
+    __tablename__ = "nha_cung_cap"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    contact_name: Mapped[str] = mapped_column(String(255), nullable=True)
-    contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
-    contact_phone: Mapped[str] = mapped_column(String(50), nullable=True)
-    address: Mapped[str] = mapped_column(Text, nullable=True)
-    payment_terms_days: Mapped[int] = mapped_column(Integer, default=30)
-    lead_time_days: Mapped[int] = mapped_column(Integer, default=14)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    ma_ncc: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    ten_ncc: Mapped[str | None] = mapped_column(String, nullable=True)
+    so_dien_thoai: Mapped[str | None] = mapped_column(String, nullable=True)
+    dia_chi: Mapped[str | None] = mapped_column(String, nullable=True)
+    phuong: Mapped[str | None] = mapped_column(String, nullable=True)
+    tinh: Mapped[str | None] = mapped_column(String, nullable=True)

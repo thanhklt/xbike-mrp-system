@@ -1,38 +1,82 @@
+"""API schemas matching the PostgreSQL model; no generated sample values."""
+
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field
-from app.shared.enums import WorkOrderStatus
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class WorkOrderBase(BaseModel):
-    work_order_number: str = Field(..., max_length=50, example="WO-2026-0012")
-    product_part_id: int
-    bom_id: int
-    quantity_planned: float = Field(..., gt=0)
-    status: WorkOrderStatus = WorkOrderStatus.PLANNED
-    scheduled_start: Optional[datetime] = None
-    scheduled_finish: Optional[datetime] = None
-    notes: Optional[str] = None
+class ProductionRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-
-class WorkOrderCreate(WorkOrderBase):
-    pass
-
-
-class WorkOrderUpdateStatus(BaseModel):
-    status: WorkOrderStatus
-    quantity_completed: Optional[float] = None
-    quantity_scrapped: Optional[float] = None
-
-
-class WorkOrderResponse(WorkOrderBase):
     id: int
-    product_part_number: Optional[str] = None
-    product_name: Optional[str] = None
-    quantity_completed: float = 0.0
-    quantity_scrapped: float = 0.0
+    ma_yeu_cau_san_xuat: str
+    mat_hang_id: int
+    so_luong: int
+    nhan_vien_id: int
+    nhan_vien_duoc_giao_id: int | None
+    trang_thai: Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
     created_at: datetime
-    updated_at: datetime
+    completed_at: datetime | None
 
-    class Config:
-        from_attributes = True
+
+class WorkOrderItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    lenh_san_xuat_id: int
+    mat_hang_id: int
+    so_luong_can: int
+
+
+class WorkOrderItemCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_hang_id: int
+    so_luong_can: int = Field(gt=0)
+
+
+class WorkOrderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ma_lenh_san_xuat: str
+    yeu_cau_san_xuat_id: int
+    lenh_san_xuat_cha_id: int | None
+    mat_hang_id: int
+    bom_id: int
+    so_luong: int
+    nhan_vien_id: int | None
+    trang_thai: Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    items: list[WorkOrderItemResponse] = Field(default_factory=list)
+
+
+class WorkOrderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ma_lenh_san_xuat: str
+    yeu_cau_san_xuat_id: int
+    lenh_san_xuat_cha_id: int | None = None
+    mat_hang_id: int
+    bom_id: int
+    so_luong: int = Field(gt=0)
+    nhan_vien_id: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    trang_thai: Literal["nhap"] = "nhap"
+    items: list[WorkOrderItemCreate] = Field(default_factory=list)
+
+
+class ProductionCompletionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ma_phieu: str
+    lenh_san_xuat_id: int
+    so_luong_hoan_thanh: int
+    nhan_vien_id: int | None
+    trang_thai: Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
+    finish_time: datetime | None
