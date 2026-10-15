@@ -7,6 +7,7 @@ help:
 	@echo "Available commands:"
 	@echo "  make up              - Start all services with Docker Compose"
 	@echo "  make down            - Stop and remove all containers"
+	@echo "  make clear           - Stop containers and delete these volumes"
 	@echo "  make build           - Build or rebuild Docker services"
 	@echo "  make logs            - Follow logs from all containers"
 	@echo "  make backend-shell   - Open bash in backend container"
@@ -20,10 +21,10 @@ help:
 
 up:
 	docker compose up -d
-
 down:
 	docker compose down
-
+clear:
+	docker compose down -v
 build:
 	docker compose build
 

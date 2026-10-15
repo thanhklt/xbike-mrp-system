@@ -57,6 +57,15 @@ Nguồn tài liệu đã thống nhất của project:
 - Nếu không chạy được kiểm tra hoặc có kiểm tra thất bại, báo rõ kiểm tra nào, lý do và ảnh hưởng; không bỏ qua lỗi trong báo cáo.
 - Khi bàn giao, liệt kê các file đã sửa, mục đích thay đổi, kết quả kiểm tra và phần chưa triển khai hoặc giới hạn còn lại.
 
+## 8. Tài liệu sequence cho các module
+
+- Mỗi module backend có endpoint phải có một file Markdown tương ứng tại `docs/sequence/<ten_module>.md`; tên file khớp tên thư mục trong `backend/app/modules/` (ví dụ `users.md`).
+- Trong file của module, mỗi endpoint có một mục riêng ghi rõ HTTP method, đường dẫn đầy đủ và lược đồ trong code block `mermaid` dùng `sequenceDiagram`.
+- Khi thêm, sửa hoặc xóa endpoint, cập nhật tài liệu sequence của module trong cùng tác vụ để phản ánh đúng code hiện tại. Không mô tả endpoint chưa triển khai như chức năng đang có.
+- Lược đồ phải thể hiện luồng thành công, xác thực/phân quyền, kiểm tra đầu vào, các lời gọi xử lý và truy cập dữ liệu liên quan, cùng các nhánh lỗi nghiệp vụ chính và mã HTTP. Chỉ thể hiện các tầng thực sự tồn tại trong code.
+- Ghi chú các khác biệt về dữ liệu trả về theo vai trò, phân trang, header hoặc transaction khi có liên quan. Đối chiếu router, service, schema, model và dependency dùng chung trước khi bàn giao.
+- Khi kiểm chứng, kiểm tra cú pháp Mermaid nếu có công cụ sẵn có và đối chiếu sơ đồ với code; nếu chưa render/kiểm tra được bằng Mermaid thì báo rõ giới hạn đó.
+
 ## Hướng dẫn công cụ hiện có
 
 @C:\Users\marcn\.codex\RTK.md
