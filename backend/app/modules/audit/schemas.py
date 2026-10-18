@@ -1,9 +1,17 @@
 """API schemas matching the PostgreSQL model; no generated sample values."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
+
+
+class CreationAudit(BaseModel):
+    nhan_vien_id: int
+    loai_doi_tuong: str
+    doi_tuong_id: int
+    thao_tac: str = "tao"
+    du_lieu_sau: dict[str, Any]
 
 
 class AuditLogResponse(BaseModel):

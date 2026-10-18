@@ -1,10 +1,32 @@
 """Request parameters and response bodies for the two employee GET endpoints."""
 
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+MAX_EMPLOYEE_ID = 2**31 - 1
+
+
+@dataclass(frozen=True)
+class EmployeeRecord:
+    """Internal employee data, validated for the selected public projection in the service."""
+
+    id: int
+    ma_nhan_vien: str
+    ho_ten: str | None
+    vai_tro_id: int | None
+    ma_vai_tro: str | None
+    trang_thai: str | None
+    ten_dang_nhap: str
+    ngay_sinh: date | None
+    so_dien_thoai: str | None
+    email: str | None
+    ngay_vao_lam: date | None
+    he_so_luong: Decimal | None
+
 
 EmployeeStatus = Literal["hoat_dong", "bi_khoa"]
 RoleCode = Literal["nhan_vien", "quan_ly", "quan_tri_vien"]

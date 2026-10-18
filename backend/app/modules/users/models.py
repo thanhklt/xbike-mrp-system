@@ -3,7 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -33,7 +33,9 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     ngay_vao_lam: Mapped[date | None] = mapped_column(Date, nullable=True)
     he_so_luong: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
-    trang_thai: Mapped[str | None] = mapped_column(String, nullable=True)
+    trang_thai: Mapped[str | None] = mapped_column(
+        String, nullable=True, server_default=text("'hoat_dong'")
+    )
 
     role: Mapped["Role | None"] = relationship(
         "Role", foreign_keys=[vai_tro_id], lazy="selectin", passive_deletes="all"

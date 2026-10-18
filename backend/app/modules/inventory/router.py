@@ -3,14 +3,16 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.core.security import get_current_user_payload, require_roles
-from app.modules.inventory.models import StockLevel, StockMovement
+from app.dependencies import (
+    get_current_user_payload,
+    get_inventory_service,
+    get_pagination_params,
+    require_roles,
+)
 from app.modules.inventory.schemas import StockLevelResponse, StockMovementResponse
-from app.shared.database_queries import list_records, workflow_not_implemented
-from app.shared.pagination import PageParams, PaginatedResponse, get_pagination_params
+from app.modules.inventory.service import InventoryService
+from app.shared.pagination import PageParams, PaginatedResponse
 
 router = APIRouter(
     prefix="/inventory", tags=["Inventory"], dependencies=[Depends(get_current_user_payload)]
@@ -20,21 +22,22 @@ router = APIRouter(
 @router.get("/stock", response_model=PaginatedResponse[StockLevelResponse])
 async def list_0(
     params: Annotated[PageParams, Depends(get_pagination_params)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await list_records(db, StockLevel, StockLevelResponse, params)
+    return await service.list_stock(params)
 
 
 @router.get("/movements", response_model=PaginatedResponse[StockMovementResponse])
 async def list_1(
     params: Annotated[PageParams, Depends(get_pagination_params)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[InventoryService, Depends(get_inventory_service)],
 ):
-    return await list_records(db, StockMovement, StockMovementResponse, params)
+    return await service.list_movements(params)
 
 
 @router.post("/movements")
 async def record_movement(
+    service: Annotated[InventoryService, Depends(get_inventory_service)],
     actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
 ):
-    workflow_not_implemented()
+    await service.record_movement()

@@ -1,7 +1,6 @@
 from math import ceil
 from typing import Generic, List, Optional, TypeVar
 
-from fastapi import Query
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
@@ -14,22 +13,6 @@ class PageParams(BaseModel):
     sort_by: Optional[str] = Field(default="created_at", description="Field to sort by")
     sort_order: Optional[str] = Field(
         default="desc", pattern="^(asc|desc)$", description="Sort order"
-    )
-
-
-def get_pagination_params(
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    search: Optional[str] = Query(None, description="Search filter"),
-    sort_by: Optional[str] = Query("created_at", description="Sort field"),
-    sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
-) -> PageParams:
-    return PageParams(
-        page=page,
-        page_size=page_size,
-        search=search,
-        sort_by=sort_by,
-        sort_order=sort_order,
     )
 
 

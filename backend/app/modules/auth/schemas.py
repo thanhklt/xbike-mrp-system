@@ -19,3 +19,15 @@ class AuthUserResponse(BaseModel):
     full_name: str | None
     ten_dang_nhap: str
     roles: list[str]
+
+
+class AuthEmployee(BaseModel):
+    """Internal credentials/principal; never used as an HTTP response schema."""
+
+    id: int
+    email: str | None
+    full_name: str | None
+    ten_dang_nhap: str
+    roles: list[str]
+    trang_thai: str | None
+    password_hash: str = Field(repr=False, exclude=True)

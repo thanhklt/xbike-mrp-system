@@ -3,12 +3,11 @@
 from hashlib import sha256
 from math import ceil
 
-from sqlalchemy import false, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.exceptions import ForbiddenException, NotFoundException
-from app.modules.users.models import User
+from app.core.errors import ForbiddenException, NotFoundException
+from app.modules.users.ports import UserRepository
 from app.modules.users.schemas import (
+    MAX_EMPLOYEE_ID,
+    EmployeeRecord,
     ListResponseMeta,
     NhanVienAssignmentRead,
     NhanVienDetailResponse,
@@ -18,82 +17,58 @@ from app.modules.users.schemas import (
     ResponseMeta,
 )
 
-# IDs in the Drive model and PostgreSQL are signed 32-bit integers.
-MAX_EMPLOYEE_ID = 2**31 - 1
 
-
-def _employee_response(user: User, actor: dict, *, detail: bool = False):
+def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = False):
     full_profile = "quan_tri_vien" in actor["roles"] or (detail and user.id == int(actor["sub"]))
     schema = NhanVienRead if full_profile else NhanVienAssignmentRead
     values = {name: getattr(user, name) for name in schema.model_fields if name != "ma_vai_tro"}
-    values["ma_vai_tro"] = user.role.ma_vai_tro if user.role else None
+    values["ma_vai_tro"] = user.ma_vai_tro
     return schema.model_validate(values)
 
 
-async def list_employees(
-    db: AsyncSession,
-    params: NhanVienListQuery,
-    actor: dict,
-    request_id: str,
-) -> NhanVienListResponse:
-    if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
-        raise ForbiddenException()
-    query = select(User)
-    if params.q:
-        query = query.where(
-            or_(
-                User.ma_nhan_vien.icontains(params.q, autoescape=True),
-                User.ho_ten.icontains(params.q, autoescape=True),
-            )
-        )
-    if params.vai_tro_id is not None:
-        query = query.where(
-            User.vai_tro_id == params.vai_tro_id
-            if params.vai_tro_id <= MAX_EMPLOYEE_ID
-            else false()
-        )
-    if params.trang_thai is not None:
-        query = query.where(User.trang_thai == params.trang_thai)
-    total = await db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    sort_column = getattr(User, params.sort.removeprefix("-"))
-    ordering = sort_column.desc() if params.sort.startswith("-") else sort_column.asc()
-    offset = (params.page - 1) * params.page_size
-    records = []
-    if offset < total:
-        records = (
-            await db.scalars(
-                query.order_by(ordering, User.id).offset(offset).limit(params.page_size)
-            )
-        ).all()
-    return NhanVienListResponse(
-        data=[_employee_response(user, actor) for user in records],
-        meta=ListResponseMeta(
-            request_id=request_id,
-            page=params.page,
-            page_size=params.page_size,
-            total=total,
-            total_pages=ceil(total / params.page_size),
-        ),
-    )
+class UserService:
+    def __init__(self, repository: UserRepository):
+        self.repository = repository
 
+    async def list_employees(
+        self,
+        params: NhanVienListQuery,
+        actor: dict,
+        request_id: str,
+    ) -> NhanVienListResponse:
+        if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+            raise ForbiddenException()
+        result = await self.repository.list_employees(params)
+        total = result.total
+        records = result.items
+        return NhanVienListResponse(
+            data=[_employee_response(user, actor) for user in records],
+            meta=ListResponseMeta(
+                request_id=request_id,
+                page=params.page,
+                page_size=params.page_size,
+                total=total,
+                total_pages=ceil(total / params.page_size),
+            ),
+        )
 
-async def get_employee(
-    db: AsyncSession,
-    employee_id: int,
-    actor: dict,
-    request_id: str,
-) -> tuple[NhanVienDetailResponse, str]:
-    if employee_id > MAX_EMPLOYEE_ID:
-        raise NotFoundException(message=f"nhan_vien {employee_id} not found")
-    user = await db.scalar(select(User).where(User.id == employee_id))
-    if user is None:
-        raise NotFoundException(message=f"nhan_vien {employee_id} not found")
-    if (
-        not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"])
-        and int(actor["sub"]) != employee_id
-    ):
-        raise ForbiddenException()
-    profile = _employee_response(user, actor, detail=True)
-    # Exclude per-request metadata from the strong representation ETag.
-    etag = f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
-    return NhanVienDetailResponse(data=profile, meta=ResponseMeta(request_id=request_id)), etag
+    async def get_employee(
+        self,
+        employee_id: int,
+        actor: dict,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        if employee_id > MAX_EMPLOYEE_ID:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        user = await self.repository.get_by_id(employee_id)
+        if user is None:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        if (
+            not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"])
+            and int(actor["sub"]) != employee_id
+        ):
+            raise ForbiddenException()
+        profile = _employee_response(user, actor, detail=True)
+        # Exclude per-request metadata from the strong representation ETag.
+        etag = f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
+        return NhanVienDetailResponse(data=profile, meta=ResponseMeta(request_id=request_id)), etag
