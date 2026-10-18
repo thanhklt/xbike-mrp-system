@@ -1,10 +1,5 @@
 # 🚴 xBike MRP System
 
-## TO-DO:
-- Thống nhất business key của từng bảng
-- Chỉnh sửa lại seed data
-
-
 **xBike MRP System** is a modern, enterprise-grade Manufacturing Resource Planning (MRP) solution engineered specifically for bicycle manufacturing and assembly operations. It streamlines material requirements planning, multi-level Bills of Materials (BOM), inventory tracking, procurement, work order execution, and dispatching.
 
 ---
