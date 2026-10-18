@@ -1,18 +1,11 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import bcrypt
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import get_db
-from app.core.exceptions import ForbiddenException, UnauthorizedException
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
+from app.core.errors import UnauthorizedException
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -59,40 +52,3 @@ def decode_access_token(token: str) -> dict:
         raise UnauthorizedException(
             message="Could not validate credentials", details={"error": str(exc)}
         ) from exc
-
-
-async def get_current_user_payload(
-    token: Annotated[str, Depends(oauth2_scheme)], db: Annotated[AsyncSession, Depends(get_db)]
-) -> dict:
-    """Validate the token and reload permissions from the employee record."""
-    from app.modules.users.models import User
-
-    payload = decode_access_token(token)
-    try:
-        user_id = int(payload["sub"])
-    except (KeyError, ValueError, TypeError) as exc:
-        raise UnauthorizedException(message="Invalid token subject") from exc
-    user = await db.scalar(select(User).where(User.id == user_id))
-    if user is None:
-        raise UnauthorizedException(message="Employee no longer exists")
-    if user.trang_thai != "hoat_dong":
-        raise UnauthorizedException(message="Employee account is not active")
-    payload["roles"] = employee_roles(user)
-    return payload
-
-
-def employee_roles(user) -> list[str]:
-    role = user.role.ma_vai_tro if user.role else None
-    return [role] if role else []
-
-
-def require_roles(allowed_roles: List[str]):
-    """Role-based access control dependency factory."""
-
-    async def role_checker(payload: Annotated[dict, Depends(get_current_user_payload)]) -> dict:
-        user_roles = payload.get("roles", [])
-        if not any(role in allowed_roles for role in user_roles):
-            raise ForbiddenException(message="You do not have permission to perform this action")
-        return payload
-
-    return role_checker

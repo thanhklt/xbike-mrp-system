@@ -1,80 +1,37 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.errors import (
+    AppException,
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    IncorrectIssueType,
+    NotFoundException,
+    UnauthorizedException,
+    WorkflowNotImplemented,
+)
 
-class AppException(Exception):
-    """Base application exception."""
+__all__ = [
+    "AppException",
+    "BadRequestException",
+    "ConflictException",
+    "ForbiddenException",
+    "NotFoundException",
+    "UnauthorizedException",
+    "register_exception_handlers",
+]
 
-    def __init__(
-        self,
-        message: str,
-        code: str = "INTERNAL_ERROR",
-        status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        self.message = message
-        self.code = code
-        self.status_code = status_code
-        self.details = details or {}
-        super().__init__(self.message)
-
-
-class NotFoundException(AppException):
-    def __init__(
-        self, message: str = "Resource not found", details: Optional[Dict[str, Any]] = None
-    ):
-        super().__init__(
-            message=message,
-            code="NOT_FOUND",
-            status_code=status.HTTP_404_NOT_FOUND,
-            details=details,
-        )
-
-
-class BadRequestException(AppException):
-    def __init__(self, message: str = "Invalid request", details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            code="BAD_REQUEST",
-            status_code=status.HTTP_400_BAD_REQUEST,
-            details=details,
-        )
-
-
-class UnauthorizedException(AppException):
-    def __init__(self, message: str = "Unauthorized", details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            code="UNAUTHORIZED",
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            details=details,
-        )
-
-
-class ForbiddenException(AppException):
-    def __init__(self, message: str = "Forbidden", details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            code="FORBIDDEN",
-            status_code=status.HTTP_403_FORBIDDEN,
-            details=details,
-        )
-
-
-class ConflictException(AppException):
-    def __init__(
-        self, message: str = "Resource conflict", details: Optional[Dict[str, Any]] = None
-    ):
-        super().__init__(
-            message=message,
-            code="CONFLICT",
-            status_code=status.HTTP_409_CONFLICT,
-            details=details,
-        )
+ERROR_STATUS = {
+    "NOT_FOUND": 404,
+    "BAD_REQUEST": 400,
+    "UNAUTHORIZED": 401,
+    "FORBIDDEN": 403,
+    "CONFLICT": 409,
+}
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -83,7 +40,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         return JSONResponse(
-            status_code=exc.status_code,
+            status_code=ERROR_STATUS.get(exc.code, 500),
             content={
                 "success": False,
                 "error": {
@@ -108,4 +65,17 @@ def register_exception_handlers(app: FastAPI) -> None:
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },
+        )
+
+    @app.exception_handler(IncorrectIssueType)
+    async def incorrect_issue_type_handler(request: Request, exc: IncorrectIssueType):
+        return JSONResponse(
+            status_code=422, content={"detail": "Incorrect issue type for this endpoint"}
+        )
+
+    @app.exception_handler(WorkflowNotImplemented)
+    async def unimplemented_handler(request: Request, exc: WorkflowNotImplemented):
+        return JSONResponse(
+            status_code=501,
+            content={"detail": "This workflow has not been implemented; no data was changed."},
         )

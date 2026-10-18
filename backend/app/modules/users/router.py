@@ -6,11 +6,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
-from app.core.security import get_current_user_payload
-from app.modules.users import service
+from app.dependencies import get_current_user_payload, get_users_service
 from app.modules.users.schemas import (
     EmployeeSort,
     EmployeeStatus,
@@ -18,6 +15,7 @@ from app.modules.users.schemas import (
     NhanVienListQuery,
     NhanVienListResponse,
 )
+from app.modules.users.service import UserService
 
 router = APIRouter(prefix="/nhan_vien", tags=["nhan_vien"])
 
@@ -44,7 +42,7 @@ def get_list_query(
             ]
         )
     try:
-        values = dict(request.query_params)
+        values: dict[str, object] = dict(request.query_params)
         values.update(
             page=page,
             page_size=page_size,
@@ -84,10 +82,10 @@ def validate_detail_query(request: Request) -> None:
 async def list_entries(
     actor: Annotated[dict, Depends(get_current_user_payload)],
     params: Annotated[NhanVienListQuery, Depends(get_list_query)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_users_service)],
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> NhanVienListResponse:
-    return await service.list_employees(db, params, actor, request_id)
+    return await service.list_employees(params, actor, request_id)
 
 
 @router.get(
@@ -105,10 +103,10 @@ async def list_entries(
 async def get_entry(
     id: Annotated[int, Path(gt=0)],
     actor: Annotated[dict, Depends(get_current_user_payload)],
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_users_service)],
     request_id: Annotated[str, Depends(get_request_id)],
     response: Response,
 ) -> NhanVienDetailResponse:
-    result, etag = await service.get_employee(db, id, actor, request_id)
+    result, etag = await service.get_employee(id, actor, request_id)
     response.headers["ETag"] = etag
     return result
