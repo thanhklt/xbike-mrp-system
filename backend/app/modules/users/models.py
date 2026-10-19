@@ -1,9 +1,9 @@
-"""ORM mapping matching infra/postgres/init.sql."""
+"""Employee mapping including the agreed auth status migrations."""
 
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -11,6 +11,9 @@ from app.core.database import Base
 
 class User(Base):
     __tablename__ = "nhan_vien"
+    __table_args__ = (
+        CheckConstraint("trang_thai IN ('hoat_dong', 'bi_khoa')", name="ck_nhan_vien_trang_thai"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     vai_tro_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -33,8 +36,8 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String, nullable=True)
     ngay_vao_lam: Mapped[date | None] = mapped_column(Date, nullable=True)
     he_so_luong: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
-    trang_thai: Mapped[str | None] = mapped_column(
-        String, nullable=True, server_default=text("'hoat_dong'")
+    trang_thai: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'hoat_dong'")
     )
 
     role: Mapped["Role | None"] = relationship(

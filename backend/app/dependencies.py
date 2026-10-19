@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.errors import ForbiddenException
+from app.core.errors import ForbiddenException, UnauthorizedException
 from app.core.sqlalchemy_transaction import SqlAlchemyTransaction
 from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
@@ -36,7 +36,7 @@ from app.modules.users.repository import SqlAlchemyUserRepository
 from app.modules.users.service import UserService
 from app.shared.pagination import PageParams
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token", auto_error=False)
 
 
 def get_pagination_params(
@@ -56,7 +56,9 @@ def get_pagination_params(
 
 
 def get_auth_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuthService:
-    return AuthService(SqlAlchemyAuthRepository(db))
+    return AuthService(
+        SqlAlchemyAuthRepository(db), SqlAlchemyAuditRepository(db), SqlAlchemyTransaction(db)
+    )
 
 
 def get_users_service(db: Annotated[AsyncSession, Depends(get_db)]) -> UserService:
@@ -68,9 +70,11 @@ def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditServ
 
 
 async def get_current_user_payload(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> dict:
+    if not token:
+        raise UnauthorizedException()
     return await service.current_payload(token)
 
 

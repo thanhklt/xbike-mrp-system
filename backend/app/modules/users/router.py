@@ -1,12 +1,13 @@
 """Register employee GET endpoints and delegate business logic to the service."""
 
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
+from app.core.request_context import get_request_id
+from app.core.request_context import reject_query as validate_detail_query
 from app.dependencies import get_current_user_payload, get_users_service
 from app.modules.users.schemas import (
     EmployeeSort,
@@ -56,26 +57,6 @@ def get_list_query(
         raise RequestValidationError(
             [{**error, "loc": ("query", *error["loc"])} for error in exc.errors()]
         ) from exc
-
-
-def get_request_id(request: Request) -> str:
-    request_id = getattr(request.state, "request_id", None) or str(uuid4())
-    request.state.request_id = request_id
-    return request_id
-
-
-def validate_detail_query(request: Request) -> None:
-    if request.query_params:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("query", key),
-                    "msg": "Extra inputs are not permitted",
-                    "type": "extra_forbidden",
-                }
-                for key in request.query_params
-            ]
-        )
 
 
 @router.get("", response_model=NhanVienListResponse)

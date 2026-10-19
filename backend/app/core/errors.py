@@ -38,6 +38,16 @@ class ConflictException(AppException):
     default_message = "Resource conflict"
 
 
+class InvalidCredentialsException(UnauthorizedException):
+    code = "thong_tin_dang_nhap_khong_hop_le"
+    default_message = "Thông tin đăng nhập không hợp lệ"
+
+
+class InactiveAccountException(ForbiddenException):
+    code = "tai_khoan_bi_vo_hieu_hoa"
+    default_message = "Tài khoản không hoạt động"
+
+
 class IncorrectIssueType(Exception):
     """The issue document belongs to the other issuing flow."""
 
