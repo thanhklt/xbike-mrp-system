@@ -22,6 +22,8 @@ from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGood
 from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
+from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
+from app.modules.mat_hang.service import MatHangService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
 from app.modules.production.repository import SqlAlchemyProductionRepository
@@ -95,6 +97,13 @@ def get_catalog_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Catalog
     return CatalogService(
         SqlAlchemyCatalogRepository(db),
         SqlAlchemyAuditRepository(db),
+        SqlAlchemyTransaction(db),
+    )
+
+
+def get_mat_hang_service(db: Annotated[AsyncSession, Depends(get_db)]) -> MatHangService:
+    return MatHangService(
+        SqlAlchemyMatHangRepository(db),
         SqlAlchemyTransaction(db),
     )
 

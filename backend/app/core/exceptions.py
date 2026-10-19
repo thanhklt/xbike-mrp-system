@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -61,7 +62,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "Input validation failed",
-                    "details": exc.errors(),
+                    "details": jsonable_encoder(exc.errors()),
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },

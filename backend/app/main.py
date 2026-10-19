@@ -12,6 +12,7 @@ from app.modules.bom.router import router as bom_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.finished_goods_issuing.router import router as finished_goods_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.mat_hang.router import router as mat_hang_router
 from app.modules.material_issuing.router import router as material_issuing_router
 from app.modules.production.router import router as production_router
 from app.modules.receiving.router import router as receiving_router
@@ -89,6 +90,7 @@ app.include_router(catalog_router, prefix=api_v1_prefix)
 app.include_router(suppliers_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)
+app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(receiving_router, prefix=api_v1_prefix)
 app.include_router(material_issuing_router, prefix=api_v1_prefix)
 app.include_router(production_router, prefix=api_v1_prefix)
