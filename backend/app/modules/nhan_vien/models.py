@@ -1,4 +1,4 @@
-"""ORM mapping matching infra/postgres/init.sql."""
+"""Employee and role ORM mappings shared with authentication."""
 
 from datetime import date
 from decimal import Decimal

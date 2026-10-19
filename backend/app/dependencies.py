@@ -24,6 +24,8 @@ from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
+from app.modules.nhan_vien.ports import EmployeeRepository
+from app.modules.nhan_vien.repository import SqlAlchemyEmployeeRepository
 from app.modules.production.repository import SqlAlchemyProductionRepository
 from app.modules.production.service import ProductionService
 from app.modules.receiving.repository import SqlAlchemyReceivingRepository
@@ -32,8 +34,6 @@ from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
 from app.modules.suppliers.repository import SqlAlchemySupplierRepository
 from app.modules.suppliers.service import SupplierService
-from app.modules.users.repository import SqlAlchemyUserRepository
-from app.modules.users.service import UserService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
@@ -59,8 +59,8 @@ def get_auth_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuthServic
     return AuthService(SqlAlchemyAuthRepository(db))
 
 
-def get_users_service(db: Annotated[AsyncSession, Depends(get_db)]) -> UserService:
-    return UserService(SqlAlchemyUserRepository(db))
+def get_employee_repository(db: Annotated[AsyncSession, Depends(get_db)]) -> EmployeeRepository:
+    return SqlAlchemyEmployeeRepository(db)
 
 
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditService:

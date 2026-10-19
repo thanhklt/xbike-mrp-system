@@ -69,3 +69,17 @@ Nguồn tài liệu đã thống nhất của project:
 ## Hướng dẫn công cụ hiện có
 
 @C:\Users\marcn\.codex\RTK.md
+
+## GitNexus — Graph codebase
+
+- Giữ graph/index trong `.gitnexus/` cho repository `xbike-mrp-system`.
+- Trong project này, GitNexus chỉ cung cấp dữ liệu và công cụ phân tích codebase; không sử dụng các skill `gitnexus-*` để điều phối quy trình làm việc.
+- Có thể dùng `query` để tìm luồng xử lý, `context` để tra cứu symbol, `impact` để xem ảnh hưởng và `detect_changes` để phân tích thay đổi khi cần.
+- Đối chiếu kết quả graph với source hiện tại; graph có thể cũ hoặc không phản ánh đầy đủ lời gọi động.
+
+| Resource | Mục đích |
+| --- | --- |
+| `gitnexus://repo/xbike-mrp-system/context` | Tổng quan codebase và trạng thái index |
+| `gitnexus://repo/xbike-mrp-system/clusters` | Các nhóm chức năng |
+| `gitnexus://repo/xbike-mrp-system/processes` | Các luồng thực thi |
+| `gitnexus://repo/xbike-mrp-system/process/{name}` | Chi tiết một luồng thực thi |

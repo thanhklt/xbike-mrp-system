@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.schemas import AuthEmployee
-from app.modules.users.models import User
+from app.modules.nhan_vien.models import User
 
 
 def auth_employee(user: User) -> AuthEmployee:

@@ -13,11 +13,11 @@ from app.modules.catalog.router import router as catalog_router
 from app.modules.finished_goods_issuing.router import router as finished_goods_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.material_issuing.router import router as material_issuing_router
+from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.production.router import router as production_router
 from app.modules.receiving.router import router as receiving_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.suppliers.router import router as suppliers_router
-from app.modules.users.router import router as users_router
 
 
 @asynccontextmanager
@@ -84,7 +84,7 @@ async def api_ping():
 # Include Domain Routers
 api_v1_prefix = settings.API_V1_STR
 app.include_router(auth_router, prefix=api_v1_prefix)
-app.include_router(users_router, prefix=api_v1_prefix)
+app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(catalog_router, prefix=api_v1_prefix)
 app.include_router(suppliers_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
