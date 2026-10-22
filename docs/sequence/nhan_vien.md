@@ -1,13 +1,25 @@
 # Sequence diagram — nhan_vien
 
-Nguồn triển khai: `backend/app/modules/nhan_vien/{router,service,schemas,dto,ports,repository,models}.py`,
+Nguồn triển khai: `backend/app/modules/nhan_vien/{router,service,write_service,schemas,dto,ports,repository,models,errors}.py`,
 `backend/app/dependencies.py`,
 `backend/app/modules/auth/{service,repository}.py`, `backend/app/core/security.py`,
 `backend/app/core/exceptions.py` và `backend/app/main.py`.
 Đối chiếu quyền truy cập với `api-contract-v2.md` trên Google Drive của project.
 
-`main.py` đăng ký hai endpoint từ `nhan_vien.router`. Module `nhan_vien.models`
-sở hữu ORM `User` và `Role`, được dùng chung với xác thực. Việc chuyển module không đổi schema database.
+`main.py` đăng ký tám endpoint từ hai router trong `nhan_vien.router`. Module sở hữu
+ORM `User` và `Role`, được dùng chung với xác thực. Giữ nguyên schema hiện tại;
+backend cấp ID và kiểm tra trạng thái trong service/repository, không tạo migration.
+
+Quyết định đã chốt với dev ngày 20/10/2026, bổ sung/thay thế contract v2:
+- DELETE chỉ dành cho Admin và là soft delete: chuyển `bi_khoa`, giữ bản ghi, mã và toàn bộ tham chiếu;
+  tài khoản khóa vẫn xuất hiện trong GET và lịch sử. Không có kiểm tra chặn theo tham chiếu để xóa vật lý.
+- PATCH cho phép Admin sửa hồ sơ hoặc chính chủ sửa `ho_ten`, `ngay_sinh`, `so_dien_thoai`, `email`.
+  Chỉ Admin sửa `ngay_vao_lam`, `he_so_luong`; gửi trường vượt quyền từ chối toàn request bằng 403.
+- Giữ đúng sáu API mới được yêu cầu; chưa có endpoint mở khóa trong module.
+
+Nhóm API này dùng envelope v2 `{data, meta}` / `{error, meta}`; validation chỉ trả
+`{field, reason}`, không echo input. Lỗi DB trả 503, lỗi chưa phân loại trả 500 và không lộ SQL.
+Thiếu/token sai hoặc account không tồn tại trả 401; account khác `hoat_dong` trả 403.
 
 `get_employee_repository` tạo `SqlAlchemyEmployeeRepository` từ session do `get_db` cung cấp.
 Router truyền repository vào service theo hợp đồng `EmployeeRepository` trong `ports.py`.
@@ -48,22 +60,25 @@ sequenceDiagram
         AuthRepo->>DB: Lấy nhân viên theo sub và vai trò hiện tại
         DB-->>AuthRepo: Nhân viên và vai trò
         AuthRepo-->>Auth: AuthEmployee hoặc không có bản ghi
-        alt Không tồn tại hoặc trạng thái khác hoat_dong
+        alt Không tồn tại
             Auth-->>API: UnauthorizedException
-            API-->>Client: 401 UNAUTHORIZED
+            API-->>Client: 401 chua_xac_thuc
+        else Trạng thái khác hoat_dong
+            Auth-->>API: InactiveAccountException
+            API-->>Client: 403 tai_khoan_bi_vo_hieu_hoa
         else Tài khoản hoạt động
             Auth->>Auth: Lấy roles từ database
             Auth-->>API: actor
             API->>API: get_list_query(), validate DanhSachNhanVienRequest
             alt Query không hợp lệ
-                API-->>Client: 422 VALIDATION_ERROR
+                API-->>Client: 422 du_lieu_khong_hop_le
             else Query hợp lệ
                 API->>API: Lấy hoặc tạo request_id
                 API->>API: Nhận repo qua Depends(get_employee_repository)
                 API->>Service: list_employees(repo, params, actor, request_id)
                 alt Không có quyền quan_tri_vien hoặc quan_ly
                     Service-->>API: ForbiddenException
-                    API-->>Client: 403 FORBIDDEN
+                    API-->>Client: 403 khong_co_quyen
                 else Có quyền xem danh sách
                     Service->>Service: Tạo EmployeeListQuery từ params đã validate
                     Service->>EmployeeRepo: list(query)
@@ -137,15 +152,18 @@ sequenceDiagram
         AuthRepo->>DB: Lấy nhân viên theo sub và vai trò hiện tại
         DB-->>AuthRepo: Nhân viên và vai trò
         AuthRepo-->>Auth: AuthEmployee hoặc không có bản ghi
-        alt Không tồn tại hoặc trạng thái khác hoat_dong
+        alt Không tồn tại
             Auth-->>API: UnauthorizedException
-            API-->>Client: 401 UNAUTHORIZED
+            API-->>Client: 401 chua_xac_thuc
+        else Trạng thái khác hoat_dong
+            Auth-->>API: InactiveAccountException
+            API-->>Client: 403 tai_khoan_bi_vo_hieu_hoa
         else Tài khoản hoạt động
             Auth->>Auth: Lấy roles từ database
             Auth-->>API: actor
             API->>API: Validate id và validate_detail_query()
             alt id không hợp lệ hoặc có query parameter
-                API-->>Client: 422 VALIDATION_ERROR
+                API-->>Client: 422 du_lieu_khong_hop_le
             else Đầu vào hợp lệ
                 API->>API: Lấy hoặc tạo request_id
                 API->>API: Nhận repo qua Depends(get_employee_repository)
@@ -165,11 +183,11 @@ sequenceDiagram
                 end
                 alt Repository trả None
                     Service-->>API: NotFoundException
-                    API-->>Client: 404 NOT_FOUND
+                    API-->>Client: 404 khong_tim_thay
                 else Có EmployeeData
                     alt Không phải quản trị viên, quản lý hoặc chính mình
                         Service-->>API: ForbiddenException
-                        API-->>Client: 403 FORBIDDEN
+                        API-->>Client: 403 khong_co_quyen
                     else Có quyền xem
                         alt Quản trị viên hoặc đang xem chính mình
                             Service->>Service: _employee_response(detail=True) chọn trường giao việc và hồ sơ
@@ -202,3 +220,355 @@ sequenceDiagram
 - ETag chỉ bao gồm các trường thực sự trả về. Thay đổi email/hệ số lương không
   làm đổi ETag của quản lý xem người khác; thay đổi trường giao việc vẫn làm đổi ETag.
 - Hai endpoint chỉ đọc, không có transaction ghi dữ liệu.
+
+## POST /api/v1/nhan_vien — Tạo tài khoản
+
+Bắt buộc `ten_dang_nhap`, `mat_khau` tối thiểu 8 ký tự, `ma_nhan_vien`, `vai_tro_id`.
+Hồ sơ nullable: `ho_ten`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`.
+Hệ số lương là JSON string decimal không âm, tối đa 5 chữ số và 2 chữ số thập phân.
+Không nhận ID, trạng thái, `tai_khoan_id` hay trường lạ. Mã/tên đăng nhập do client gửi, duy nhất và bất biến.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Writer as EmployeeWriter
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant Audit as SqlAlchemyAuditRepository
+    participant Tx as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    Client->>API: POST /api/v1/nhan_vien, JSON + Bearer
+    API->>Auth: Xác thực JWT, đọc account và quyền hiện tại từ DB
+    alt JWT thiếu/sai hoặc account không tồn tại
+        API-->>Client: 401 chua_xac_thuc
+    else Account bị khóa
+        API-->>Client: 403 tai_khoan_bi_vo_hieu_hoa
+    else Input/query không hợp lệ
+        API-->>Client: 422 du_lieu_khong_hop_le
+    else Input hợp lệ
+        API->>Writer: create(...)
+        alt Không phải Admin
+            Writer-->>API: 403 khong_co_quyen
+        else Admin
+            Writer->>Writer: Hash Argon2id trên worker thread
+            Writer->>Tx: Bắt đầu thao tác atomic
+            Writer->>Repo: lock_writes(), get_for_update(actor)
+            Repo->>DB: Advisory transaction lock, khóa và đọc lại actor
+            alt Actor mất quyền hoặc bị khóa trong lúc chờ
+                Writer-->>API: 403, rollback
+            else Actor còn quyền
+                Writer->>Repo: get_role(vai_tro_id)
+                Repo->>DB: SELECT vai_tro
+                alt Vai trò không tồn tại hoặc mã vai trò sai
+                    Writer-->>API: 404 hoặc 422, rollback
+                else Vai trò hợp lệ
+                    Writer->>Repo: create(NewEmployee)
+                    Repo->>DB: Lấy MAX(id) dưới advisory lock, INSERT ID mới và trang_thai=hoat_dong, flush
+                    alt Trùng tên đăng nhập hoặc mã
+                        Repo-->>API: 409 ma_bi_trung, rollback
+                    else Tạo được tài khoản
+                        Repo-->>Writer: EmployeeData không có credentials
+                        Writer->>Audit: append(tao, du_lieu_sau)
+                        Audit->>DB: Thêm audit trong cùng session
+                        Writer->>Tx: COMMIT account và audit
+                        Writer-->>API: Hồ sơ, request_id, ETag
+                        API-->>Client: 201, Location chi tiết, ETag, data/meta
+                    end
+                end
+            end
+        end
+    end
+```
+
+Không có If-Match khi tạo. Audit/commit thất bại rollback cả tài khoản.
+Mật khẩu, hash và token không xuất hiện trong response, audit hoặc SQL parameter logs.
+
+## PATCH /api/v1/nhan_vien/{id} — Sửa hồ sơ
+
+Chỉ nhận các trường hồ sơ nullable của Create. Trường bỏ qua giữ nguyên, `null` xóa giá trị nullable.
+Không nhận mật khẩu, tên đăng nhập, mã nhân viên, vai trò hoặc trạng thái.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Writer as EmployeeWriter
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant Audit as SqlAlchemyAuditRepository
+    participant Tx as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    Client->>API: PATCH /api/v1/nhan_vien/{id}, Bearer, If-Match, JSON
+    API->>Auth: Xác thực, đọc account và vai trò từ DB
+    alt JWT lỗi hoặc account không tồn tại
+        API-->>Client: 401
+    else Account bị khóa
+        API-->>Client: 403
+    else ID/body/query không hợp lệ
+        API-->>Client: 422
+    else Input hợp lệ
+        API->>Writer: patch(id, chỉ các trường được gửi, actor, If-Match)
+        Writer->>Tx: Bắt đầu thao tác atomic
+        Writer->>Repo: Advisory lock, khóa và đọc lại actor
+        Repo->>DB: pg_advisory_xact_lock, SELECT FOR UPDATE
+        alt Actor bị khóa, không phải Admin/chính chủ, hoặc gửi trường vượt quyền
+            Writer-->>API: 403, rollback toàn request
+        else Được sửa
+            Writer->>Repo: get_for_update(id)
+            Repo->>DB: SELECT FOR UPDATE nhân viên đích và tải role
+            alt Không có nhân viên
+                Writer-->>API: 404, rollback
+            else Thiếu If-Match
+                Writer-->>API: 428 thieu_if_match, rollback
+            else ETag không khớp hồ sơ đầy đủ của Admin/chính chủ
+                Writer-->>API: 412 du_lieu_da_thay_doi, rollback
+            else Đúng phiên bản
+                Writer->>Repo: update_profile(chỉ các trường đã gửi)
+                Repo->>DB: UPDATE, flush, đọc snapshot mới
+                opt Có trường được gửi
+                    Writer->>Audit: append(sua, trước/sau)
+                    Audit->>DB: INSERT audit
+                end
+                Writer->>Tx: COMMIT
+                Writer-->>API: Hồ sơ đầy đủ, request_id, ETag mới
+                API-->>Client: 200 data/meta, ETag
+            end
+        end
+    end
+```
+
+Request `{}` vẫn kiểm tra quyền/ETag, trả hồ sơ hiện tại và không ghi audit.
+Admin được sửa cả ngày vào làm/hệ số lương; mọi vai trò được tự sửa bốn trường đã chốt.
+
+## DELETE /api/v1/nhan_vien/{id} — Xóa mềm bằng trạng thái bi_khoa
+
+Không xóa bản ghi, không giải phóng mã/tên đăng nhập và không tác động chứng từ hoặc kho.
+Không yêu cầu body/lý do. If-Match phải là ETag mới nhất từ GET của Admin.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Writer as EmployeeWriter
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant Audit as SqlAlchemyAuditRepository
+    participant Tx as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    Client->>API: DELETE /api/v1/nhan_vien/{id}, Bearer, If-Match
+    API->>Auth: Xác thực và đọc quyền hiện tại
+    alt JWT lỗi/account không tồn tại
+        API-->>Client: 401
+    else Bị khóa hoặc không phải Admin
+        API-->>Client: 403
+    else ID/query sai
+        API-->>Client: 422
+    else Request hợp lệ
+        API->>Writer: soft_delete(id, actor, If-Match)
+        Writer->>Tx: Bắt đầu thao tác atomic
+        Writer->>Repo: Advisory lock, khóa và đọc lại actor/target
+        Repo->>DB: pg_advisory_xact_lock, SELECT FOR UPDATE
+        alt Actor mất quyền/bị khóa
+            Writer-->>API: 403, rollback
+        else Target không tồn tại
+            Writer-->>API: 404, rollback
+        else Thiếu hoặc sai If-Match
+            Writer-->>API: 428 hoặc 412, rollback
+        else Tự khóa tài khoản đang gọi
+            Writer-->>API: 409 khong_the_tu_khoa, rollback
+        else Target đã bi_khoa
+            Writer->>Tx: Kết thúc không thay đổi, không audit lặp
+            API-->>Client: 204, không body
+        else Target hoạt động
+            Writer->>Repo: active_admin_count() nếu target là Admin
+            Repo->>DB: COUNT Admin hoat_dong dưới advisory lock
+            alt Là Admin cuối cùng
+                Writer-->>API: 409 quan_tri_vien_cuoi_cung, rollback
+            else Được phép khóa
+                Writer->>Repo: set_status(id, bi_khoa)
+                Repo->>DB: UPDATE, flush
+                Writer->>Audit: append(vo_hieu_hoa, trước/sau, lý do null)
+                Audit->>DB: INSERT audit
+                Writer->>Tx: COMMIT
+                API-->>Client: 204, không body
+            end
+        end
+    end
+```
+
+Gọi lại vẫn phải gửi If-Match hiện tại: dùng ETag trước lần khóa vẫn trả 412.
+JWT đã cấp cho tài khoản khóa bị chặn ở request sau; không cần thu hồi token để có hiệu lực.
+
+## PUT /api/v1/nhan_vien/{id}/vai_tro — Đổi vai trò
+
+Body duy nhất `{vai_tro_id: integer dương}`. Quyền chỉ từ vai trò hiện tại trong database.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Writer as EmployeeWriter
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant Audit as SqlAlchemyAuditRepository
+    participant Tx as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    Client->>API: PUT /api/v1/nhan_vien/{id}/vai_tro, Bearer, If-Match, JSON
+    API->>Auth: Xác thực, lấy vai trò hiện tại từ DB
+    alt JWT lỗi/account không tồn tại
+        API-->>Client: 401
+    else Account bị khóa hoặc không phải Admin
+        API-->>Client: 403
+    else ID/body/query không hợp lệ
+        API-->>Client: 422
+    else Input hợp lệ
+        API->>Writer: change_role(id, vai_tro_id, actor, If-Match)
+        Writer->>Tx: Bắt đầu thao tác atomic
+        Writer->>Repo: Advisory lock, khóa/đọc lại actor và target
+        Repo->>DB: SELECT FOR UPDATE
+        alt Actor mất quyền/bị khóa
+            Writer-->>API: 403, rollback
+        else Target không tồn tại
+            Writer-->>API: 404, rollback
+        else Thiếu hoặc sai If-Match
+            Writer-->>API: 428 hoặc 412, rollback
+        else ETag đúng
+            Writer->>Repo: get_role(vai_tro_id)
+            Repo->>DB: SELECT vai_tro
+            alt Vai trò không tồn tại hoặc mã vai trò sai
+                Writer-->>API: 404 hoặc 422, rollback
+            else Vai trò không đổi
+                Writer->>Tx: COMMIT không audit lặp
+                API-->>Client: 200 hồ sơ, ETag hiện tại
+            else Vai trò thay đổi
+                Writer->>Repo: Kiểm tra active_admin_count() khi thu quyền Admin
+                Repo->>DB: COUNT Admin hoạt động
+                alt Hạ quyền Admin cuối cùng
+                    Writer-->>API: 409 quan_tri_vien_cuoi_cung, rollback
+                else Được đổi quyền
+                    Writer->>Repo: set_role(id, vai_tro_id)
+                    Repo->>DB: UPDATE, flush, tải lại quan hệ role
+                    opt Có vai trò cũ
+                        Writer->>Audit: append(thu_hoi_quyen, trước/sau)
+                    end
+                    Writer->>Audit: append(cap_quyen, trước/sau)
+                    Audit->>DB: INSERT các audit trong cùng transaction
+                    Writer->>Tx: COMMIT
+                    API-->>Client: 200 hồ sơ, ETag mới
+                end
+            end
+        end
+    end
+```
+
+## POST /api/v1/nhan_vien/{id}/vo_hieu_hoa — Khóa có lý do
+
+Body `{ly_do: string}` bắt buộc, trim và không được rỗng. Chỉ chuyển `hoat_dong → bi_khoa`.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Writer as EmployeeWriter
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant Audit as SqlAlchemyAuditRepository
+    participant Tx as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    Client->>API: POST /api/v1/nhan_vien/{id}/vo_hieu_hoa, Bearer, If-Match, ly_do
+    API->>Auth: Xác thực và lấy quyền từ DB
+    alt JWT lỗi/account không tồn tại
+        API-->>Client: 401
+    else Account bị khóa hoặc không phải Admin
+        API-->>Client: 403
+    else ID/query/body/lý do không hợp lệ
+        API-->>Client: 422
+    else Input hợp lệ
+        API->>Writer: disable(id, ly_do, actor, If-Match)
+        Writer->>Tx: Bắt đầu thao tác atomic
+        Writer->>Repo: Advisory lock, khóa/đọc lại actor và target
+        Repo->>DB: pg_advisory_xact_lock, SELECT FOR UPDATE
+        alt Actor mất quyền/bị khóa
+            Writer-->>API: 403, rollback
+        else Target không tồn tại
+            Writer-->>API: 404, rollback
+        else Thiếu hoặc sai If-Match
+            Writer-->>API: 428 hoặc 412, rollback
+        else Tự khóa
+            Writer-->>API: 409 khong_the_tu_khoa, rollback
+        else Target không hoat_dong
+            Writer-->>API: 409 trang_thai_khong_hop_le, rollback
+        else Trạng thái hợp lệ
+            Writer->>Repo: Kiểm tra active_admin_count() nếu target là Admin
+            Repo->>DB: COUNT Admin hoạt động
+            alt Là Admin cuối cùng
+                Writer-->>API: 409 quan_tri_vien_cuoi_cung, rollback
+            else Được khóa
+                Writer->>Repo: set_status(id, bi_khoa)
+                Repo->>DB: UPDATE và flush
+                Writer->>Audit: append(vo_hieu_hoa, trước/sau, ly_do)
+                Audit->>DB: INSERT audit
+                Writer->>Tx: COMMIT
+                API-->>Client: 200 hồ sơ, ETag mới, data/meta
+            end
+        end
+    end
+```
+
+## GET /api/v1/vai_tro — Danh sách vai trò
+
+Query chỉ gồm `page` (>=1, mặc định 1), `page_size` (1..100, mặc định 20).
+Không nhận query lặp/thừa. Sắp xếp ID tăng dần, trang vượt phạm vi trả danh sách rỗng.
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as nhan_vien.role_router
+    participant Auth as AuthService + SqlAlchemyAuthRepository
+    participant Service as nhan_vien.service
+    participant Repo as SqlAlchemyEmployeeRepository
+    participant DB as PostgreSQL
+    Client->>API: GET /api/v1/vai_tro, query, Bearer
+    API->>Auth: Xác thực, đọc account và role hiện tại từ DB
+    alt JWT lỗi/account không tồn tại
+        API-->>Client: 401
+    else Account bị khóa
+        API-->>Client: 403
+    else Query không hợp lệ
+        API-->>Client: 422
+    else Input hợp lệ
+        API->>Service: list_roles(repo, page, page_size, actor, request_id)
+        alt Không phải Admin hoặc Quản lý
+            Service-->>API: 403 khong_co_quyen
+        else Có quyền
+            Service->>Repo: list_roles(page, page_size)
+            Repo->>DB: COUNT vai_tro
+            opt Trang nằm trong kết quả
+                Repo->>DB: SELECT vai_tro ORDER BY id, OFFSET, LIMIT
+            end
+            Repo-->>Service: RolePage
+            Service-->>API: data gồm id, ma_vai_tro, ten_vai_tro và meta phân trang
+            API-->>Client: 200 data/meta
+        end
+    end
+```
+
+## Schema và kiểm chứng
+
+- Source v3 đã đối chiếu: DBML được liên kết trong `api-contract-v2.md`, schema PostgreSQL hiện tại.
+  `infra/postgres/init.sql` còn model cũ (`loai_nhan_vien`), không phải nguồn bootstrap v3 hợp lệ.
+- Theo yêu cầu dev: không tạo migration hoặc thay đổi schema. ID nhân viên không có identity/sequence;
+  repository lấy MAX(id)+1 dưới cùng advisory transaction lock với mọi API ghi nhân viên, giữ khóa
+  đến commit và kiểm tra giới hạn signed 32-bit. Các lần tạo đồng thời qua API không trùng ID.
+  Tiến trình ghi trực tiếp bằng SQL ngoài API phải phối hợp cùng khóa/cơ chế cấp ID; khóa advisory
+  không tự ép các client SQL khác tuân thủ. PK/UNIQUE của database vẫn chặn dữ liệu trùng.
+- Backend đặt `hoat_dong` khi tạo và kiểm tra trạng thái trên mỗi request; không tự sửa dữ liệu cũ.
+  Dữ liệu NULL/trạng thái lạ vẫn bị từ chối xác thực. Giữ bộ xác minh Argon2id/bcrypt khi rollback code
+  để các tài khoản đã tạo tiếp tục đăng nhập được; không có bước downgrade schema trong tác vụ này.
+- Unit/API dùng SQLite riêng; concurrency dùng database có tên bắt đầu `xbike_employee_test_` và
+  tạo schema riêng mỗi lượt để các kết nối thấy fixture, không reset/xóa dữ liệu hoặc database có sẵn.
+- Chạy trong `backend`: `poetry run pytest -q`, `poetry run ruff check .`, `poetry run ruff format --check .`.
+  Đặt `EMPLOYEE_TEST_DATABASE_URL` tới DB test chuyên biệt để chạy thêm `test_nhan_vien_postgres.py`.
+- Các nhánh lỗi audit/commit rollback mọi cập nhật; lỗi SQL trả 503, lỗi khác trả 500 theo envelope v2.
+  Thứ tự validation và auth không cam kết khi request đồng thời sai nhiều điều kiện.

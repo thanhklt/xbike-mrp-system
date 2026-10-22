@@ -1,7 +1,7 @@
 """Login and current-account policy, independent of HTTP and database sessions."""
 
 from app.core.config import settings
-from app.core.errors import UnauthorizedException
+from app.core.errors import InactiveAccountException, UnauthorizedException
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.modules.auth.ports import AuthRepository
 from app.modules.auth.schemas import AuthUserResponse, TokenResponse
@@ -15,7 +15,11 @@ class AuthService:
         user = await self.repository.find_by_username(identifier)
         if user is None:
             user = await self.repository.find_unique_by_email(identifier)
-        if user is None or not verify_password(password, user.password_hash):
+        if (
+            user is None
+            or not verify_password(password, user.password_hash)
+            or user.trang_thai != "hoat_dong"
+        ):
             raise UnauthorizedException(message="Invalid username/email or password")
         return TokenResponse(
             access_token=create_access_token(subject=user.id, roles=user.roles),
@@ -32,7 +36,7 @@ class AuthService:
         if user is None:
             raise UnauthorizedException(message="Employee no longer exists")
         if user.trang_thai != "hoat_dong":
-            raise UnauthorizedException(message="Employee account is not active")
+            raise InactiveAccountException()
         payload["roles"] = user.roles
         return payload
 

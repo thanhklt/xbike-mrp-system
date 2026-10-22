@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.errors import ForbiddenException
+from app.core.security import get_password_hash
 from app.core.sqlalchemy_transaction import SqlAlchemyTransaction
 from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
@@ -26,6 +27,7 @@ from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRep
 from app.modules.material_issuing.service import MaterialIssuingService
 from app.modules.nhan_vien.ports import EmployeeRepository
 from app.modules.nhan_vien.repository import SqlAlchemyEmployeeRepository
+from app.modules.nhan_vien.write_service import EmployeeWriter
 from app.modules.production.repository import SqlAlchemyProductionRepository
 from app.modules.production.service import ProductionService
 from app.modules.receiving.repository import SqlAlchemyReceivingRepository
@@ -61,6 +63,15 @@ def get_auth_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuthServic
 
 def get_employee_repository(db: Annotated[AsyncSession, Depends(get_db)]) -> EmployeeRepository:
     return SqlAlchemyEmployeeRepository(db)
+
+
+def get_employee_writer(db: Annotated[AsyncSession, Depends(get_db)]) -> EmployeeWriter:
+    return EmployeeWriter(
+        SqlAlchemyEmployeeRepository(db),
+        SqlAlchemyAuditRepository(db),
+        SqlAlchemyTransaction(db),
+        get_password_hash,
+    )
 
 
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditService:

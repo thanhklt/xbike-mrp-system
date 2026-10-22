@@ -33,6 +33,11 @@ class ForbiddenException(AppException):
     default_message = "Forbidden"
 
 
+class InactiveAccountException(UnauthorizedException):
+    code = "ACCOUNT_INACTIVE"
+    default_message = "Employee account is not active"
+
+
 class ConflictException(AppException):
     code = "CONFLICT"
     default_message = "Resource conflict"

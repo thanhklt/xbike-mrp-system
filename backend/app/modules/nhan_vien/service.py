@@ -11,8 +11,10 @@ from app.modules.nhan_vien.schemas import (
     ChiTietNhanVienResponse,
     DanhSachNhanVienRequest,
     DanhSachNhanVienResponse,
+    DanhSachVaiTroResponse,
     ListResponseMeta,
     ResponseMeta,
+    VaiTroRead,
 )
 
 ASSIGNMENT_FIELDS = ("id", "ma_nhan_vien", "ho_ten", "vai_tro_id", "trang_thai")
@@ -83,6 +85,35 @@ async def get_employee(
     ):
         raise ForbiddenException()
     profile = _employee_response(employee, actor, detail=True)
-    # Exclude per-request metadata from the strong representation ETag.
-    etag = f'"{sha256(profile.model_dump_json(exclude_unset=True).encode("utf-8")).hexdigest()}"'
+    etag = employee_etag(employee, actor)
     return ChiTietNhanVienResponse(data=profile, meta=ResponseMeta(request_id=request_id)), etag
+
+
+def employee_etag(employee: EmployeeData, actor: dict) -> str:
+    profile = _employee_response(employee, actor, detail=True)
+    return f'"{sha256(profile.model_dump_json(exclude_unset=True).encode("utf-8")).hexdigest()}"'
+
+
+async def list_roles(
+    repo: EmployeeRepository,
+    page: int,
+    page_size: int,
+    actor: dict,
+    request_id: str,
+) -> DanhSachVaiTroResponse:
+    if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+        raise ForbiddenException()
+    result = await repo.list_roles(page, page_size)
+    return DanhSachVaiTroResponse(
+        data=[
+            VaiTroRead(id=r.id, ma_vai_tro=r.ma_vai_tro, ten_vai_tro=r.ten_vai_tro)
+            for r in result.items
+        ],
+        meta=ListResponseMeta(
+            request_id=request_id,
+            page=page,
+            page_size=page_size,
+            total=result.total,
+            total_pages=ceil(result.total / page_size),
+        ),
+    )

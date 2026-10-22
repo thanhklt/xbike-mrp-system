@@ -1,24 +1,32 @@
-"""Register employee GET endpoints and delegate business logic to the service."""
+"""Register employee and role endpoints; delegate policies to application services."""
 
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Path, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
-from app.dependencies import get_current_user_payload, get_employee_repository
+from app.dependencies import get_current_user_payload, get_employee_repository, get_employee_writer
 from app.modules.nhan_vien import service
 from app.modules.nhan_vien.ports import EmployeeRepository
 from app.modules.nhan_vien.schemas import (
     ChiTietNhanVienResponse,
     DanhSachNhanVienRequest,
     DanhSachNhanVienResponse,
+    DanhSachVaiTroRequest,
+    DanhSachVaiTroResponse,
+    DoiVaiTroRequest,
     EmployeeSort,
     EmployeeStatus,
+    NhanVienCreate,
+    NhanVienPatch,
+    VoHieuHoaRequest,
 )
+from app.modules.nhan_vien.write_service import EmployeeWriter
 
 router = APIRouter(prefix="/nhan_vien", tags=["nhan_vien"])
+role_router = APIRouter(prefix="/vai_tro", tags=["vai_tro"])
 
 
 def get_list_query(
@@ -116,3 +124,145 @@ async def get_entry(
     result, etag = await service.get_employee(repo, id, actor, request_id)
     response.headers["ETag"] = etag
     return result
+
+
+Writer = Annotated[EmployeeWriter, Depends(get_employee_writer)]
+Actor = Annotated[dict, Depends(get_current_user_payload)]
+RequestId = Annotated[str, Depends(get_request_id)]
+IfMatch = Annotated[str | None, Header(alias="If-Match")]
+
+
+@router.post(
+    "",
+    response_model=ChiTietNhanVienResponse,
+    response_model_exclude_unset=True,
+    status_code=201,
+    dependencies=[Depends(validate_detail_query)],
+)
+async def create_entry(
+    payload: NhanVienCreate, actor: Actor, writer: Writer, request_id: RequestId, response: Response
+) -> ChiTietNhanVienResponse:
+    profile = payload.model_dump(
+        exclude={"ten_dang_nhap", "ma_nhan_vien", "vai_tro_id", "mat_khau"}
+    )
+    result, etag = await writer.create(
+        payload.ten_dang_nhap,
+        payload.ma_nhan_vien,
+        payload.vai_tro_id,
+        payload.mat_khau.get_secret_value(),
+        profile,
+        actor,
+        request_id,
+    )
+    response.headers["ETag"] = etag
+    response.headers["Location"] = f"/api/v1/nhan_vien/{result.data.id}"
+    return result
+
+
+@router.patch(
+    "/{id}",
+    response_model=ChiTietNhanVienResponse,
+    response_model_exclude_unset=True,
+    dependencies=[Depends(validate_detail_query)],
+)
+async def patch_entry(
+    id: Annotated[int, Path(gt=0)],
+    payload: NhanVienPatch,
+    actor: Actor,
+    writer: Writer,
+    request_id: RequestId,
+    response: Response,
+    if_match: IfMatch = None,
+) -> ChiTietNhanVienResponse:
+    result, etag = await writer.patch(
+        id, payload.model_dump(exclude_unset=True), actor, if_match, request_id
+    )
+    response.headers["ETag"] = etag
+    return result
+
+
+@router.delete("/{id}", status_code=204, dependencies=[Depends(validate_detail_query)])
+async def delete_entry(
+    id: Annotated[int, Path(gt=0)], actor: Actor, writer: Writer, if_match: IfMatch = None
+) -> Response:
+    await writer.soft_delete(id, actor, if_match)
+    return Response(status_code=204)
+
+
+@router.put(
+    "/{id}/vai_tro",
+    response_model=ChiTietNhanVienResponse,
+    response_model_exclude_unset=True,
+    dependencies=[Depends(validate_detail_query)],
+)
+async def change_role_entry(
+    id: Annotated[int, Path(gt=0)],
+    payload: DoiVaiTroRequest,
+    actor: Actor,
+    writer: Writer,
+    request_id: RequestId,
+    response: Response,
+    if_match: IfMatch = None,
+) -> ChiTietNhanVienResponse:
+    result, etag = await writer.change_role(id, payload.vai_tro_id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@router.post(
+    "/{id}/vo_hieu_hoa",
+    response_model=ChiTietNhanVienResponse,
+    response_model_exclude_unset=True,
+    dependencies=[Depends(validate_detail_query)],
+)
+async def disable_entry(
+    id: Annotated[int, Path(gt=0)],
+    payload: VoHieuHoaRequest,
+    actor: Actor,
+    writer: Writer,
+    request_id: RequestId,
+    response: Response,
+    if_match: IfMatch = None,
+) -> ChiTietNhanVienResponse:
+    result, etag = await writer.disable(id, payload.ly_do, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+def get_role_query(
+    request: Request,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> DanhSachVaiTroRequest:
+    try:
+        values: dict[str, object] = dict(request.query_params)
+        values.update(page=page, page_size=page_size)
+        repeated = [
+            key for key in request.query_params if len(request.query_params.getlist(key)) > 1
+        ]
+        if repeated:
+            raise RequestValidationError(
+                [
+                    {
+                        "loc": ("query", key),
+                        "msg": "Query parameter must appear once",
+                        "type": "value_error",
+                    }
+                    for key in repeated
+                ]
+            )
+        return DanhSachVaiTroRequest.model_validate(values)
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [{**error, "loc": ("query", *error["loc"])} for error in exc.errors()]
+        ) from exc
+
+
+@role_router.get("", response_model=DanhSachVaiTroResponse)
+async def list_role_entries(
+    actor: Actor,
+    request_id: RequestId,
+    params: Annotated[DanhSachVaiTroRequest, Depends(get_role_query)],
+    repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+) -> DanhSachVaiTroResponse:
+    return await service.list_roles(repo, params.page, params.page_size, actor, request_id)

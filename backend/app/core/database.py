@@ -11,6 +11,7 @@ engine = create_async_engine(
     echo=(settings.ENVIRONMENT == "development"),
     future=True,
     pool_pre_ping=True,
+    hide_parameters=True,
 )
 
 # Async session factory

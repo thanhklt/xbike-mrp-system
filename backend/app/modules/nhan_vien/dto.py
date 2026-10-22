@@ -1,6 +1,6 @@
 """ORM-independent data exchanged between employee services and repositories."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
@@ -36,4 +36,26 @@ class EmployeeListQuery:
 @dataclass(frozen=True)
 class EmployeePage:
     items: tuple[EmployeeData, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class NewEmployee:
+    ten_dang_nhap: str
+    ma_nhan_vien: str
+    vai_tro_id: int
+    password_hash: str = field(repr=False)
+    profile: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RoleData:
+    id: int
+    ma_vai_tro: str | None
+    ten_vai_tro: str | None
+
+
+@dataclass(frozen=True)
+class RolePage:
+    items: tuple[RoleData, ...]
     total: int
