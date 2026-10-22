@@ -2,6 +2,9 @@
 -- Chạy một lần trên database/schema public trống; không DROP hoặc ghi đè bảng.
 -- Ví dụ: psql -v ON_ERROR_STOP=1 -d xbike_mrp -f init.sql
 -- Giữ nguyên 20 bảng, tên/kiểu cột, nullability và 39 FK của v3.
+-- Bổ sung đã thống nhất cho auth contract v2: nhan_vien.trang_thai,
+-- NOT NULL, DEFAULT hoat_dong và CHECK hoat_dong/bi_khoa.
+-- Giữ loai_nhan_vien cũ trong SQL để bảo toàn dữ liệu; API không dùng/trả cột này.
 -- Chỉ hai id có [increment] dùng IDENTITY; các id khác do ứng dụng cung cấp.
 -- tai_khoan_id chưa có bảng đích: giữ INTEGER, chưa tạo FK.
 -- Không tự sinh ma_*; backend cấp mã theo quy ước v3, an toàn khi đồng thời.
@@ -46,7 +49,9 @@ CREATE TABLE nhan_vien (
     email VARCHAR,
     ngay_vao_lam DATE,
     he_so_luong NUMERIC(5,2),
+    trang_thai VARCHAR NOT NULL DEFAULT 'hoat_dong',
     loai_nhan_vien VARCHAR,
+    CONSTRAINT ck_nhan_vien_trang_thai CHECK (trang_thai IN ('hoat_dong', 'bi_khoa')),
     CONSTRAINT ck_nhan_vien_01 CHECK (loai_nhan_vien IN ('nhan_vien', 'quan_ly', 'quan_tri_vien')),
     CONSTRAINT ck_nhan_vien_02 CHECK (ma_nhan_vien ~ '^NV-[0-9]{6}$' AND right(ma_nhan_vien, 6) <> '000000')
 );

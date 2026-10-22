@@ -27,7 +27,9 @@ htmlcov/
 .ruff_cache/
 
 # Backend tests
-backend/tests/
+backend/tests/*
+!backend/tests/test_suppliers_api.py
+!backend/tests/test_supplier_writes.py
 
 # Virtual Environments
 venv/

@@ -11,7 +11,8 @@ class CreationAudit(BaseModel):
     loai_doi_tuong: str
     doi_tuong_id: int
     thao_tac: str = "tao"
-    du_lieu_sau: dict[str, Any]
+    du_lieu_sau: dict[str, Any] | None
+    du_lieu_truoc: dict[str, Any] | None = None
 
 
 class AuditLogResponse(BaseModel):

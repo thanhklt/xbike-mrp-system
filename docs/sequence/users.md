@@ -1,7 +1,8 @@
 # Sequence diagram — users
 
-Nguồn triển khai: `backend/app/modules/users/{router,service,schemas,models}.py`,
-`backend/app/core/security.py`, `backend/app/core/exceptions.py` và `backend/app/main.py`.
+Nguồn triển khai: `backend/app/modules/users/{router,service,schemas,models,ports,repository}.py`,
+`backend/app/dependencies.py`, `backend/app/modules/auth/`,
+`backend/app/core/{security,request_context,exceptions}.py` và `backend/app/main.py`.
 Đối chiếu quyền truy cập với `api-contract-v2.md` trên Google Drive của project.
 
 Các sơ đồ gom thao tác SQLAlchemy và tải quan hệ `User.role` (`lazy="selectin"`)
@@ -22,8 +23,10 @@ sequenceDiagram
     autonumber
     actor Client
     participant API as FastAPI / users.router
-    participant Auth as security.py
+    participant Auth as AuthService qua dependency
+    participant AuthRepo as SqlAlchemyAuthRepository
     participant Service as users.service
+    participant Repo as SqlAlchemyUserRepository
     participant DB as PostgreSQL
 
     Client->>API: GET /api/v1/nhan_vien + query, Bearer JWT
@@ -33,11 +36,17 @@ sequenceDiagram
         Auth-->>API: Lỗi xác thực
         API-->>Client: 401 Unauthorized
     else Token hợp lệ
-        Auth->>DB: Lấy nhân viên theo sub và vai trò hiện tại
-        DB-->>Auth: Nhân viên và vai trò
-        alt Không tồn tại hoặc trạng thái khác hoat_dong
+        Auth->>AuthRepo: get_by_id(sub)
+        AuthRepo->>DB: Lấy nhân viên theo sub và vai trò hiện tại
+        DB-->>AuthRepo: Nhân viên và vai trò
+        AuthRepo-->>Auth: AuthEmployee
+        Auth->>Auth: Kiểm tra trạng thái, vai trò và pwdv hiện tại
+        alt Không tồn tại hoặc token thiếu/cũ pwdv
             Auth-->>API: UnauthorizedException
             API-->>Client: 401 UNAUTHORIZED
+        else Account khóa hoặc vai trò không hợp lệ
+            Auth-->>API: InactiveAccountException hoặc ForbiddenException
+            API-->>Client: 403 tai_khoan_bi_vo_hieu_hoa hoặc FORBIDDEN
         else Tài khoản hoạt động
             Auth->>Auth: Lấy roles từ database
             Auth-->>API: actor
@@ -46,21 +55,23 @@ sequenceDiagram
                 API-->>Client: 422 VALIDATION_ERROR
             else Query hợp lệ
                 API->>API: Lấy hoặc tạo request_id
-                API->>Service: list_employees(db, params, actor, request_id)
+                API->>Service: list_employees(params, actor, request_id)
                 alt Không có quyền quan_tri_vien hoặc quan_ly
                     Service-->>API: ForbiddenException
                     API-->>Client: 403 FORBIDDEN
                 else Có quyền xem danh sách
-                    Service->>Service: Tạo bộ lọc q, vai_tro_id, trang_thai
-                    Service->>DB: COUNT theo bộ lọc
-                    DB-->>Service: total
-                    Service->>Service: offset = (page - 1) * page_size
+                    Service->>Repo: list_employees(params)
+                    Repo->>Repo: Tạo bộ lọc q, vai_tro_id, trang_thai
+                    Repo->>DB: COUNT theo bộ lọc
+                    DB-->>Repo: total
+                    Repo->>Repo: offset = (page - 1) * page_size
                     alt offset nhỏ hơn total
-                        Service->>DB: SELECT theo bộ lọc, ORDER BY sort và id, OFFSET, LIMIT
-                        DB-->>Service: records cùng quan hệ role
+                        Repo->>DB: SELECT theo bộ lọc, ORDER BY sort và id, OFFSET, LIMIT
+                        DB-->>Repo: records cùng quan hệ role
                     else Trang không có dữ liệu
-                        Service->>Service: records = []
+                        Repo->>Repo: records = []
                     end
+                    Repo-->>Service: RecordPage với EmployeeRecord và total
                     loop Mỗi nhân viên trong records
                         alt actor có quyền quan_tri_vien
                             Service->>Service: _employee_response() dùng NhanVienRead
@@ -93,9 +104,11 @@ sequenceDiagram
     autonumber
     actor Client
     participant API as FastAPI / users.router
-    participant Auth as security.py
+    participant Auth as AuthService qua dependency
+    participant AuthRepo as SqlAlchemyAuthRepository
     participant Service as users.service
     participant DB as PostgreSQL
+    participant Repo as SqlAlchemyUserRepository
 
     Client->>API: GET /api/v1/nhan_vien/{id}, Bearer JWT
     API->>Auth: get_current_user_payload()
@@ -104,11 +117,17 @@ sequenceDiagram
         Auth-->>API: Lỗi xác thực
         API-->>Client: 401 Unauthorized
     else Token hợp lệ
-        Auth->>DB: Lấy nhân viên theo sub và vai trò hiện tại
-        DB-->>Auth: Nhân viên và vai trò
-        alt Không tồn tại hoặc trạng thái khác hoat_dong
+        Auth->>AuthRepo: get_by_id(sub)
+        AuthRepo->>DB: Lấy nhân viên theo sub và vai trò hiện tại
+        DB-->>AuthRepo: Nhân viên và vai trò
+        AuthRepo-->>Auth: AuthEmployee
+        Auth->>Auth: Kiểm tra trạng thái, vai trò và pwdv hiện tại
+        alt Không tồn tại hoặc token thiếu/cũ pwdv
             Auth-->>API: UnauthorizedException
             API-->>Client: 401 UNAUTHORIZED
+        else Account khóa hoặc vai trò không hợp lệ
+            Auth-->>API: InactiveAccountException hoặc ForbiddenException
+            API-->>Client: 403 tai_khoan_bi_vo_hieu_hoa hoặc FORBIDDEN
         else Tài khoản hoạt động
             Auth->>Auth: Lấy roles từ database
             Auth-->>API: actor
@@ -117,13 +136,15 @@ sequenceDiagram
                 API-->>Client: 422 VALIDATION_ERROR
             else Đầu vào hợp lệ
                 API->>API: Lấy hoặc tạo request_id
-                API->>Service: get_employee(db, id, actor, request_id)
+                API->>Service: get_employee(id, actor, request_id)
                 alt id lớn hơn 2147483647
                     Service-->>API: NotFoundException, không truy vấn nhân viên đích
                     API-->>Client: 404 NOT_FOUND
                 else id trong giới hạn
-                    Service->>DB: SELECT nhân viên đích theo id
-                    DB-->>Service: user cùng role hoặc không có bản ghi
+                    Service->>Repo: get_by_id(id)
+                    Repo->>DB: SELECT nhân viên đích theo id và role
+                    DB-->>Repo: user cùng role hoặc không có bản ghi
+                    Repo-->>Service: EmployeeRecord hoặc None
                     alt Không tìm thấy nhân viên đích
                         Service-->>API: NotFoundException
                         API-->>Client: 404 NOT_FOUND

@@ -24,14 +24,14 @@ from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
+from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
+from app.modules.nha_cung_cap.service import SupplierService
 from app.modules.production.repository import SqlAlchemyProductionRepository
 from app.modules.production.service import ProductionService
 from app.modules.receiving.repository import SqlAlchemyReceivingRepository
 from app.modules.receiving.service import ReceivingService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
-from app.modules.suppliers.repository import SqlAlchemySupplierRepository
-from app.modules.suppliers.service import SupplierService
 from app.modules.users.repository import SqlAlchemyUserRepository
 from app.modules.users.service import UserService
 from app.shared.pagination import PageParams

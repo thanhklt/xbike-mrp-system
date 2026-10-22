@@ -28,6 +28,10 @@ __all__ = [
 ]
 
 ERROR_STATUS = {
+    "ma_bi_trung": 409,
+    "dang_duoc_tham_chieu": 409,
+    "thieu_if_match": 428,
+    "du_lieu_da_thay_doi": 412,
     "thong_tin_dang_nhap_khong_hop_le": 401,
     "tai_khoan_bi_vo_hieu_hoa": 403,
     "NOT_FOUND": 404,
@@ -38,11 +42,17 @@ ERROR_STATUS = {
 }
 
 
-def _is_auth(request: Request) -> bool:
-    return request.url.path.startswith(f"{settings.API_V1_STR}/auth/")
+def _uses_contract_envelope(request: Request) -> bool:
+    path = request.url.path
+    suppliers = f"{settings.API_V1_STR}/nha_cung_cap"
+    return (
+        path.startswith(f"{settings.API_V1_STR}/auth/")
+        or path == suppliers
+        or path.startswith(f"{suppliers}/")
+    )
 
 
-def _auth_error(
+def _contract_error(
     request: Request, status: int, code: str, message: str, details: list
 ) -> JSONResponse:
     headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
@@ -64,13 +74,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         status = ERROR_STATUS.get(exc.code, 500)
-        if _is_auth(request):
+        if _uses_contract_envelope(request):
             code = {
                 "UNAUTHORIZED": "chua_xac_thuc",
                 "FORBIDDEN": "khong_co_quyen",
                 "CONFLICT": "trang_thai_khong_hop_le",
+                "NOT_FOUND": "khong_tim_thay",
             }.get(exc.code, exc.code)
-            return _auth_error(request, status, code, exc.message, [])
+            return _contract_error(request, status, code, exc.message, [])
         return JSONResponse(
             status_code=ERROR_STATUS.get(exc.code, 500),
             content={
@@ -86,7 +97,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        if _is_auth(request):
+        if _uses_contract_envelope(request):
             details = [
                 {
                     "field": ".".join(str(part) for part in error["loc"][1:]),
@@ -94,7 +105,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 }
                 for error in exc.errors()
             ]
-            return _auth_error(
+            return _contract_error(
                 request, 422, "du_lieu_khong_hop_le", "Dữ liệu không hợp lệ", details
             )
         return JSONResponse(
@@ -125,6 +136,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected_exception_handler(request: Request, exc: Exception):
-        if _is_auth(request):
-            return _auth_error(request, 500, "loi_noi_bo", "Không thể xử lý yêu cầu", [])
+        if _uses_contract_envelope(request):
+            return _contract_error(request, 500, "loi_noi_bo", "Không thể xử lý yêu cầu", [])
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})

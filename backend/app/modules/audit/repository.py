@@ -17,4 +17,5 @@ class SqlAlchemyAuditRepository:
         return await select_page(self.session, AuditTrailLog, AuditLogResponse, params)
 
     async def append(self, entry: CreationAudit) -> None:
-        self.session.add(AuditTrailLog(**entry.model_dump()))
+        # Missing snapshots are SQL NULL, not the JSONB literal null.
+        self.session.add(AuditTrailLog(**entry.model_dump(exclude_none=True)))
