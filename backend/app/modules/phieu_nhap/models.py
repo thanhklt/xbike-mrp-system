@@ -6,7 +6,6 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
-    Identity,
     Index,
     Integer,
     String,
@@ -26,7 +25,7 @@ class GoodsReceiptNote(Base):
         CheckConstraint("trang_thai IN ('nhap', 'hoan_thanh')", name="phieu_nhap_trang_thai_check"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     ma_phieu_nhap: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     nhan_vien_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -59,7 +58,7 @@ class ReceiptItem(Base):
         Index("ix_chi_tiet_phieu_nhap_mat_hang_id", "mat_hang_id"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     phieu_nhap_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(

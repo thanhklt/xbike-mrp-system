@@ -30,6 +30,8 @@ htmlcov/
 backend/tests/*
 !backend/tests/test_suppliers_api.py
 !backend/tests/test_supplier_writes.py
+!backend/tests/test_phieu_nhap_api.py
+!backend/tests/test_phieu_nhap_actions.py
 
 # Virtual Environments
 venv/

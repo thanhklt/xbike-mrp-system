@@ -28,6 +28,7 @@ __all__ = [
 ]
 
 ERROR_STATUS = {
+    "phu_thuoc_khong_hop_le": 409,
     "ma_bi_trung": 409,
     "dang_duoc_tham_chieu": 409,
     "thieu_if_match": 428,
@@ -45,10 +46,13 @@ ERROR_STATUS = {
 def _uses_contract_envelope(request: Request) -> bool:
     path = request.url.path
     suppliers = f"{settings.API_V1_STR}/nha_cung_cap"
+    receipts = f"{settings.API_V1_STR}/phieu_nhap"
     return (
         path.startswith(f"{settings.API_V1_STR}/auth/")
         or path == suppliers
         or path.startswith(f"{suppliers}/")
+        or path == receipts
+        or path.startswith(f"{receipts}/")
     )
 
 

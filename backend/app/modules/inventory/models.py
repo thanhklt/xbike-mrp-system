@@ -25,7 +25,7 @@ class StockLevel(Base):
         {"comment": "Balance updated with ledger, document and audit in one backend transaction"},
     )
 
-    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("mat_hang.id", name="fk_ton_kho_mat_hang_id", ondelete="RESTRICT"),

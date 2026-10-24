@@ -15,7 +15,7 @@ from app.modules.nha_cung_cap.schemas import (
     SupplierCreate,
     SupplierResponse,
 )
-from app.modules.receiving.models import GoodsReceiptNote
+from app.modules.phieu_nhap.models import GoodsReceiptNote
 from app.shared.pagination import PageParams
 from app.shared.records import CreatedRecord, RecordPage
 

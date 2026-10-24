@@ -2,10 +2,14 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
-from fastapi.exceptions import RequestValidationError
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 
-from app.core.request_context import get_request_id, reject_query
+from app.core.request_context import (
+    get_if_match,
+    get_request_id,
+    reject_query,
+    reject_repeated_query,
+)
 from app.dependencies import (
     get_current_user_payload,
     get_pagination_params,
@@ -29,6 +33,7 @@ legacy_router = APIRouter(
     prefix="/suppliers", tags=["Suppliers"], dependencies=[Depends(get_current_user_payload)]
 )
 
+
 @legacy_router.get("", response_model=PaginatedResponse[SupplierResponse])
 async def list_entries(
     params: Annotated[PageParams, Depends(get_pagination_params)],
@@ -51,41 +56,6 @@ async def create_entry(
     actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
 ):
     return await service.create_entry(payload, actor)
-
-
-def reject_repeated_query(request: Request) -> None:
-    repeated = [key for key in request.query_params if len(request.query_params.getlist(key)) > 1]
-    if repeated:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("query", key),
-                    "msg": "Query parameter must appear once",
-                    "type": "value_error",
-                }
-                for key in repeated
-            ]
-        )
-
-
-def get_if_match(
-    request: Request,
-    if_match: Annotated[
-        str | None,
-        Header(description="Strong ETag from GET detail; required at runtime (428 if missing)"),
-    ] = None,
-) -> str | None:
-    if len(request.headers.getlist("if-match")) > 1:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("header", "If-Match"),
-                    "msg": "If-Match must appear once",
-                    "type": "value_error",
-                }
-            ]
-        )
-    return if_match
 
 
 read_actor = require_roles(["quan_tri_vien", "quan_ly"])

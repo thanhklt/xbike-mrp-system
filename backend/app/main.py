@@ -14,8 +14,8 @@ from app.modules.finished_goods_issuing.router import router as finished_goods_r
 from app.modules.inventory.router import router as inventory_router
 from app.modules.material_issuing.router import router as material_issuing_router
 from app.modules.nha_cung_cap.router import router as suppliers_router
+from app.modules.phieu_nhap.router import router as receiving_router
 from app.modules.production.router import router as production_router
-from app.modules.receiving.router import router as receiving_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.users.router import router as users_router
 

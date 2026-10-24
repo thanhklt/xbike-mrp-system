@@ -23,7 +23,7 @@ from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.nha_cung_cap.models import Supplier
 from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
 from app.modules.nha_cung_cap.service import SupplierService
-from app.modules.receiving.models import GoodsReceiptNote
+from app.modules.phieu_nhap.models import GoodsReceiptNote
 from app.modules.users.models import Role, User
 from tests.test_auth_api import PASSWORD, login
 from tests.test_auth_api import auth_context as auth_context
