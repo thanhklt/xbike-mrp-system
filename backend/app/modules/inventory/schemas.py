@@ -28,6 +28,7 @@ class StockMovementResponse(BaseModel):
         "dieu_chinh_ton_kho",
     ]
     so_luong_bien_dong: int
+    so_luong_hieu_luc: int
     chi_tiet_phieu_nhap_id: int | None
     chi_tiet_phieu_xuat_id: int | None
     chung_tu_hoan_thanh_sx_id: int | None
