@@ -31,7 +31,7 @@ class AuditLogResponse(BaseModel):
         "lenh_san_xuat",
         "chung_tu_hoan_thanh_san_xuat",
         "phieu_dieu_chinh_kho",
-        "phieu_loi_dieu_chinh",
+        "ticket_loi_dieu_chinh",
     ]
     doi_tuong_id: int
     thao_tac: Literal[
@@ -50,8 +50,8 @@ class AuditLogResponse(BaseModel):
         "huy",
         "ghi_nhan_loi",
         "nhan_xu_ly",
-        "mo_lai",
         "giai_quyet",
+        "xac_nhan",
     ]
     du_lieu_truoc: dict | None
     du_lieu_sau: dict | None

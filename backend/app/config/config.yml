@@ -1,0 +1,19 @@
+project_name: "xBike MRP System API"
+version: "0.1.0"
+api_v1_str: "/api/v1"
+environment: "development"
+
+# Database
+database_url: "postgresql+asyncpg://xbike_admin:12345@localhost:5432/xbike_mrp"
+
+# JWT Authentication
+secret_key: "super-secret-jwt-key-xbike-mrp-2026-production-ready-string-minimum-32-chars"
+algorithm: "HS256"
+access_token_expire_minutes: 60
+
+# CORS
+backend_cors_origins:
+  - "http://localhost:3000"
+  - "http://localhost:5173"
+  - "http://localhost:80"
+  - "http://localhost"

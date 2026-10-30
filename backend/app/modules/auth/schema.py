@@ -1,10 +1,8 @@
-from datetime import date
-from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints
 
-from app.modules.users.schemas import NhanVienRead, ResponseMeta
+from app.modules.nhan_vien.service import NhanVienRead, ResponseMeta
 
 Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Password = Annotated[SecretStr, Field(min_length=1, max_length=1024)]
@@ -22,12 +20,6 @@ class DoiMatKhauInput(BaseModel):
 
     mat_khau_hien_tai: Password
     mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024)
-
-
-class LoginRequest(BaseModel):
-    # Demo .local emails and usernames in seed.sql are valid login identifiers.
-    email: Username
-    password: Password
 
 
 class TokenResponse(BaseModel):
@@ -68,22 +60,3 @@ class AuthError(BaseModel):
 class AuthErrorResponse(BaseModel):
     error: AuthError
     meta: ResponseMeta
-
-
-class AuthEmployee(BaseModel):
-    """Internal credentials/principal; never used as an HTTP response schema."""
-
-    id: int
-    email: str | None
-    ho_ten: str | None
-    ten_dang_nhap: str
-    roles: list[str]
-    trang_thai: str | None
-    password_hash: str = Field(repr=False, exclude=True)
-    ma_nhan_vien: str
-    vai_tro_id: int | None
-    ma_vai_tro: str | None
-    ngay_sinh: date | None
-    so_dien_thoai: str | None
-    ngay_vao_lam: date | None
-    he_so_luong: Decimal | None

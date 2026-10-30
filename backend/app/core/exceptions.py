@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.core.config import settings
+from app.config.settings import settings
 from app.core.errors import (
     AppException,
     BadRequestException,
@@ -39,7 +39,7 @@ ERROR_STATUS = {
 
 
 def _is_auth(request: Request) -> bool:
-    return request.url.path.startswith(f"{settings.API_V1_STR}/auth/")
+    return request.url.path.startswith(f"{settings.api_v1_str}/auth/")
 
 
 def _auth_error(

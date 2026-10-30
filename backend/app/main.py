@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.config.settings import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
 from app.modules.audit.router import router as audit_router
@@ -13,11 +13,11 @@ from app.modules.catalog.router import router as catalog_router
 from app.modules.finished_goods_issuing.router import router as finished_goods_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.material_issuing.router import router as material_issuing_router
+from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.production.router import router as production_router
 from app.modules.receiving.router import router as receiving_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.suppliers.router import router as suppliers_router
-from app.modules.users.router import router as users_router
 
 
 @asynccontextmanager
@@ -26,19 +26,19 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(
         "Initializing %s v%s in %s mode...",
-        settings.PROJECT_NAME,
-        settings.VERSION,
-        settings.ENVIRONMENT,
+        settings.project_name,
+        settings.version,
+        settings.environment,
     )
     yield
     # Shutdown
-    logger.info("Shutting down %s...", settings.PROJECT_NAME)
+    logger.info("Shutting down %s...", settings.project_name)
 
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.VERSION,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    title=settings.project_name,
+    version=settings.version,
+    openapi_url=f"{settings.api_v1_str}/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -50,8 +50,8 @@ register_exception_handlers(app)
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS
-    if isinstance(settings.BACKEND_CORS_ORIGINS, list)
+    allow_origins=settings.backend_cors_origins
+    if isinstance(settings.backend_cors_origins, list)
     else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
@@ -65,26 +65,26 @@ async def health_check():
     """Service health status endpoint."""
     return {
         "status": "ok",
-        "app": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT,
+        "app": settings.project_name,
+        "version": settings.version,
+        "environment": settings.environment,
     }
 
 
-@app.get(f"{settings.API_V1_STR}/ping", tags=["Health"])
+@app.get(f"{settings.api_v1_str}/ping", tags=["Health"])
 async def api_ping():
     """API ping status endpoint."""
     return {
         "success": True,
         "message": "xBike MRP API v1 is active",
-        "version": settings.VERSION,
+        "version": settings.version,
     }
 
 
 # Include Domain Routers
-api_v1_prefix = settings.API_V1_STR
+api_v1_prefix = settings.api_v1_str
 app.include_router(auth_router, prefix=api_v1_prefix)
-app.include_router(users_router, prefix=api_v1_prefix)
+app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(catalog_router, prefix=api_v1_prefix)
 app.include_router(suppliers_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)

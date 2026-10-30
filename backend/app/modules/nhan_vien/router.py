@@ -8,15 +8,15 @@ from pydantic import ValidationError
 
 from app.core.request_context import get_request_id
 from app.core.request_context import reject_query as validate_detail_query
-from app.dependencies import get_current_user_payload, get_users_service
-from app.modules.users.schemas import (
+from app.dependencies import get_current_user_payload, get_nhan_vien_service
+from app.modules.nhan_vien.schemas import (
     EmployeeSort,
     EmployeeStatus,
     NhanVienDetailResponse,
     NhanVienListQuery,
     NhanVienListResponse,
 )
-from app.modules.users.service import UserService
+from app.modules.nhan_vien.service import NhanVienService
 
 router = APIRouter(prefix="/nhan_vien", tags=["nhan_vien"])
 
@@ -63,7 +63,7 @@ def get_list_query(
 async def list_entries(
     actor: Annotated[dict, Depends(get_current_user_payload)],
     params: Annotated[NhanVienListQuery, Depends(get_list_query)],
-    service: Annotated[UserService, Depends(get_users_service)],
+    service: Annotated[NhanVienService, Depends(get_nhan_vien_service)],
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> NhanVienListResponse:
     return await service.list_employees(params, actor, request_id)
@@ -84,7 +84,7 @@ async def list_entries(
 async def get_entry(
     id: Annotated[int, Path(gt=0)],
     actor: Annotated[dict, Depends(get_current_user_payload)],
-    service: Annotated[UserService, Depends(get_users_service)],
+    service: Annotated[NhanVienService, Depends(get_nhan_vien_service)],
     request_id: Annotated[str, Depends(get_request_id)],
     response: Response,
 ) -> NhanVienDetailResponse:

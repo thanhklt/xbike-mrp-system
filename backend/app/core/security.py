@@ -8,7 +8,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from jose import JWTError, jwt
 
-from app.core.config import settings
+from app.config.settings import settings
 from app.core.errors import UnauthorizedException
 
 password_hasher = PasswordHasher()
@@ -35,7 +35,7 @@ def get_password_hash(password: str) -> str:
 def password_version(password_hash: str) -> str:
     """Keyed credential version; neither the password nor its hash enters JWTs."""
     return hmac.new(
-        settings.SECRET_KEY.encode(),
+        settings.secret_key.encode(),
         b"xbike-password-version\0" + password_hash.encode(),
         hashlib.sha256,
     ).hexdigest()
@@ -53,7 +53,7 @@ def create_access_token(
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            minutes=settings.access_token_expire_minutes
         )
 
     to_encode = {
@@ -64,7 +64,7 @@ def create_access_token(
     }
     if credential_version is not None:
         to_encode["pwdv"] = credential_version
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
 def decode_access_token(token: str) -> dict:
@@ -72,8 +72,8 @@ def decode_access_token(token: str) -> dict:
     try:
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            settings.secret_key,
+            algorithms=[settings.algorithm],
             options={"require_exp": True, "require_iat": True, "require_sub": True},
         )
         return payload

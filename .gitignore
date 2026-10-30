@@ -26,9 +26,6 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Backend tests
-backend/tests/
-
 # Virtual Environments
 venv/
 .venv/

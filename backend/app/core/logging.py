@@ -2,12 +2,12 @@ import logging
 import logging.config
 import sys
 
-from app.core.config import settings
+from app.config.settings import settings
 
 
 def setup_logging() -> None:
     """Configures centralized logging for the application."""
-    log_level = logging.DEBUG if settings.ENVIRONMENT == "development" else logging.INFO
+    log_level = logging.DEBUG if settings.environment == "development" else logging.INFO
 
     logging_config = {
         "version": 1,
@@ -26,7 +26,7 @@ def setup_logging() -> None:
             "console": {
                 "class": "logging.StreamHandler",
                 "stream": sys.stdout,
-                "formatter": "default" if settings.ENVIRONMENT == "development" else "json",
+                "formatter": "default" if settings.environment == "development" else "json",
             },
         },
         "root": {

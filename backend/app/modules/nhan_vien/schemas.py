@@ -94,3 +94,30 @@ class NhanVienDetailResponse(BaseModel):
 class NhanVienListResponse(BaseModel):
     data: list[NhanVienRead | NhanVienAssignmentRead]
     meta: ListResponseMeta
+
+
+class EmployeeCredentials(BaseModel):
+    """Internal credentials/principal; never used as an HTTP response schema."""
+
+    id: int
+    email: str | None
+    ho_ten: str | None
+    ten_dang_nhap: str
+    roles: list[str]
+    trang_thai: str | None
+    password_hash: str = Field(repr=False, exclude=True)
+    ma_nhan_vien: str
+    vai_tro_id: int | None
+    ma_vai_tro: str | None
+    ngay_sinh: date | None
+    so_dien_thoai: str | None
+    ngay_vao_lam: date | None
+    he_so_luong: Decimal | None
+
+
+class AuthIdentity(BaseModel):
+    """Verified identity exposed to auth; credential hashes stay internal."""
+
+    profile: NhanVienRead
+    roles: list[str]
+    credential_version: str = Field(repr=False, exclude=True)
