@@ -6,14 +6,12 @@ from fastapi import Depends, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.config.settings import settings
 from app.core.database import get_db
-from app.core.errors import ForbiddenException
-from app.core.security import get_password_hash
+from app.core.errors import ForbiddenException, UnauthorizedException
 from app.core.sqlalchemy_transaction import SqlAlchemyTransaction
 from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
-from app.modules.auth.repository import SqlAlchemyAuthRepository
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomService
@@ -25,9 +23,8 @@ from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
-from app.modules.nhan_vien.ports import EmployeeRepository
-from app.modules.nhan_vien.repository import SqlAlchemyEmployeeRepository
-from app.modules.nhan_vien.write_service import EmployeeWriter
+from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
+from app.modules.nhan_vien.service import NhanVienService
 from app.modules.production.repository import SqlAlchemyProductionRepository
 from app.modules.production.service import ProductionService
 from app.modules.receiving.repository import SqlAlchemyReceivingRepository
@@ -38,7 +35,7 @@ from app.modules.suppliers.repository import SqlAlchemySupplierRepository
 from app.modules.suppliers.service import SupplierService
 from app.shared.pagination import PageParams
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
 
 
 def get_pagination_params(
@@ -57,31 +54,29 @@ def get_pagination_params(
     )
 
 
-def get_auth_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuthService:
-    return AuthService(SqlAlchemyAuthRepository(db))
-
-
-def get_employee_repository(db: Annotated[AsyncSession, Depends(get_db)]) -> EmployeeRepository:
-    return SqlAlchemyEmployeeRepository(db)
-
-
-def get_employee_writer(db: Annotated[AsyncSession, Depends(get_db)]) -> EmployeeWriter:
-    return EmployeeWriter(
-        SqlAlchemyEmployeeRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-        get_password_hash,
-    )
-
-
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditService:
     return AuditService(SqlAlchemyAuditRepository(db))
 
 
+def get_nhan_vien_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> NhanVienService:
+    return NhanVienService(SqlAlchemyNhanVienRepository(db), audit, SqlAlchemyTransaction(db))
+
+
+def get_auth_service(
+    employees: Annotated[NhanVienService, Depends(get_nhan_vien_service)],
+) -> AuthService:
+    return AuthService(employees)
+
+
 async def get_current_user_payload(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> dict:
+    if not token:
+        raise UnauthorizedException()
     return await service.current_payload(token)
 
 

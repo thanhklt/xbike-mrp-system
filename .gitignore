@@ -26,12 +26,6 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# Backend tests
-backend/tests/*
-!backend/tests/test_users_api.py
-!backend/tests/test_nhan_vien_writes.py
-!backend/tests/test_nhan_vien_postgres.py
-
 # Virtual Environments
 venv/
 .venv/
@@ -77,4 +71,3 @@ pgdata/
 
 # Poetry
 /backend/poetry.*
-!/backend/poetry.lock

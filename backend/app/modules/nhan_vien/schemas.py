@@ -1,13 +1,32 @@
-"""Contract v2 employee/role requests and responses, including approved policy changes."""
+"""Request parameters and response bodies for the two employee GET endpoints."""
 
-from __future__ import annotations
-
-import re
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field
+
+MAX_EMPLOYEE_ID = 2**31 - 1
+
+
+@dataclass(frozen=True)
+class EmployeeRecord:
+    """Internal employee data, validated for the selected public projection in the service."""
+
+    id: int
+    ma_nhan_vien: str
+    ho_ten: str | None
+    vai_tro_id: int | None
+    ma_vai_tro: str | None
+    trang_thai: str | None
+    ten_dang_nhap: str
+    ngay_sinh: date | None
+    so_dien_thoai: str | None
+    email: str | None
+    ngay_vao_lam: date | None
+    he_so_luong: Decimal | None
+
 
 EmployeeStatus = Literal["hoat_dong", "bi_khoa"]
 RoleCode = Literal["nhan_vien", "quan_ly", "quan_tri_vien"]
@@ -23,7 +42,39 @@ EmployeeSort = Literal[
 ]
 
 
-# Meta model
+class NhanVienListQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    q: str | None = None
+    sort: EmployeeSort = "id"
+    vai_tro_id: int | None = Field(default=None, gt=0)
+    trang_thai: EmployeeStatus | None = None
+
+
+class NhanVienAssignmentRead(BaseModel):
+    """Limited projection for managers assigning work."""
+
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    id: int
+    ma_nhan_vien: str
+    ho_ten: str | None
+    vai_tro_id: int | None
+    ma_vai_tro: RoleCode | None
+    trang_thai: EmployeeStatus
+
+
+class NhanVienRead(NhanVienAssignmentRead):
+    ten_dang_nhap: str
+    ngay_sinh: date | None
+    so_dien_thoai: str | None
+    email: str | None
+    ngay_vao_lam: date | None
+    he_so_luong: Decimal | None = Field(ge=0)
+
+
 class ResponseMeta(BaseModel):
     request_id: str
 
@@ -35,108 +86,38 @@ class ListResponseMeta(ResponseMeta):
     total_pages: int
 
 
-# DanhSachNhanVien model
-class DanhSachNhanVienRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    q: str | None = None
-    sort: EmployeeSort = "id"
-    vai_tro_id: int | None = Field(default=None, gt=0)
-    trang_thai: EmployeeStatus | None = None
-
-
-class DanhSachNhanVienResponse(BaseModel):
-    data: list[ChiTietNhanVien]
-    meta: ListResponseMeta
-
-
-# ChiTietNhanVien model
-class ChiTietNhanVien(BaseModel):
-    """Employee response; the service selects fields according to the caller's permissions."""
-
-    model_config = ConfigDict(extra="forbid", from_attributes=True)
-
-    id: int
-    ma_nhan_vien: str
-    ho_ten: str | None
-    vai_tro_id: int | None
-    ma_vai_tro: RoleCode | None
-    trang_thai: EmployeeStatus
-    ten_dang_nhap: str | None = None
-    ngay_sinh: date | None = None
-    so_dien_thoai: str | None = None
-    email: str | None = None
-    ngay_vao_lam: date | None = None
-    he_so_luong: Decimal | None = Field(default=None, ge=0)
-
-
-class ChiTietNhanVienResponse(BaseModel):
-    data: ChiTietNhanVien
+class NhanVienDetailResponse(BaseModel):
+    data: NhanVienRead | NhanVienAssignmentRead
     meta: ResponseMeta
 
 
-PositiveId = Annotated[int, Field(strict=True, gt=0, le=2**31 - 1)]
-RequiredText = Annotated[str, Field(strict=True, min_length=1)]
-
-
-class NhanVienPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    ho_ten: str | None = None
-    ngay_sinh: date | None = None
-    so_dien_thoai: str | None = None
-    email: str | None = None
-    ngay_vao_lam: date | None = None
-    he_so_luong: Decimal | None = Field(default=None, ge=0, max_digits=5, decimal_places=2)
-
-    @field_validator("ngay_sinh", "ngay_vao_lam", mode="before")
-    @classmethod
-    def date_uses_contract_format(cls, value: object) -> object:
-        if value is not None and (
-            not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
-        ):
-            raise ValueError("Date must use YYYY-MM-DD")
-        return value
-
-    @field_validator("he_so_luong", mode="before")
-    @classmethod
-    def salary_is_json_string(cls, value: object) -> object:
-        if value is not None and not isinstance(value, str):
-            raise ValueError("he_so_luong must be a decimal JSON string")
-        return value
-
-
-class NhanVienCreate(NhanVienPatch):
-    ten_dang_nhap: RequiredText
-    mat_khau: SecretStr = Field(min_length=8)
-    ma_nhan_vien: RequiredText
-    vai_tro_id: PositiveId
-
-
-class DoiVaiTroRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    vai_tro_id: PositiveId
-
-
-class VoHieuHoaRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    ly_do: RequiredText
-
-
-class DanhSachVaiTroRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-
-
-class VaiTroRead(BaseModel):
-    id: int
-    ma_vai_tro: RoleCode | None
-    ten_vai_tro: str | None
-
-
-class DanhSachVaiTroResponse(BaseModel):
-    data: list[VaiTroRead]
+class NhanVienListResponse(BaseModel):
+    data: list[NhanVienRead | NhanVienAssignmentRead]
     meta: ListResponseMeta
+
+
+class EmployeeCredentials(BaseModel):
+    """Internal credentials/principal; never used as an HTTP response schema."""
+
+    id: int
+    email: str | None
+    ho_ten: str | None
+    ten_dang_nhap: str
+    roles: list[str]
+    trang_thai: str | None
+    password_hash: str = Field(repr=False, exclude=True)
+    ma_nhan_vien: str
+    vai_tro_id: int | None
+    ma_vai_tro: str | None
+    ngay_sinh: date | None
+    so_dien_thoai: str | None
+    ngay_vao_lam: date | None
+    he_so_luong: Decimal | None
+
+
+class AuthIdentity(BaseModel):
+    """Verified identity exposed to auth; credential hashes stay internal."""
+
+    profile: NhanVienRead
+    roles: list[str]
+    credential_version: str = Field(repr=False, exclude=True)

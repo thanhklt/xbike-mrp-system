@@ -1,4 +1,4 @@
-.PHONY: help up down logs build backend-shell frontend-shell db-migrate db-upgrade test lint clean
+.PHONY: help up down logs build backend-shell frontend-shell test lint clean
 
 help:
 	@echo "=================================================="
@@ -12,8 +12,6 @@ help:
 	@echo "  make logs            - Follow logs from all containers"
 	@echo "  make backend-shell   - Open bash in backend container"
 	@echo "  make frontend-shell  - Open shell in frontend container"
-	@echo "  make db-migrate      - Create new Alembic migration (arg: MSG='...')"
-	@echo "  make db-upgrade      - Apply Alembic migrations"
 	@echo "  make test            - Run all unit and integration tests"
 	@echo "  make test-backend    - Run backend pytest"
 	@echo "  make lint            - Run backend & frontend lint checks"
@@ -36,12 +34,6 @@ backend-shell:
 
 frontend-shell:
 	docker compose exec frontend sh
-
-db-migrate:
-	docker compose exec backend poetry run alembic revision --autogenerate -m "$(MSG)"
-
-db-upgrade:
-	docker compose exec backend poetry run alembic upgrade head
 
 test: test-backend
 

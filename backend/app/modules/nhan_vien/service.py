@@ -1,119 +1,163 @@
 """Employee lookup, permissions, projections and contract v2 responses."""
 
+import asyncio
+import hmac
 from hashlib import sha256
 from math import ceil
 
-from app.core.errors import ForbiddenException, NotFoundException
-from app.modules.nhan_vien.dto import EmployeeData, EmployeeListQuery
-from app.modules.nhan_vien.ports import EmployeeRepository
+from app.core.errors import (
+    ForbiddenException,
+    InactiveAccountException,
+    InvalidCredentialsException,
+    NotFoundException,
+    UnauthorizedException,
+)
+from app.core.security import get_password_hash, password_version, verify_password
+from app.core.transactions import Transaction
+from app.modules.audit.service import AuditService, CreationAudit
+from app.modules.nhan_vien.ports import NhanVienRepository
 from app.modules.nhan_vien.schemas import (
-    ChiTietNhanVien,
-    ChiTietNhanVienResponse,
-    DanhSachNhanVienRequest,
-    DanhSachNhanVienResponse,
-    DanhSachVaiTroResponse,
+    MAX_EMPLOYEE_ID,
+    AuthIdentity,
+    EmployeeCredentials,
+    EmployeeRecord,
     ListResponseMeta,
+    NhanVienAssignmentRead,
+    NhanVienDetailResponse,
+    NhanVienListQuery,
+    NhanVienListResponse,
+    NhanVienRead,
     ResponseMeta,
-    VaiTroRead,
 )
 
-ASSIGNMENT_FIELDS = ("id", "ma_nhan_vien", "ho_ten", "vai_tro_id", "trang_thai")
-PROFILE_FIELDS = (
-    "ten_dang_nhap",
-    "ngay_sinh",
-    "so_dien_thoai",
-    "email",
-    "ngay_vao_lam",
-    "he_so_luong",
-)
+__all__ = ["NhanVienService", "AuthIdentity", "NhanVienRead", "ResponseMeta"]
 
 
-def _employee_response(
-    employee: EmployeeData, actor: dict, *, detail: bool = False
-) -> ChiTietNhanVien:
-    full_profile = "quan_tri_vien" in actor["roles"] or (
-        detail and employee.id == int(actor["sub"])
-    )
-    fields = ASSIGNMENT_FIELDS + PROFILE_FIELDS if full_profile else ASSIGNMENT_FIELDS
-    values = {name: getattr(employee, name) for name in fields}
-    values["ma_vai_tro"] = employee.ma_vai_tro
-    return ChiTietNhanVien.model_validate(values)
-
-
-async def list_employees(
-    repo: EmployeeRepository,
-    params: DanhSachNhanVienRequest,
-    actor: dict,
-    request_id: str,
-) -> DanhSachNhanVienResponse:
-    if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+def _require_active(user: EmployeeCredentials) -> None:
+    if user.trang_thai != "hoat_dong":
+        raise InactiveAccountException()
+    if not {"quan_tri_vien", "quan_ly", "nhan_vien"}.intersection(user.roles):
         raise ForbiddenException()
-    employee_page = await repo.list(
-        EmployeeListQuery(
-            page=params.page,
-            page_size=params.page_size,
-            q=params.q,
-            sort=params.sort,
-            vai_tro_id=params.vai_tro_id,
-            trang_thai=params.trang_thai,
-        )
-    )
-    return DanhSachNhanVienResponse(
-        data=[_employee_response(employee, actor) for employee in employee_page.items],
-        meta=ListResponseMeta(
-            request_id=request_id,
-            page=params.page,
-            page_size=params.page_size,
-            total=employee_page.total,
-            total_pages=ceil(employee_page.total / params.page_size),
-        ),
-    )
 
 
-async def get_employee(
-    repo: EmployeeRepository,
-    employee_id: int,
-    actor: dict,
-    request_id: str,
-) -> tuple[ChiTietNhanVienResponse, str]:
-    employee = await repo.get_by_id(employee_id)
-    if employee is None:
-        raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+def _require_current_password(user: EmployeeCredentials, version: str) -> None:
     if (
-        not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"])
-        and int(actor["sub"]) != employee_id
+        not isinstance(version, str)
+        or not version.isascii()
+        or not hmac.compare_digest(version, password_version(user.password_hash))
     ):
-        raise ForbiddenException()
-    profile = _employee_response(employee, actor, detail=True)
-    etag = employee_etag(employee, actor)
-    return ChiTietNhanVienResponse(data=profile, meta=ResponseMeta(request_id=request_id)), etag
+        raise UnauthorizedException(message="Please sign in again")
 
 
-def employee_etag(employee: EmployeeData, actor: dict) -> str:
-    profile = _employee_response(employee, actor, detail=True)
-    return f'"{sha256(profile.model_dump_json(exclude_unset=True).encode("utf-8")).hexdigest()}"'
-
-
-async def list_roles(
-    repo: EmployeeRepository,
-    page: int,
-    page_size: int,
-    actor: dict,
-    request_id: str,
-) -> DanhSachVaiTroResponse:
-    if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
-        raise ForbiddenException()
-    result = await repo.list_roles(page, page_size)
-    return DanhSachVaiTroResponse(
-        data=[
-            VaiTroRead(id=r.id, ma_vai_tro=r.ma_vai_tro, ten_vai_tro=r.ten_vai_tro)
-            for r in result.items
-        ],
-        meta=ListResponseMeta(
-            request_id=request_id,
-            page=page,
-            page_size=page_size,
-            total=result.total,
-            total_pages=ceil(result.total / page_size),
-        ),
+def _identity(user: EmployeeCredentials) -> AuthIdentity:
+    return AuthIdentity(
+        profile=NhanVienRead.model_validate(user),
+        roles=user.roles,
+        credential_version=password_version(user.password_hash),
     )
+
+
+def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = False):
+    full_profile = "quan_tri_vien" in actor["roles"] or (detail and user.id == int(actor["sub"]))
+    schema = NhanVienRead if full_profile else NhanVienAssignmentRead
+    values = {name: getattr(user, name) for name in schema.model_fields if name != "ma_vai_tro"}
+    values["ma_vai_tro"] = user.ma_vai_tro
+    return schema.model_validate(values)
+
+
+class NhanVienService:
+    def __init__(
+        self, repository: NhanVienRepository, audit: AuditService, transaction: Transaction
+    ):
+        self.repository = repository
+        self.audit = audit
+        self.transaction = transaction
+
+    async def authenticate_employee(
+        self, identifier: str, password: str, *, allow_email: bool = False
+    ) -> AuthIdentity:
+        user = await self.repository.find_by_username(identifier)
+        if user is None and allow_email:
+            user = await self.repository.find_unique_by_email(identifier)
+        if user is None or not await asyncio.to_thread(
+            verify_password, password, user.password_hash
+        ):
+            raise InvalidCredentialsException()
+        _require_active(user)
+        return _identity(user)
+
+    async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
+        if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
+            raise UnauthorizedException(message="Invalid token subject")
+        user = await self.repository.get_credentials_by_id(employee_id)
+        if user is None:
+            raise UnauthorizedException(message="Employee no longer exists")
+        _require_active(user)
+        _require_current_password(user, credential_version)
+        return _identity(user)
+
+    async def change_password(
+        self, employee_id: int, current_password: str, new_password: str, *, credential_version: str
+    ) -> None:
+        async with self.transaction:
+            user = await self.repository.lock_credentials_by_id(employee_id)
+            if user is None:
+                raise UnauthorizedException(message="Employee no longer exists")
+            _require_active(user)
+            _require_current_password(user, credential_version)
+            if not await asyncio.to_thread(verify_password, current_password, user.password_hash):
+                raise InvalidCredentialsException()
+            new_hash = await asyncio.to_thread(get_password_hash, new_password)
+            await self.repository.set_password_hash(user.id, new_hash)
+            await self.audit.append(
+                CreationAudit(
+                    nhan_vien_id=user.id,
+                    loai_doi_tuong="nhan_vien",
+                    doi_tuong_id=user.id,
+                    thao_tac="sua",
+                    du_lieu_sau={"da_doi_mat_khau": True},
+                )
+            )
+
+    async def list_employees(
+        self,
+        params: NhanVienListQuery,
+        actor: dict,
+        request_id: str,
+    ) -> NhanVienListResponse:
+        if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+            raise ForbiddenException()
+        result = await self.repository.list_employees(params)
+        total = result.total
+        records = result.items
+        return NhanVienListResponse(
+            data=[_employee_response(user, actor) for user in records],
+            meta=ListResponseMeta(
+                request_id=request_id,
+                page=params.page,
+                page_size=params.page_size,
+                total=total,
+                total_pages=ceil(total / params.page_size),
+            ),
+        )
+
+    async def get_employee(
+        self,
+        employee_id: int,
+        actor: dict,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        if employee_id > MAX_EMPLOYEE_ID:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        user = await self.repository.get_by_id(employee_id)
+        if user is None:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        if (
+            not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"])
+            and int(actor["sub"]) != employee_id
+        ):
+            raise ForbiddenException()
+        profile = _employee_response(user, actor, detail=True)
+        # Exclude per-request metadata from the strong representation ETag.
+        etag = f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
+        return NhanVienDetailResponse(data=profile, meta=ResponseMeta(request_id=request_id)), etag
