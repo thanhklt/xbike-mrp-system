@@ -1,5 +1,9 @@
+import os
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.fixture
@@ -10,3 +14,23 @@ async def async_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+async def bootstrapped_connection():
+    """Tests may write only inside a rollback on an explicitly separate test DB."""
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip(
+            "Requires a dedicated PostgreSQL database bootstrapped from init.sql and seed.sql"
+        )
+    if not (make_url(url).database or "").endswith("_test"):
+        pytest.fail("PostgreSQL tests require a database name ending in _test")
+    engine = create_async_engine(url, hide_parameters=True)
+    try:
+        async with engine.connect() as connection:
+            async with connection.begin() as transaction:
+                yield connection
+                await transaction.rollback()
+    finally:
+        await engine.dispose()

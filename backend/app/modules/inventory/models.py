@@ -51,7 +51,7 @@ class StockAdjustment(Base):
     nhan_vien_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
-            "nhan_vien.id", name="fk_phieu_dieu_chinh_kho_nhan_vien_id", ondelete="RESTRICT"
+            "NhanVien.id", name="fk_phieu_dieu_chinh_kho_nhan_vien_id", ondelete="RESTRICT"
         ),
         nullable=False,
     )
@@ -146,7 +146,7 @@ class AdjustmentErrorTicket(Base):
     nguoi_xu_ly_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
-            "nhan_vien.id", name="fk_ticket_loi_dieu_chinh_nguoi_xu_ly_id", ondelete="RESTRICT"
+            "NhanVien.id", name="fk_ticket_loi_dieu_chinh_nguoi_xu_ly_id", ondelete="RESTRICT"
         ),
         nullable=True,
     )
@@ -227,7 +227,7 @@ class StockMovement(Base):
     )
     nhan_vien_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("nhan_vien.id", name="fk_giao_dich_kho_nhan_vien_id", ondelete="RESTRICT"),
+        ForeignKey("NhanVien.id", name="fk_giao_dich_kho_nhan_vien_id", ondelete="RESTRICT"),
         nullable=False,
     )
     posted_at: Mapped[datetime] = mapped_column(

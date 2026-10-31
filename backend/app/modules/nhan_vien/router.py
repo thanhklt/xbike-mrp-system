@@ -1,21 +1,22 @@
 """Register employee GET endpoints and delegate business logic to the service."""
 
 from typing import Annotated
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
-from app.dependencies import get_current_user_payload, get_users_service
-from app.modules.users.schemas import (
+from app.core.request_context import get_request_id
+from app.core.request_context import reject_query as validate_detail_query
+from app.dependencies import get_current_user_payload, get_nhan_vien_service
+from app.modules.nhan_vien.schemas import (
     EmployeeSort,
     EmployeeStatus,
     NhanVienDetailResponse,
     NhanVienListQuery,
     NhanVienListResponse,
 )
-from app.modules.users.service import UserService
+from app.modules.nhan_vien.service import NhanVienService
 
 router = APIRouter(prefix="/nhan_vien", tags=["nhan_vien"])
 
@@ -58,31 +59,11 @@ def get_list_query(
         ) from exc
 
 
-def get_request_id(request: Request) -> str:
-    request_id = getattr(request.state, "request_id", None) or str(uuid4())
-    request.state.request_id = request_id
-    return request_id
-
-
-def validate_detail_query(request: Request) -> None:
-    if request.query_params:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("query", key),
-                    "msg": "Extra inputs are not permitted",
-                    "type": "extra_forbidden",
-                }
-                for key in request.query_params
-            ]
-        )
-
-
 @router.get("", response_model=NhanVienListResponse)
 async def list_entries(
     actor: Annotated[dict, Depends(get_current_user_payload)],
     params: Annotated[NhanVienListQuery, Depends(get_list_query)],
-    service: Annotated[UserService, Depends(get_users_service)],
+    service: Annotated[NhanVienService, Depends(get_nhan_vien_service)],
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> NhanVienListResponse:
     return await service.list_employees(params, actor, request_id)
@@ -103,7 +84,7 @@ async def list_entries(
 async def get_entry(
     id: Annotated[int, Path(gt=0)],
     actor: Annotated[dict, Depends(get_current_user_payload)],
-    service: Annotated[UserService, Depends(get_users_service)],
+    service: Annotated[NhanVienService, Depends(get_nhan_vien_service)],
     request_id: Annotated[str, Depends(get_request_id)],
     response: Response,
 ) -> NhanVienDetailResponse:

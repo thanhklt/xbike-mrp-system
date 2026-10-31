@@ -49,6 +49,8 @@ The manufacturing lifecycle executes in distinct, auditable phases:
 
 | Module | Responsibility | Key Entities |
 | :--- | :--- | :--- |
+| **`auth`** | JWT issuance/validation and orchestration through the employee public service. Contains router.py, schema.py and service.py. | `AuthService` |
+| **`nhan_vien`** | Owns employee credentials, profiles and roles; public authentication and atomic password-change operations. | `NhanVien`, `VaiTro`, `NhanVienService` |
 | **`catalog`** | Bicycle models, sub-assemblies, raw parts, and unit of measures. | `Part`, `Assembly`, `Category`, `UnitOfMeasure` |
 | **`suppliers`** | Approved vendor list (AVL), vendor lead times, pricing tiers. | `Supplier`, `SupplierPartPricing` |
 | **`bom`** | Multi-level Bill of Materials trees with scrap factor and revisions. | `BOMHeader`, `BOMItem`, `BOMRevision` |
@@ -58,11 +60,19 @@ The manufacturing lifecycle executes in distinct, auditable phases:
 | **`production`** | Production scheduling, routing, work stations, assembly steps. | `WorkOrder`, `ProductionRun`, `WorkStation` |
 | **`finished_goods_issuing`** | Shipping / transferring completed bicycles to distribution. | `DispatchOrder`, `DispatchItem` |
 | **`reporting`** | MRP calculation engines, inventory valuation, scrap & lead-time analytics. | `MRPRunRecord`, `MaterialShortageReport` |
-| **`audit`** | Tamper-proof event logs for compliance and traceability. | `AuditTrailLog` |
+| **`audit`** | Append/read history through its public service; SQL trigger rejects changes to persisted history. | `LichSuThaoTac`, `AuditService` |
 
 ---
 
 ## 3. Database & Transactional Integrity
+
+### Auth, employee and audit boundary (30/10/2026)
+
+`AuthService` imports the employee module's public service and exported DTOs. It never imports employee ORM/repositories. `NhanVienService` verifies credentials and current account/role/password version, returns a safe `AuthIdentity`, and owns the password-change transaction. The ORM objects and hashes remain inside the employee module.
+
+Password changes call `AuditService.append` with the same request session; the audit service never commits independently. `SELECT FOR UPDATE` refreshes credentials under lock before verification, and password UPDATE plus audit INSERT commit together. Existing JWTs fail the keyed password-version check after a password change.
+
+Only the three tables `"NhanVien"`, `"VaiTro"`, `"LichSuThaoTac"` have been renamed to PascalCase. Other models only receive FK target updates where necessary; their remaining SQL v4 drift is outside this task. Demo Docker uses bootstrap on a fresh data directory, without migrations. The manufacturing overview below describes broader architecture, not proof that every workflow/schema has been implemented or verified.
 
 - **ACID Guarantee**: Inventory adjustments and material issuance are wrapped in strict database transactions with row-level locks (`SELECT FOR UPDATE`) to prevent negative inventory allocations.
 - **Double-Entry Stock Ledger**: Physical stock changes are recorded as ledger movements (Credit from Location A, Debit to Location B) rather than arbitrary in-place mutations.
