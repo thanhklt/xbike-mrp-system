@@ -1,6 +1,8 @@
 # Hướng dẫn làm việc trong project xBike MRP
 
 Các hướng dẫn này áp dụng cho toàn bộ repository.
+Không áp dụng skill superpowers
+Không tự ý accept các sự thay đổi
 
 ## 1. Không tự ý commit hoặc push
 
@@ -48,7 +50,7 @@ Nguồn tài liệu đã thống nhất của project:
 - Khi sửa ORM, đối chiếu tài liệu đã thống nhất và schema PostgreSQL, bao gồm tên bảng/cột, kiểu dữ liệu, nullable, giá trị mặc định, khóa và ràng buộc.
 - Không tự chọn một nguồn làm chuẩn khi tài liệu, SQL và code mâu thuẫn; nêu điểm khác biệt và hỏi lại dev.
 - Nếu thay đổi schema hoặc request/response của API, báo rõ thay đổi, ảnh hưởng tương thích và các thành phần cần cập nhật.
-- Chuẩn bị migration khi cần thay đổi database đã tồn tại. Không coi việc sửa file bootstrap `init.sql` là đã cập nhật database đang chạy.
+- Chuẩn bị migration khi cần thay đổi database đã tồn tại. Riêng kế hoạch demo Docker hiện tại, dev đã chốt chưa cần migration: chỉ bootstrap database mới/trống bằng `init.sql` và `seed.sql`, không tạo hoặc chạy migration, không tự thay đổi database đã có dữ liệu. Không coi việc sửa file bootstrap `init.sql` là đã cập nhật database đang chạy.
 
 ## 7. Kiểm chứng và bàn giao
 
@@ -66,6 +68,31 @@ Nguồn tài liệu đã thống nhất của project:
 - Ghi chú các khác biệt về dữ liệu trả về theo vai trò, phân trang, header hoặc transaction khi có liên quan. Đối chiếu router, service, schema, model và dependency dùng chung trước khi bàn giao.
 - Khi kiểm chứng, kiểm tra cú pháp Mermaid nếu có công cụ sẵn có và đối chiếu sơ đồ với code; nếu chưa render/kiểm tra được bằng Mermaid thì báo rõ giới hạn đó.
 
+## 9. Quy ước tên bảng và ORM đã thống nhất ngày 30/10/2026
+
+- Tên bảng khi tạo mới hoặc đổi tên theo quy ước này dùng PascalCase; tên lớp ORM phải trùng chính xác tên bảng để dễ đối chiếu và audit.
+- Phạm vi đã chốt cho kế hoạch refactor auth hiện tại: đổi `nhan_vien` thành `"NhanVien"`, ORM `User` thành `NhanVien`; đổi `vai_tro` thành `"VaiTro"`, ORM `Role` thành `VaiTro`; đổi `lich_su_thao_tac` thành `"LichSuThaoTac"`, ORM `AuditTrailLog` thành `LichSuThaoTac`.
+- Đổi module `backend/app/modules/users/` thành `backend/app/modules/nhan_vien/`; module này sở hữu ORM `NhanVien` và `VaiTro`. Auth giao tiếp qua service công khai của module nhân viên.
+- Module `backend/app/modules/audit/` giữ nguyên tên và sở hữu ORM `LichSuThaoTac`. Ghi audit trong luồng đổi mật khẩu qua service audit và dùng chung transaction với cập nhật mật khẩu.
+- Tên cột, mã vai trò, giá trị nghiệp vụ và đường dẫn API giữ nguyên snake_case. Chẳng hạn `/api/v1/nhan_vien`, `nhan_vien_id`, `vai_tro_id` và mã vai trò `nhan_vien` không đổi theo tên bảng.
+- PostgreSQL phân biệt hoa/thường với tên có dấu nháy kép: SQL viết trực tiếp phải dùng `"NhanVien"`, `"VaiTro"` và `"LichSuThaoTac"`. Cập nhật đồng bộ tham chiếu FK, seed, truy vấn, index, trigger bảo vệ audit và kiểm thử liên quan khi triển khai.
+- Các bảng còn lại chưa thuộc phạm vi đổi tên của tác vụ này; không tự mở rộng sang toàn bộ schema.
+- Đây là quyết định cho kế hoạch triển khai, không phải xác nhận database đã được đổi tên. Phạm vi hiện tại chỉ demo Docker trên database mới/trống, chưa có migration. Volume PostgreSQL đã khởi tạo không tự cập nhật schema khi sửa `init.sql` hoặc restart/rebuild container; không tự xóa volume, chạy `make clear`/`docker compose down -v` hoặc seed lại dữ liệu để áp dụng schema mới.
+
 ## Hướng dẫn công cụ hiện có
 
 @C:\Users\marcn\.codex\RTK.md
+
+## GitNexus — Graph codebase
+
+- Giữ graph/index trong `.gitnexus/` cho repository `xbike-mrp-system`.
+- Trong project này, GitNexus chỉ cung cấp dữ liệu và công cụ phân tích codebase; không sử dụng các skill `gitnexus-*` để điều phối quy trình làm việc.
+- Có thể dùng `query` để tìm luồng xử lý, `context` để tra cứu symbol, `impact` để xem ảnh hưởng và `detect_changes` để phân tích thay đổi khi cần.
+- Đối chiếu kết quả graph với source hiện tại; graph có thể cũ hoặc không phản ánh đầy đủ lời gọi động.
+
+| Resource | Mục đích |
+| --- | --- |
+| `gitnexus://repo/xbike-mrp-system/context` | Tổng quan codebase và trạng thái index |
+| `gitnexus://repo/xbike-mrp-system/clusters` | Các nhóm chức năng |
+| `gitnexus://repo/xbike-mrp-system/processes` | Các luồng thực thi |
+| `gitnexus://repo/xbike-mrp-system/process/{name}` | Chi tiết một luồng thực thi |

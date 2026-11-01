@@ -1,271 +1,301 @@
--- xBike MRP — Dữ liệu mẫu theo mrp-xbike-data-model-v3.txt cập nhật 15/10/2026.
--- Chạy bằng psql, sau init.sql tương ứng, trên cơ sở dữ liệu nghiệp vụ còn trống.
--- Đây là tệp khởi tạo dữ liệu mẫu, không phải migration hoặc tệp cập nhật dữ liệu cũ.
--- Tên hiển thị có dấu; danh mục dùng snake_case tiếng Việt không dấu.
--- Mã danh mục: NV/MH/NCC-NNNNNN. Mã chứng từ: TIEN_TO-YYYYMM-NNNNNN.
--- Giữ tháng 202610 theo thời điểm tạo dữ liệu mẫu, múi giờ Asia/Ho_Chi_Minh.
--- SRS quy định cấu trúc BOM; số lượng và đơn giá dưới đây là ví dụ thử nghiệm.
--- Bốn xe có BOM riêng; các mã linh kiện dùng chung chỉ là giả định của dữ liệu mẫu.
--- Nhãn đối chiếu SRS: xe leo núi, xe đô thị, xe thể thao, xe trẻ em theo đúng thứ tự model.
--- Tồn đầu kỳ được ghi bằng phiếu kiểm kê độc lập đã duyệt, sổ kho và lịch sử.
--- Phiếu nháp/chờ duyệt/lỗi không làm đổi tồn; không có trigger tự cộng/trừ kho.
--- Tài khoản mẫu: quan_tri_vien / quan_ly / nhan_vien. Mật khẩu: XeDapMau@2026.
--- Mật khẩu lưu bcrypt chi phí 12; không dùng tài khoản và dữ liệu mẫu ở môi trường thật.
--- V3 hiện tại dùng nhan_vien.loai_nhan_vien, phieu_xuat.nhan_vien_id, ticket.ma_ticket.
--- Phải đồng bộ init.sql cũ trước khi nạp; tệp này không tự sửa schema.
--- Hai FK 1–1 phải trỏ từ ton_kho tới mat_hang và từ ticket tới phieu_dieu_chinh_kho.
--- Nguồn DBML 15/10 đang ghi ngược hai Ref dấu '-'; cần sửa nguồn trước khi export init.
-\set ON_ERROR_STOP on
+-- xBike MRP data model v3.1 — dữ liệu demo cố định, không phải dữ liệu vận hành.
+-- Tương thích init.sql v3.1: số dư tồn nằm trong public."MatHang".
+-- Yêu cầu: init.sql đã chạy thành công và các bảng chưa có dữ liệu.
+-- Không chạy lại trên DB đã seed; không xóa/ghi đè dữ liệu có sẵn.
+-- 3 tài khoản demo dùng mật khẩu DemoXbike2026! (bcrypt cost 12).
 BEGIN;
-SET LOCAL search_path = public;
+SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh';
+SET LOCAL search_path = public, pg_catalog;
+DO $$
+DECLARE t record; used boolean;
+BEGIN
+  FOR t IN SELECT schemaname,tablename FROM pg_tables WHERE schemaname='public' AND tablename=ANY(ARRAY['NhanVien','VaiTro','MatHang','Bom','ChiTietBom','NhaCungCap','PhieuNhap','ChiTietPhieuNhap','PhieuXuat','ChiTietPhieuXuat','YeuCauSanXuat','LenhSanXuat','ChiTietLenhSanXuat','ChungTuHoanThanhSx','PhieuDieuChinhKho','ChiTietPhieuDieuChinhKho','TicketLoiDieuChinh','ChiTietTicketLoiDieuChinh','GiaoDichKho','LichSuThaoTac']) LOOP
+    EXECUTE format('SELECT EXISTS(SELECT 1 FROM %I.%I)', t.schemaname, t.tablename) INTO used;
+    IF used THEN RAISE EXCEPTION 'seed.sql yêu cầu DB trống; bảng % đã có dữ liệu',t.tablename; END IF;
+  END LOOP;
+END $$;
 
--- Dừng trước khi nạp nếu schema chưa khớp phiên bản nguồn mới nhất.
+INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro) VALUES
+  (1, 'quan_tri_vien', 'Quản trị viên'),
+  (2, 'quan_ly', 'Quản lý'),
+  (3, 'nhan_vien', 'Nhân viên');
+
+INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_vao_lam, trang_thai) VALUES
+  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '2026-10-01', 'hoat_dong'),
+  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '2026-10-01', 'hoat_dong'),
+  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '2026-10-01', 'hoat_dong');
+
+INSERT INTO public."MatHang" (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, is_active) VALUES
+  (1, 'MH-000001', 'Xe Mountain Pro', 'XE-MOUNTAIN-PRO', 'thanh_pham', 'chiec', true),
+  (2, 'MH-000002', 'Xe City Ride', 'XE-CITY-RIDE', 'thanh_pham', 'chiec', true),
+  (3, 'MH-000003', 'Xe Speed Sport', 'XE-SPEED-SPORT', 'thanh_pham', 'chiec', true),
+  (4, 'MH-000004', 'Xe Kids Fun', 'XE-KIDS-FUN', 'thanh_pham', 'chiec', true),
+  (5, 'MH-000005', 'Cụm bánh xe', 'CUM-BANH-XE', 'ban_thanh_pham', 'chiec', true),
+  (6, 'MH-000006', 'Khung xe', 'KHUNG-XE', 'linh_kien', 'chiec', true),
+  (7, 'MH-000007', 'Phuộc xe', 'PHUOC-XE', 'linh_kien', 'chiec', true),
+  (8, 'MH-000008', 'Lốp xe', 'LOP-XE', 'linh_kien', 'chiec', true),
+  (9, 'MH-000009', 'Xích xe', 'XICH-XE', 'linh_kien', 'chiec', true),
+  (10, 'MH-000010', 'Bàn đạp', 'BAN-DAP', 'linh_kien', 'chiec', true),
+  (11, 'MH-000011', 'Dây phanh', 'DAY-PHANH', 'linh_kien', 'chiec', true),
+  (12, 'MH-000012', 'Yên xe', 'YEN-XE', 'linh_kien', 'chiec', true),
+  (13, 'MH-000013', 'Đĩa xích', 'DIA-XICH', 'linh_kien', 'chiec', true),
+  (14, 'MH-000014', 'Bộ ốc vít', 'BO-OC-VIT', 'linh_kien', 'bo', true),
+  (15, 'MH-000015', 'Vành bánh xe', 'VANH-BANH-XE', 'linh_kien', 'chiec', true),
+  (16, 'MH-000016', 'Moay-ơ', 'MOAY-O', 'linh_kien', 'chiec', true),
+  (17, 'MH-000017', 'Nan hoa', 'NAN-HOA', 'linh_kien', 'chiec', true);
+
+INSERT INTO public."NhaCungCap" (id, ma_ncc, ten_ncc, dia_chi, tinh) VALUES
+  (1, 'NCC-000001', 'Nhà cung cấp linh kiện xe đạp Minh Phát', 'Địa chỉ minh họa', 'Thành phố Hồ Chí Minh');
+
+-- Năm BOM riêng; bốn model xe cùng định mức minh họa, mỗi BOM đầu ra một đơn vị.
+
+INSERT INTO public."Bom" (id, mat_hang_id, version, start_time, is_active) VALUES
+  (1, 1, 1, '2026-10-01 08:00:00+07', true),
+  (2, 2, 1, '2026-10-01 08:00:00+07', true),
+  (3, 3, 1, '2026-10-01 08:00:00+07', true),
+  (4, 4, 1, '2026-10-01 08:00:00+07', true),
+  (5, 5, 1, '2026-10-01 08:00:00+07', true);
+
+INSERT INTO public."ChiTietBom" (id, bom_id, mat_hang_id, so_luong) VALUES
+  (1, 1, 6, 1),
+  (2, 1, 7, 1),
+  (3, 1, 5, 2),
+  (4, 1, 8, 2),
+  (5, 1, 9, 1),
+  (6, 1, 10, 2),
+  (7, 1, 11, 2),
+  (8, 1, 12, 1),
+  (9, 1, 13, 1),
+  (10, 1, 14, 1),
+  (11, 2, 6, 1),
+  (12, 2, 7, 1),
+  (13, 2, 5, 2),
+  (14, 2, 8, 2),
+  (15, 2, 9, 1),
+  (16, 2, 10, 2),
+  (17, 2, 11, 2),
+  (18, 2, 12, 1),
+  (19, 2, 13, 1),
+  (20, 2, 14, 1),
+  (21, 3, 6, 1),
+  (22, 3, 7, 1),
+  (23, 3, 5, 2),
+  (24, 3, 8, 2),
+  (25, 3, 9, 1),
+  (26, 3, 10, 2),
+  (27, 3, 11, 2),
+  (28, 3, 12, 1),
+  (29, 3, 13, 1),
+  (30, 3, 14, 1),
+  (31, 4, 6, 1),
+  (32, 4, 7, 1),
+  (33, 4, 5, 2),
+  (34, 4, 8, 2),
+  (35, 4, 9, 1),
+  (36, 4, 10, 2),
+  (37, 4, 11, 2),
+  (38, 4, 12, 1),
+  (39, 4, 13, 1),
+  (40, 4, 14, 1),
+  (41, 5, 15, 1),
+  (42, 5, 16, 1),
+  (43, 5, 17, 36);
+
+-- Phiếu nhập hoàn tất có 12 dòng NVL/linh kiện. Phiếu thứ hai còn nháp, không cộng kho.
+
+INSERT INTO public."PhieuNhap" (id, ma_phieu_nhap, nhan_vien_id, ncc_id, ngay_nhap, ghi_chu, trang_thai, created_at) VALUES
+  (1, 'PN-202610-000001', 2, 1, '2026-10-22', 'Lô linh kiện demo cho sản xuất 10 xe; số nan hoa sẽ được điều chỉnh.', 'nhap', '2026-10-22 08:30:00+07'),
+  (2, 'PN-202610-000002', 2, 1, '2026-10-23', 'Phiếu nháp bổ sung khung xe; chưa xác nhận, chưa tăng tồn.', 'nhap', '2026-10-22 08:35:00+07');
+
+INSERT INTO public."ChiTietPhieuNhap" (id, phieu_nhap_id, mat_hang_id, so_luong) VALUES
+  (1, 1, 6, 10),
+  (2, 1, 7, 10),
+  (3, 1, 8, 20),
+  (4, 1, 9, 10),
+  (5, 1, 10, 20),
+  (6, 1, 11, 20),
+  (7, 1, 12, 10),
+  (8, 1, 13, 10),
+  (9, 1, 14, 10),
+  (10, 1, 15, 20),
+  (11, 1, 16, 20),
+  (12, 1, 17, 1000),
+  (13, 2, 6, 100);
+
+UPDATE public."PhieuNhap" SET trang_thai='hoan_thanh' WHERE id=1;
+
+INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_nhap_id, nhan_vien_id, posted_at) VALUES
+  (1, 6, 'nhap_vat_tu', 10, 1, 2, '2026-10-22 09:00:00+07'),
+  (2, 7, 'nhap_vat_tu', 10, 2, 2, '2026-10-22 09:00:00+07'),
+  (3, 8, 'nhap_vat_tu', 20, 3, 2, '2026-10-22 09:00:00+07'),
+  (4, 9, 'nhap_vat_tu', 10, 4, 2, '2026-10-22 09:00:00+07'),
+  (5, 10, 'nhap_vat_tu', 20, 5, 2, '2026-10-22 09:00:00+07'),
+  (6, 11, 'nhap_vat_tu', 20, 6, 2, '2026-10-22 09:00:00+07'),
+  (7, 12, 'nhap_vat_tu', 10, 7, 2, '2026-10-22 09:00:00+07'),
+  (8, 13, 'nhap_vat_tu', 10, 8, 2, '2026-10-22 09:00:00+07'),
+  (9, 14, 'nhap_vat_tu', 10, 9, 2, '2026-10-22 09:00:00+07'),
+  (10, 15, 'nhap_vat_tu', 20, 10, 2, '2026-10-22 09:00:00+07'),
+  (11, 16, 'nhap_vat_tu', 20, 11, 2, '2026-10-22 09:00:00+07'),
+  (12, 17, 'nhap_vat_tu', 1000, 12, 2, '2026-10-22 09:00:00+07');
+
+-- Quản lý tự xác nhận điều chỉnh nan hoa: 1000 -> 980 (-20), rồi 980 -> 985 (+5).
+
+INSERT INTO public."PhieuDieuChinhKho" (id, ma_phieu, phieu_nhap_id, nhan_vien_id, ly_do, trang_thai, created_at) VALUES
+  (1, 'DCK-202610-000001', 1, 2, 'Đối chiếu số nan hoa thực nhập với chứng từ nhà cung cấp.', 'nhap', '2026-10-22 09:10:00+07');
+
+INSERT INTO public."ChiTietPhieuDieuChinhKho" (id, phieu_dieu_chinh_kho_id, mat_hang_id, giao_dich_goc_id, so_luong_hieu_luc_truoc, so_luong_dung, so_luong_bien_dong) VALUES
+  (1, 1, 17, 12, 1000, 980, -20);
+
+UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_xac_nhan',confirmed_at='2026-10-22 09:10:30+07' WHERE id=1;
+
+INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_dieu_chinh_id, nhan_vien_id, posted_at) VALUES
+  (13, 17, 'dieu_chinh_ton_kho', -20, 1, 2, '2026-10-22 09:10:30+07');
+
+INSERT INTO public."PhieuDieuChinhKho" (id, ma_phieu, phieu_nhap_id, nhan_vien_id, ly_do, trang_thai, created_at) VALUES
+  (2, 'DCK-202610-000002', 1, 2, 'Đối chiếu số nan hoa thực nhập với chứng từ nhà cung cấp.', 'nhap', '2026-10-22 09:20:00+07');
+
+INSERT INTO public."ChiTietPhieuDieuChinhKho" (id, phieu_dieu_chinh_kho_id, mat_hang_id, giao_dich_goc_id, so_luong_hieu_luc_truoc, so_luong_dung, so_luong_bien_dong) VALUES
+  (2, 2, 17, 12, 980, 985, 5);
+
+UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_xac_nhan',confirmed_at='2026-10-22 09:20:30+07' WHERE id=2;
+
+INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_dieu_chinh_id, nhan_vien_id, posted_at) VALUES
+  (14, 17, 'dieu_chinh_ton_kho', 5, 2, 2, '2026-10-22 09:20:30+07');
+
+-- Yêu cầu 10 xe có lệnh cha 10 xe và lệnh con 20 cụm. Không có tồn TP/BTP ban đầu.
+
+INSERT INTO public."YeuCauSanXuat" (id, ma_yeu_cau_san_xuat, mat_hang_id, so_luong, nhan_vien_id, nhan_vien_duoc_giao_id, trang_thai, created_at) VALUES
+  (1, 'YCSX-202610-000001', 1, 10, 2, 3, 'dang_thuc_hien', '2026-10-22 09:25:00+07'),
+  (2, 'YCSX-202610-000002', 2, 100, 2, 3, 'cho_bo_sung_vat_tu', '2026-10-22 09:30:00+07');
+
+INSERT INTO public."LenhSanXuat" (id, ma_lenh_san_xuat, yeu_cau_san_xuat_id, lenh_san_xuat_cha_id, mat_hang_id, bom_id, so_luong, nhan_vien_id, trang_thai, created_at, started_at) VALUES
+  (1, 'LSX-202610-000001', 1, NULL, 1, 1, 10, 3, 'da_gui', '2026-10-22 09:26:00+07', NULL),
+  (2, 'LSX-202610-000002', 1, 1, 5, 5, 20, 3, 'dang_thuc_hien', '2026-10-22 09:27:00+07', '2026-10-22 10:01:00+07'),
+  (3, 'LSX-202610-000003', 2, NULL, 2, 2, 100, 3, 'da_gui', '2026-10-22 09:31:00+07', NULL),
+  (4, 'LSX-202610-000004', 2, 3, 5, 5, 200, 3, 'da_gui', '2026-10-22 09:32:00+07', NULL);
+
+INSERT INTO public."ChiTietLenhSanXuat" (id, lenh_san_xuat_id, mat_hang_id, so_luong_can) VALUES
+  (1, 1, 6, 10),
+  (2, 1, 7, 10),
+  (3, 1, 5, 20),
+  (4, 1, 8, 20),
+  (5, 1, 9, 10),
+  (6, 1, 10, 20),
+  (7, 1, 11, 20),
+  (8, 1, 12, 10),
+  (9, 1, 13, 10),
+  (10, 1, 14, 10),
+  (11, 2, 15, 20),
+  (12, 2, 16, 20),
+  (13, 2, 17, 720),
+  (14, 3, 6, 100),
+  (15, 3, 7, 100),
+  (16, 3, 5, 200),
+  (17, 3, 8, 200),
+  (18, 3, 9, 100),
+  (19, 3, 10, 200),
+  (20, 3, 11, 200),
+  (21, 3, 12, 100),
+  (22, 3, 13, 100),
+  (23, 3, 14, 100),
+  (24, 4, 15, 200),
+  (25, 4, 16, 200),
+  (26, 4, 17, 7200);
+
+-- Xuất đủ vật tư cho lệnh 20 cụm: 20 vành, 20 moay-ơ, 720 nan hoa. Chỉ trừ một lần.
+
+INSERT INTO public."PhieuXuat" (id, ma_phieu_xuat, nhan_vien_id, loai_phieu, lenh_san_xuat_id, trang_thai, created_at) VALUES
+  (1, 'PX-202610-000001', 3, 'xuat_vat_tu', 2, 'nhap', '2026-10-22 09:40:00+07');
+
+INSERT INTO public."ChiTietPhieuXuat" (id, phieu_xuat_id, mat_hang_id, so_luong) VALUES
+  (1, 1, 15, 20),
+  (2, 1, 16, 20),
+  (3, 1, 17, 720);
+
+UPDATE public."PhieuXuat" SET trang_thai='da_duyet' WHERE id=1;
+
+INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_xuat_id, nhan_vien_id, posted_at) VALUES
+  (15, 15, 'xuat_vat_tu', -20, 1, 2, '2026-10-22 10:00:00+07'),
+  (16, 16, 'xuat_vat_tu', -20, 2, 2, '2026-10-22 10:00:00+07'),
+  (17, 17, 'xuat_vat_tu', -720, 3, 2, '2026-10-22 10:00:00+07');
+
+INSERT INTO public."ChungTuHoanThanhSx" (id, ma_phieu, lenh_san_xuat_id, so_luong_hoan_thanh, nhan_vien_id, trang_thai, finish_time, created_at) VALUES
+  (1, 'HTSX-202610-000001', 2, 20, 3, 'cho_duyet', '2026-10-22 10:25:00+07', '2026-10-22 10:30:00+07');
+
+-- Hoàn thành còn chờ duyệt: không có giao dịch nhập sản xuất, tồn cụm bánh vẫn bằng 0.
+
+-- Hai sự việc giảm nan hoa không hợp lệ; ticket thứ hai đóng thủ công, không có phiếu điều chỉnh mới.
+
+INSERT INTO public."TicketLoiDieuChinh" (id, ma_ticket, phieu_nhap_id, nguoi_tao_id, mo_ta_loi, trang_thai, nguoi_xu_ly_id, ket_qua_xu_ly, created_at, closed_at) VALUES
+  (1, 'TKDC-202610-000001', 1, 2, 'Đề nghị sửa lượng nhập nan hoa 985 về 200: giảm 785 nhưng tồn chỉ còn 265.', 'cho_xu_ly', NULL, NULL, '2026-10-22 11:00:00+07', NULL),
+  (2, 'TKDC-202610-000002', 1, 2, 'Đề nghị sửa lượng nhập nan hoa 985 về 300: giảm 685 nhưng tồn chỉ còn 265.', 'da_xu_ly', 2, 'Đã đối chiếu lại, đề nghị 300 là nhầm. Giữ số lượng có hiệu lực 985; không cần lập điều chỉnh mới.', '2026-10-22 11:10:00+07', '2026-10-22 12:00:00+07');
+
+INSERT INTO public."ChiTietTicketLoiDieuChinh" (id, ticket_id, chi_tiet_phieu_nhap_id, mat_hang_id, so_luong_hieu_luc_truoc, so_luong_de_nghi, so_luong_bien_dong, ton_kho_tai_thoi_diem) VALUES
+  (1, 1, 12, 17, 985, 200, -785, 265),
+  (2, 2, 12, 17, 985, 300, -685, 265);
+
+-- Số dư demo dựng duy nhất từ các giao dịch thành công; không tính phiếu nháp/chờ duyệt/ticket.
+
+-- Chỉ dùng phép tổng hợp này để dựng dữ liệu demo, trong cùng transaction seed.
+-- Khi vận hành, backend phải cập nhật tồn theo từng nghiệp vụ với kiểm soát đồng thời.
+UPDATE public."MatHang" AS m
+SET so_luong_ton = totals.so_luong_ton,
+    ton_kho_updated_at = '2026-10-22 12:00:00+07'
+FROM (
+  SELECT item.id, COALESCE(sum(g.so_luong_bien_dong),0)::int AS so_luong_ton
+  FROM public."MatHang" item
+  LEFT JOIN public."GiaoDichKho" g ON g.mat_hang_id=item.id
+  GROUP BY item.id
+) AS totals
+WHERE m.id=totals.id;
+
+INSERT INTO public."LichSuThaoTac" (id, nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, du_lieu_truoc, du_lieu_sau, ly_do, created_at) VALUES
+  (1, 2, 'phieu_nhap', 1, 'hoan_tat', '{"trang_thai": "nhap"}', '{"trang_thai": "hoan_thanh", "so_dong": 12}', 'Quản lý tự xác nhận nhập.', '2026-10-22 09:00:00+07'),
+  (2, 2, 'phieu_nhap', 2, 'tao', NULL, '{"trang_thai": "nhap"}', 'Phiếu nháp không ghi kho.', '2026-10-22 08:35:00+07'),
+  (3, 2, 'phieu_dieu_chinh_kho', 1, 'xac_nhan', '{"trang_thai": "nhap", "so_luong_hieu_luc": 1000}', '{"trang_thai": "da_xac_nhan", "so_luong_dung": 980, "chenh_lech": -20}', 'Xác nhận trực tiếp, không duyệt độc lập.', '2026-10-22 09:10:30+07'),
+  (4, 2, 'phieu_dieu_chinh_kho', 2, 'xac_nhan', '{"trang_thai": "nhap", "so_luong_hieu_luc": 980}', '{"trang_thai": "da_xac_nhan", "so_luong_dung": 985, "chenh_lech": 5}', 'Xác nhận trực tiếp, không duyệt độc lập.', '2026-10-22 09:20:30+07'),
+  (5, 2, 'yeu_cau_san_xuat', 1, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nguoi_phu_trach": 3}', 'Giao nhân viên phụ trách.', '2026-10-22 09:25:00+07'),
+  (6, 2, 'yeu_cau_san_xuat', 2, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nguoi_phu_trach": 3}', 'Giao nhân viên phụ trách.', '2026-10-22 09:30:00+07'),
+  (7, 2, 'yeu_cau_san_xuat', 2, 'sua', '{"trang_thai": "da_gui"}', '{"trang_thai": "cho_bo_sung_vat_tu"}', 'Thiếu vật tư; giữ yêu cầu và lệnh hiện có.', '2026-10-22 09:33:00+07'),
+  (8, 2, 'lenh_san_xuat', 1, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:26:00+07'),
+  (9, 2, 'lenh_san_xuat', 2, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:27:00+07'),
+  (10, 2, 'lenh_san_xuat', 3, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:31:00+07'),
+  (11, 2, 'lenh_san_xuat', 4, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:32:00+07'),
+  (12, 2, 'phieu_xuat', 1, 'duyet', '{"trang_thai": "cho_duyet"}', '{"trang_thai": "da_duyet", "cap_vat_tu_cho_lenh": 2}', 'Đủ vật tư cho 20 cụm bánh.', '2026-10-22 10:00:00+07'),
+  (13, 3, 'lenh_san_xuat', 2, 'bat_dau', '{"trang_thai": "da_gui"}', '{"trang_thai": "dang_thuc_hien"}', 'Vật tư đã cấp đủ.', '2026-10-22 10:01:00+07'),
+  (14, 3, 'yeu_cau_san_xuat', 1, 'bat_dau', '{"trang_thai": "da_gui"}', '{"trang_thai": "dang_thuc_hien"}', 'Bắt đầu thực hiện lệnh con.', '2026-10-22 10:01:00+07'),
+  (15, 3, 'chung_tu_hoan_thanh_san_xuat', 1, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "cho_duyet", "so_luong": 20}', 'Chờ quản lý duyệt; chưa cộng kho.', '2026-10-22 10:30:00+07'),
+  (16, 2, 'ticket_loi_dieu_chinh', 1, 'ghi_nhan_loi', NULL, '{"trang_thai": "cho_xu_ly", "so_luong_de_nghi": 200, "ton": 265}', 'Điều chỉnh không hợp lệ; kho không thay đổi.', '2026-10-22 11:00:00+07'),
+  (17, 2, 'ticket_loi_dieu_chinh', 2, 'ghi_nhan_loi', NULL, '{"trang_thai": "cho_xu_ly", "so_luong_de_nghi": 300, "ton": 265}', 'Điều chỉnh không hợp lệ; kho không thay đổi.', '2026-10-22 11:10:00+07'),
+  (18, 2, 'ticket_loi_dieu_chinh', 2, 'giai_quyet', '{"trang_thai": "cho_xu_ly"}', '{"trang_thai": "da_xu_ly", "nguoi_xu_ly_id": 2, "ket_qua_xu_ly": "Đề nghị 300 là nhầm; giữ lượng hiệu lực 985."}', 'Đóng thủ công, không cần phiếu điều chỉnh mới.', '2026-10-22 12:00:00+07');
+
+-- Đồng bộ sequence sau khi dùng id cố định trong dữ liệu minh họa.
+DO $$
+DECLARE r record; seq text; maximum bigint;
+BEGIN
+  FOR r IN SELECT table_schema,table_name FROM information_schema.columns
+    WHERE table_schema='public' AND table_name=ANY(ARRAY['NhanVien','VaiTro','MatHang','Bom','ChiTietBom','NhaCungCap','PhieuNhap','ChiTietPhieuNhap','PhieuXuat','ChiTietPhieuXuat','YeuCauSanXuat','LenhSanXuat','ChiTietLenhSanXuat','ChungTuHoanThanhSx','PhieuDieuChinhKho','ChiTietPhieuDieuChinhKho','TicketLoiDieuChinh','ChiTietTicketLoiDieuChinh','GiaoDichKho','LichSuThaoTac']) AND column_name='id' LOOP
+    seq := pg_get_serial_sequence(format('%I.%I',r.table_schema,r.table_name),'id');
+    IF seq IS NOT NULL THEN
+      EXECUTE format('SELECT max(id) FROM %I.%I',r.table_schema,r.table_name) INTO maximum;
+      PERFORM setval(seq,COALESCE(maximum,1),maximum IS NOT NULL);
+    END IF;
+  END LOOP;
+END $$;
+
+-- Tự kiểm tra các số liệu trọng yếu trước COMMIT.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
-                   AND table_name='nhan_vien' AND column_name='loai_nhan_vien')
-       OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
-                   AND table_name='phieu_xuat' AND column_name='nhan_vien_id')
-       OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
-                   AND table_name='ticket_loi_dieu_chinh' AND column_name='ma_ticket') THEN
-        RAISE EXCEPTION 'Schema chưa khớp v3 ngày 15/10: cần nhan_vien.loai_nhan_vien, phieu_xuat.nhan_vien_id và ticket_loi_dieu_chinh.ma_ticket. Hãy đồng bộ init.sql trước.';
-    END IF;
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE contype='f' AND (
-            (conrelid='public.mat_hang'::regclass AND confrelid='public.ton_kho'::regclass)
-            OR (conrelid='public.phieu_dieu_chinh_kho'::regclass AND confrelid='public.ticket_loi_dieu_chinh'::regclass)
-        )
-    ) THEN
-        RAISE EXCEPTION 'Hai FK 1–1 đang ngược nghiệp vụ. Cần ton_kho.mat_hang_id -> mat_hang.id và ticket_loi_dieu_chinh.phieu_dieu_chinh_kho_id -> phieu_dieu_chinh_kho.id.';
-    END IF;
-END;
-$$;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM nhan_vien)
-       OR EXISTS (SELECT 1 FROM vai_tro)
-       OR EXISTS (SELECT 1 FROM mat_hang)
-       OR EXISTS (SELECT 1 FROM ton_kho)
-       OR EXISTS (SELECT 1 FROM bom)
-       OR EXISTS (SELECT 1 FROM chi_tiet_bom)
-       OR EXISTS (SELECT 1 FROM nha_cung_cap)
-       OR EXISTS (SELECT 1 FROM phieu_nhap)
-       OR EXISTS (SELECT 1 FROM chi_tiet_phieu_nhap)
-       OR EXISTS (SELECT 1 FROM phieu_xuat)
-       OR EXISTS (SELECT 1 FROM chi_tiet_phieu_xuat)
-       OR EXISTS (SELECT 1 FROM yeu_cau_san_xuat)
-       OR EXISTS (SELECT 1 FROM lenh_san_xuat)
-       OR EXISTS (SELECT 1 FROM chi_tiet_lenh_san_xuat)
-       OR EXISTS (SELECT 1 FROM chung_tu_hoan_thanh_sx)
-       OR EXISTS (SELECT 1 FROM phieu_dieu_chinh_kho)
-       OR EXISTS (SELECT 1 FROM chi_tiet_phieu_dieu_chinh_kho)
-       OR EXISTS (SELECT 1 FROM ticket_loi_dieu_chinh)
-       OR EXISTS (SELECT 1 FROM giao_dich_kho)
-       OR EXISTS (SELECT 1 FROM lich_su_thao_tac) THEN
-        RAISE EXCEPTION 'seed.sql yêu cầu các bảng nghiệp vụ trống; không nạp trùng dữ liệu mẫu';
-    END IF;
-END;
-$$;
-
-INSERT INTO vai_tro (id, ma_vai_tro, ten_vai_tro) VALUES
-(1, 'quan_tri_vien', 'Quản trị viên'),
-(2, 'quan_ly', 'Quản lý'),
-(3, 'nhan_vien', 'Nhân viên');
-
--- Mật khẩu được băm bcrypt bằng pgcrypto, chi phí 12.
--- tai_khoan_id để NULL: v3 chưa định nghĩa bảng tài khoản tham chiếu.
-INSERT INTO nhan_vien (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien,
-                       ho_ten, email, ngay_vao_lam, loai_nhan_vien) VALUES
-(1, 1, 'quan_tri_vien', crypt('XeDapMau@2026', gen_salt('bf',12)), 'NV-000001',
- 'Quản trị viên mẫu', 'quan_tri_vien@xbike.local', DATE '2026-10-14', 'quan_tri_vien'),
-(2, 2, 'quan_ly', crypt('XeDapMau@2026', gen_salt('bf',12)), 'NV-000002',
- 'Quản lý kho mẫu', 'quan_ly@xbike.local', DATE '2026-10-14', 'quan_ly'),
-(3, 3, 'nhan_vien', crypt('XeDapMau@2026', gen_salt('bf',12)), 'NV-000003',
- 'Nhân viên mẫu', 'nhan_vien@xbike.local', DATE '2026-10-14', 'nhan_vien');
-
-INSERT INTO nha_cung_cap (id, ma_ncc, ten_ncc, dia_chi, tinh) VALUES
-(1, 'NCC-000001', 'Nhà cung cấp linh kiện mẫu', 'Địa chỉ mẫu 1', 'TP. Hồ Chí Minh'),
-(2, 'NCC-000002', 'Nhà cung cấp vật tư mẫu', 'Địa chỉ mẫu 2', 'TP. Hồ Chí Minh');
-
-INSERT INTO mat_hang (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, don_gia, is_active) VALUES
-(1, 'MH-000001', 'Xe đạp leo núi', 'xe_dap_leo_nui', 'thanh_pham', 'chiec', 5000000, TRUE),
-(2, 'MH-000002', 'Xe đạp đô thị', 'xe_dap_do_thi', 'thanh_pham', 'chiec', 3500000, TRUE),
-(3, 'MH-000003', 'Xe đạp thể thao', 'xe_dap_the_thao', 'thanh_pham', 'chiec', 7000000, TRUE),
-(4, 'MH-000004', 'Xe đạp trẻ em', 'xe_dap_tre_em', 'thanh_pham', 'chiec', 2000000, TRUE),
-(5, 'MH-000005', 'Cụm bánh xe', 'cum_banh_xe', 'ban_thanh_pham', 'chiec', 350000, TRUE),
-(6, 'MH-000006', 'Khung xe', 'khung_xe', 'linh_kien', 'chiec', 600000, TRUE),
-(7, 'MH-000007', 'Phuộc xe', 'phuoc_xe', 'linh_kien', 'chiec', 200000, TRUE),
-(8, 'MH-000008', 'Vành bánh xe', 'vanh_banh_xe', 'linh_kien', 'chiec', 120000, TRUE),
-(9, 'MH-000009', 'Moay-ơ', 'moay_o', 'linh_kien', 'chiec', 80000, TRUE),
-(10, 'MH-000010', 'Nan hoa', 'nan_hoa', 'nguyen_vat_lieu', 'chiec', 2000, TRUE),
-(11, 'MH-000011', 'Lốp xe', 'lop_xe', 'linh_kien', 'chiec', 100000, TRUE),
-(12, 'MH-000012', 'Xích xe', 'xich_xe', 'linh_kien', 'chiec', 60000, TRUE),
-(13, 'MH-000013', 'Bàn đạp', 'ban_dap', 'linh_kien', 'chiec', 40000, TRUE),
-(14, 'MH-000014', 'Dây phanh', 'day_phanh', 'nguyen_vat_lieu', 'chiec', 20000, TRUE),
-(15, 'MH-000015', 'Yên xe', 'yen_xe', 'linh_kien', 'chiec', 80000, TRUE),
-(16, 'MH-000016', 'Đĩa xích', 'dia_xich', 'linh_kien', 'chiec', 70000, TRUE),
-(17, 'MH-000017', 'Bộ ốc vít', 'bo_oc_vit', 'nguyen_vat_lieu', 'bo', 15000, TRUE);
-INSERT INTO bom (id, mat_hang_id, version, start_time, is_active) VALUES
-(1, 1, 1, TIMESTAMP '2026-10-14 08:00:00', TRUE),
-(2, 2, 1, TIMESTAMP '2026-10-14 08:00:00', TRUE),
-(3, 3, 1, TIMESTAMP '2026-10-14 08:00:00', TRUE),
-(4, 4, 1, TIMESTAMP '2026-10-14 08:00:00', TRUE),
-(5, 5, 1, TIMESTAMP '2026-10-14 08:00:00', TRUE);
-INSERT INTO chi_tiet_bom (id,bom_id,mat_hang_id,so_luong) VALUES
-(1, 1, 6, 1),
-(2, 1, 7, 1),
-(3, 1, 5, 2),
-(4, 1, 11, 2),
-(5, 1, 12, 1),
-(6, 1, 13, 2),
-(7, 1, 14, 2),
-(8, 1, 15, 1),
-(9, 1, 16, 1),
-(10, 1, 17, 1),
-(11, 2, 6, 1),
-(12, 2, 7, 1),
-(13, 2, 5, 2),
-(14, 2, 11, 2),
-(15, 2, 12, 1),
-(16, 2, 13, 2),
-(17, 2, 14, 2),
-(18, 2, 15, 1),
-(19, 2, 16, 1),
-(20, 2, 17, 1),
-(21, 3, 6, 1),
-(22, 3, 7, 1),
-(23, 3, 5, 2),
-(24, 3, 11, 2),
-(25, 3, 12, 1),
-(26, 3, 13, 2),
-(27, 3, 14, 2),
-(28, 3, 15, 1),
-(29, 3, 16, 1),
-(30, 3, 17, 1),
-(31, 4, 6, 1),
-(32, 4, 7, 1),
-(33, 4, 5, 2),
-(34, 4, 11, 2),
-(35, 4, 12, 1),
-(36, 4, 13, 2),
-(37, 4, 14, 2),
-(38, 4, 15, 1),
-(39, 4, 16, 1),
-(40, 4, 17, 1),
-(41, 5, 8, 1),
-(42, 5, 9, 1),
-(43, 5, 10, 36);
-
--- Kiểm kê độc lập để ghi nhận số dư đầu kỳ cho dữ liệu mẫu.
-INSERT INTO phieu_dieu_chinh_kho (id,ma_phieu,nhan_vien_id,ly_do,trang_thai,created_at)
-VALUES (1,'DCK-202610-000001',2,'Kiểm kê độc lập: ghi nhận tồn đầu kỳ cho toàn bộ mặt hàng mẫu; không gắn chứng từ cũ.',
-        'da_duyet',TIMESTAMP '2026-10-14 08:00:00');
-
-INSERT INTO chi_tiet_phieu_dieu_chinh_kho (id,phieu_dieu_chinh_kho_id,mat_hang_id,so_luong_bien_dong) VALUES
-(1,1,1,2),
-(2,1,2,5),
-(4,1,4,3),
-(5,1,5,8),
-(6,1,6,50),
-(7,1,7,50),
-(8,1,8,100),
-(9,1,9,100),
-(10,1,10,4000),
-(11,1,11,100),
-(12,1,12,50),
-(13,1,13,100),
-(14,1,14,100),
-(15,1,15,50),
-(16,1,16,50),
-(17,1,17,50);
-INSERT INTO giao_dich_kho (mat_hang_id,loai_giao_dich,so_luong_bien_dong,
-                           chi_tiet_phieu_dieu_chinh_id,nhan_vien_id,posted_at)
-SELECT mat_hang_id,'dieu_chinh_ton_kho',so_luong_bien_dong,id,2,TIMESTAMP '2026-10-14 08:00:00'
-FROM chi_tiet_phieu_dieu_chinh_kho WHERE phieu_dieu_chinh_kho_id=1;
-INSERT INTO ton_kho (id,mat_hang_id,so_luong,updated_at)
-SELECT m.id,m.id,COALESCE(SUM(g.so_luong_bien_dong),0)::INTEGER,TIMESTAMP '2026-10-14 08:00:00'
-FROM mat_hang m LEFT JOIN giao_dich_kho g ON g.mat_hang_id=m.id GROUP BY m.id;
-INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau,ly_do)
-VALUES (2,'phieu_dieu_chinh_kho',1,'duyet','{"trang_thai":"cho_duyet"}',
-        '{"trang_thai":"da_duyet","nguon":"du_lieu_mau","kiem_ke_doc_lap":true}',
-        'Dữ liệu khởi tạo mẫu: kiểm kê tồn đầu kỳ đã duyệt.');
-
--- Yêu cầu đã gửi: cần 10 xe leo núi, có sẵn 2 -> sản xuất 8.
--- Lệnh cha cần 16 cụm bánh, có sẵn 8 -> lệnh con sản xuất 8 cụm.
--- Bản chụp nhu cầu: gửi lệnh chưa xuất vật tư hoặc giữ chỗ tồn kho.
-INSERT INTO yeu_cau_san_xuat
-(id,ma_yeu_cau_san_xuat,mat_hang_id,so_luong,nhan_vien_id,nhan_vien_duoc_giao_id,trang_thai,created_at)
-VALUES (1,'YCSX-202610-000001',1,10,2,3,'da_gui',TIMESTAMP '2026-10-14 09:00:00'),
-       (2,'YCSX-202610-000002',2,3,2,3,'nhap',TIMESTAMP '2026-10-14 09:00:00');
-INSERT INTO lenh_san_xuat
-(id,ma_lenh_san_xuat,yeu_cau_san_xuat_id,lenh_san_xuat_cha_id,mat_hang_id,bom_id,so_luong,nhan_vien_id,trang_thai,created_at)
-VALUES (1,'LSX-202610-000001',1,NULL,1,1,8,3,'da_gui',TIMESTAMP '2026-10-14 09:00:00'),
-       (2,'LSX-202610-000002',1,1,5,5,8,3,'da_gui',TIMESTAMP '2026-10-14 09:00:00');
-INSERT INTO chi_tiet_lenh_san_xuat (id,lenh_san_xuat_id,mat_hang_id,so_luong_can)
-SELECT row_number() OVER (ORDER BY l.id,c.mat_hang_id)::INTEGER,l.id,c.mat_hang_id,c.so_luong*l.so_luong
-FROM lenh_san_xuat l JOIN chi_tiet_bom c ON c.bom_id=l.bom_id;
-INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau,ly_do)
-SELECT 2,'lenh_san_xuat',id,'gui','{"trang_thai":"nhap"}',
-       jsonb_build_object('trang_thai',trang_thai,'bom_id',bom_id,'so_luong',so_luong),
-       'Kế hoạch mẫu đã gửi; chưa giữ chỗ, xuất vật tư hoặc cập nhật tồn.' FROM lenh_san_xuat;
-INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau)
-VALUES (2,'yeu_cau_san_xuat',1,'gui','{"trang_thai":"nhap"}','{"trang_thai":"da_gui","nhan_vien_duoc_giao_id":3}');
-
--- Phiếu nhập nháp: chưa cộng tồn kho.
-INSERT INTO phieu_nhap (id,ma_phieu_nhap,nhan_vien_id,ncc_id,tong_tien,trang_thai,created_at)
-VALUES (1,'PN-202610-000001',2,1,1200000,'nhap',TIMESTAMP '2026-10-14 09:00:00');
-INSERT INTO chi_tiet_phieu_nhap (id,phieu_nhap_id,mat_hang_id,so_luong,don_gia_thuc,tong_gia)
-VALUES (1,1,8,10,120000,1200000);
-
--- Phiếu xuất vật tư chờ duyệt chỉ phục vụ lệnh con; chưa trừ tồn kho.
-INSERT INTO phieu_xuat (id,ma_phieu_xuat,nhan_vien_id,loai_phieu,lenh_san_xuat_id,trang_thai,created_at)
-VALUES (1,'PX-202610-000001',3,'xuat_vat_tu',2,'cho_duyet',TIMESTAMP '2026-10-14 09:00:00');
-INSERT INTO chi_tiet_phieu_xuat (id,phieu_xuat_id,mat_hang_id,so_luong)
-SELECT row_number() OVER (ORDER BY mat_hang_id)::INTEGER,1,mat_hang_id,so_luong_can FROM chi_tiet_lenh_san_xuat WHERE lenh_san_xuat_id=2;
-INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau)
-VALUES (3,'phieu_xuat',1,'gui','{"trang_thai":"nhap"}','{"trang_thai":"cho_duyet"}');
-
--- Tình huống lỗi mẫu: giảm 200 vành khi chỉ có 100; không ghi biến động kho.
-INSERT INTO phieu_dieu_chinh_kho (id,ma_phieu,nhan_vien_id,ly_do,trang_thai,created_at)
-VALUES (2,'DCK-202610-000002',2,'Kiểm kê độc lập mẫu: giảm 200 vành; lỗi vì vượt tồn hiện có.','loi',TIMESTAMP '2026-10-14 09:30:00');
-INSERT INTO chi_tiet_phieu_dieu_chinh_kho (id,phieu_dieu_chinh_kho_id,mat_hang_id,so_luong_bien_dong)
-VALUES (18,2,8,-200);
-INSERT INTO ticket_loi_dieu_chinh (id,ma_ticket,phieu_dieu_chinh_kho_id,mo_ta_loi,trang_thai,created_at)
-VALUES (1,'TKDC-202610-000001',2,'Mặt hàng MH-000008: tồn 100, điều chỉnh -200; kết quả -100 không hợp lệ. Dữ liệu mẫu sau hoàn tác giao dịch, chưa đổi tồn.','cho_xu_ly',TIMESTAMP '2026-10-14 09:30:00');
-INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau,ly_do)
-VALUES (2,'phieu_dieu_chinh_kho',2,'ghi_nhan_loi','{"trang_thai":"cho_duyet"}',
-        '{"trang_thai":"loi","da_hoan_tac":true,"nguon":"du_lieu_mau"}',
-        'Tình huống lỗi mẫu sau hoàn tác giao dịch; chưa thực thi duyệt phiếu.');
-
--- Đồng bộ bộ đếm của các cột IDENTITY sau khi nạp dữ liệu mẫu.
-DO $$
-DECLARE bang RECORD; ten_bo_dem TEXT; id_lon_nhat BIGINT;
-BEGIN
-    FOR bang IN SELECT table_name FROM information_schema.columns
-             WHERE table_schema='public' AND column_name='id' AND is_identity='YES'
-    LOOP
-        ten_bo_dem := pg_get_serial_sequence(format('public.%I',bang.table_name),'id');
-        EXECUTE format('SELECT MAX(id) FROM public.%I',bang.table_name) INTO id_lon_nhat;
-        PERFORM setval(ten_bo_dem::regclass,COALESCE(id_lon_nhat,1),id_lon_nhat IS NOT NULL);
-    END LOOP;
-END;
-$$;
-
--- Đối soát số dư với sổ giao dịch kho trước khi chốt giao dịch.
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM ton_kho t LEFT JOIN (
-            SELECT mat_hang_id,SUM(so_luong_bien_dong) AS so_luong_ghi_so
-            FROM giao_dich_kho GROUP BY mat_hang_id
-        ) g USING(mat_hang_id)
-        WHERE t.so_luong <> COALESCE(g.so_luong_ghi_so,0)
-    ) THEN
-        RAISE EXCEPTION 'Tồn kho không khớp tổng biến động trong sổ giao dịch kho';
-    END IF;
-END;
-$$;
+  IF (SELECT count(*) FROM public."Bom") <> 5 OR (SELECT count(*) FROM public."ChiTietBom") <> 43 THEN
+    RAISE EXCEPTION 'Seed phải có 5 BOM, 43 dòng định mức'; END IF;
+  IF (SELECT so_luong_ton FROM public."MatHang" WHERE id=17) <> 265 THEN
+    RAISE EXCEPTION 'Tồn nan hoa phải là 1000 -20 +5 -720 = 265'; END IF;
+  IF (SELECT so_luong_ton FROM public."MatHang" WHERE id=5) <> 0 THEN
+    RAISE EXCEPTION 'Cụm bánh chưa được duyệt nhập kho'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."MatHang" t LEFT JOIN (
+      SELECT mat_hang_id,sum(so_luong_bien_dong) qty FROM public."GiaoDichKho" GROUP BY mat_hang_id
+    ) g ON g.mat_hang_id=t.id WHERE t.so_luong_ton<>COALESCE(g.qty,0)
+  ) THEN RAISE EXCEPTION 'Số dư không khớp sổ kho'; END IF;
+END $$;
 COMMIT;
