@@ -9,7 +9,7 @@ Password = Annotated[SecretStr, Field(min_length=1, max_length=1024)]
 
 
 class LoginInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid") # Nếu dư sẽ báo lỗi
 
     ten_dang_nhap: Username
     mat_khau: Password
