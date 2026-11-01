@@ -52,4 +52,8 @@ sequenceDiagram
 Response dùng envelope nghiệp vụ hiện tại, khác envelope `data/meta` của auth/nhân viên. Không có ETag hoặc transaction ghi cho GET này. SQL lỗi không dự kiến được handler chung trả 500 an toàn. Khi request sai nhiều điều kiện, thứ tự ưu tiên validation/auth không được cố định bởi sơ đồ.
 
 `created_at` là TIMESTAMPTZ; hai trường dữ liệu trước/sau là JSONB. SQL bootstrap tạo hai index phục vụ tìm lịch sử và trigger `trg_audit_bat_bien` chặn UPDATE/DELETE. Tạo bảng bằng ORM đơn thuần không tạo trigger này.
+Theo quyết định ngày 01/11/2026, hai cột `du_lieu_truoc` và `du_lieu_sau` dùng
+`JSONB(none_as_null=True)`: Python `None` được lưu thành SQL `NULL`, còn `{}` vẫn
+là một đối tượng JSON rỗng. Thay đổi chỉ áp dụng khi ORM ghi dữ liệu mới; không
+chuyển đổi các bản ghi JSON null đã tồn tại.
 Trong luồng đổi mật khẩu, `append` chỉ `session.add` record và không commit riêng; transaction nhân viên flush INSERT và commit cùng UPDATE password. Nếu append/commit lỗi, rollback cả hai; xem [auth.md](auth.md). Không log password/hash/token vào dữ liệu audit.

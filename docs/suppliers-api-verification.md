@@ -1,5 +1,70 @@
 # Kiểm chứng API nhà cung cấp — cập nhật 20/10/2026
 
+## Cập nhật 01/11/2026
+
+Theo quyết định mới trong `.handoff/plan.md`, module chỉ giữ GET danh sách,
+GET chi tiết và POST `/api/v1/nha_cung_cap`. Đã bỏ PATCH, DELETE, ETag/If-Match
+và toàn bộ `/api/v1/suppliers`; đã xóa `nha_cung_cap/errors.py`.
+POST giữ Location và audit `tao` cùng transaction; trùng mã trả 409 `ma_bi_trung`
+qua `DuplicateCodeException` dùng chung. Nhà cung cấp không được sửa/xóa vì
+phiếu nhập tham chiếu trực tiếp và không lưu bản sao thông tin.
+
+Các phần kiểm chứng PATCH/DELETE, ETag và `/suppliers` bên dưới chỉ còn giá trị
+lịch sử, không mô tả API hiện hành. Xem [sequence hiện tại](sequence/nha_cung_cap.md).
+Frontend còn gọi `/suppliers` cần tác vụ cập nhật riêng; receiving còn lệch tên bảng
+so với SQL ngoài FK nhà cung cấp. Không sửa database đang chạy hoặc tạo migration.
+
+### Bổ sung quyết định audit và kết quả kiểm chứng 01/11/2026
+
+Dev xác nhận mở rộng tác vụ để hai cột `LichSuThaoTac.du_lieu_truoc` và
+`du_lieu_sau` dùng `JSONB(none_as_null=True)`. Python `None` được lưu thành SQL
+`NULL`, còn `{}` được giữ là đối tượng JSON rỗng. Không chuyển đổi các bản ghi
+JSON null đã tồn tại; không đổi schema, request hoặc response của API audit.
+
+Kiểm chứng bằng Poetry trên máy host vì container backend không chạy. Các test
+PostgreSQL dùng database riêng `xbike_employee_20261101_d6aa7245_test`, với
+schema tách biệt hoặc transaction/savepoint rollback theo fixture; không dùng
+database ứng dụng làm nơi thử nghiệm và không chạy migration hoặc seed lại.
+
+- Nhóm nhà cung cấp, audit, auth, nhân viên và phân quyền: **119 passed**.
+  Hai file test nhà cung cấp có tổng cộng 66 test; lỗi kiểm tra SQL NULL cũ đã đạt.
+  Test audit mới kiểm tra trực tiếp PostgreSQL cho cả hai cột với `None` và `{}`.
+- Toàn bộ backend: **348 passed, 4 failed, 1 skipped**. Test chỉ đọc PostgreSQL
+  cần opt-in được bỏ qua theo fixture hiện có. Bốn lỗi ngoài phạm vi còn lại:
+  `test_mat_hang_postgres.py::test_mapping_and_constraints_match_bootstrap`
+  (database test còn nullable ở `MatHang.ten_mat_hang`),
+  `test_postgres_seed.py::test_seeded_postgres_schema_and_api`, và hai test trong
+  `test_schema_contract.py` về bảng/cột/kiểu dữ liệu và FK/constraint/index
+  (các ORM nghiệp vụ còn lệch bootstrap). Không sửa các module đó hoặc làm yếu test.
+- Ruff check đạt trên tất cả file Python đã sửa; Ruff format check đạt trên
+  module nhà cung cấp, model audit và các test nhà cung cấp/audit.
+- Import `app.main` và resolve FK receiving sang `NhaCungCap.id` đạt.
+  Không còn import module users/suppliers, AuditTrailLog hoặc errors cũ trong
+  backend; module nhà cung cấp không còn ETag/If-Match hoặc route legacy.
+- Sequence đã đối chiếu router, service, schema, model và dependency hiện tại;
+  đã kiểm tra số mục endpoint, code fence và khối Mermaid lồng nhau. Chưa kiểm tra
+  bằng Mermaid parser/render vì môi trường không có công cụ này.
+
+### Danh sách file thay đổi
+
+- `backend/app/modules/nha_cung_cap/`: sửa `models.py`, `schemas.py`, `ports.py`,
+  `repository.py`, `service.py`, `router.py`; xóa `errors.py`.
+- Wiring và lỗi chung: `backend/app/main.py`, `backend/app/dependencies.py`,
+  `backend/app/models.py`, `backend/app/core/exceptions.py`.
+- Tham chiếu FK trực tiếp: `backend/app/modules/receiving/models.py`.
+- ORM audit: `backend/app/modules/audit/models.py`.
+- Kiểm thử: `backend/tests/test_suppliers_api.py`,
+  `backend/tests/test_supplier_writes.py`, `backend/tests/test_audit_schema.py`,
+  `backend/tests/test_database_api.py`. Test phân quyền chung đổi tham chiếu
+  `/suppliers` sang `/nha_cung_cap` theo route mới.
+- Tài liệu: `docs/sequence/nha_cung_cap.md`, `docs/sequence/audit.md`,
+  `docs/suppliers-api-verification.md`.
+
+Hai file `test_audit_schema.py` và `test_database_api.py` đang bị quy tắc
+`backend/tests/.gitignore` hiện có bỏ qua nên không xuất hiện trong `git diff`.
+Các chỉnh sửa vẫn được lưu trên đĩa; tác vụ không thay đổi ignore, stage, commit
+hoặc push. Các thay đổi đã stage của dev được giữ nguyên.
+
 ## Phạm vi và quyết định
 
 Triển khai GET danh sách/chi tiết và POST/PATCH/DELETE `/api/v1/nha_cung_cap` theo
