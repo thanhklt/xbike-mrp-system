@@ -51,7 +51,7 @@ def _uses_contract_envelope(request: Request) -> bool:
     prefix = settings.api_v1_str
     return path.startswith(f"{prefix}/auth/") or any(
         path == f"{prefix}/{resource}" or path.startswith(f"{prefix}/{resource}/")
-        for resource in ("nhan_vien", "vai_tro", "mat_hang", "danh_muc_mat_hang")
+        for resource in ("nhan_vien", "vai_tro", "mat_hang", "danh_muc_mat_hang", "nha_cung_cap")
     )
 
 

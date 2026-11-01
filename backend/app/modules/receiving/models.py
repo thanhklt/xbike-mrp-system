@@ -35,7 +35,7 @@ class GoodsReceiptNote(Base):
     )
     ncc_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("nha_cung_cap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
+        ForeignKey("NhaCungCap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
         nullable=True,
     )
     tong_tien: Mapped[int | None] = mapped_column(Integer, nullable=True)

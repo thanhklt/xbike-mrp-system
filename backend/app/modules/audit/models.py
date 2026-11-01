@@ -48,8 +48,8 @@ class LichSuThaoTac(Base):
     loai_doi_tuong: Mapped[str] = mapped_column(String, nullable=False)
     doi_tuong_id: Mapped[int] = mapped_column(Integer, nullable=False)
     thao_tac: Mapped[str] = mapped_column(String, nullable=False)
-    du_lieu_truoc: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    du_lieu_sau: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    du_lieu_truoc: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    du_lieu_sau: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     ly_do: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

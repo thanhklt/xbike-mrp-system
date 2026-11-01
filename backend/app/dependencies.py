@@ -24,6 +24,8 @@ from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
+from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
+from app.modules.nha_cung_cap.service import SupplierService
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
 from app.modules.nhan_vien.service import NhanVienService
 from app.modules.production.repository import SqlAlchemyProductionRepository
@@ -32,8 +34,6 @@ from app.modules.receiving.repository import SqlAlchemyReceivingRepository
 from app.modules.receiving.service import ReceivingService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
-from app.modules.suppliers.repository import SqlAlchemySupplierRepository
-from app.modules.suppliers.service import SupplierService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)

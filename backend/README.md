@@ -59,6 +59,13 @@ docker-compose.yml             # PostgreSQL, backend, frontend, nginx
 
 Các module có tầng lưu trữ thường gồm `router.py`, `schemas.py`, `service.py`, `ports.py`, `repository.py`, `models.py`. Auth dùng `schema.py` số ít và không có ORM/repository riêng.
 
+## INSIGHT:
+- 1/ Hiện tại, Backend chỉ đang dùng access token với thời hạn trong 60 phút.
+=> Có thể bổ sung luông JWT authentication.
+
+- 2/ Hiện tại, Service đang nhập trực tiếp ORM Object từ Repository.
+=> Cần xác định việc lệ thuộc này sẽ dẫn đến hậu quả nào.
+
 ## How to run
 
 ### 1. Chuẩn bị cấu hình

@@ -16,12 +16,12 @@ from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
 from app.modules.mat_hang.synchronizer import create_synchronizer
 from app.modules.material_issuing.router import router as material_issuing_router
+from app.modules.nha_cung_cap.router import router as nha_cung_cap_router
 from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
 from app.modules.production.router import router as production_router
 from app.modules.receiving.router import router as receiving_router
 from app.modules.reporting.router import router as reporting_router
-from app.modules.suppliers.router import router as suppliers_router
 
 
 @asynccontextmanager
@@ -99,7 +99,7 @@ api_v1_prefix = settings.api_v1_str
 app.include_router(auth_router, prefix=api_v1_prefix)
 app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(vai_tro_router, prefix=api_v1_prefix)
-app.include_router(suppliers_router, prefix=api_v1_prefix)
+app.include_router(nha_cung_cap_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
