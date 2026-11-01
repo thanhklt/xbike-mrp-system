@@ -2,7 +2,14 @@
 
 from typing import Protocol
 
-from app.modules.nhan_vien.schemas import EmployeeCredentials, EmployeeRecord, NhanVienListQuery
+from app.modules.nhan_vien.schemas import (
+    EmployeeCredentials,
+    EmployeeRecord,
+    NewEmployee,
+    NhanVienListQuery,
+    VaiTroListQuery,
+    VaiTroRead,
+)
 from app.shared.records import RecordPage
 
 
@@ -20,3 +27,19 @@ class NhanVienRepository(Protocol):
     async def lock_credentials_by_id(self, employee_id: int) -> EmployeeCredentials | None: ...
 
     async def set_password_hash(self, employee_id: int, password_hash: str) -> None: ...
+
+    async def get_for_update(self, employee_id: int) -> EmployeeRecord | None: ...
+
+    async def create(self, employee: NewEmployee) -> EmployeeRecord: ...
+
+    async def update_profile(
+        self, employee_id: int, changes: dict[str, object]
+    ) -> EmployeeRecord: ...
+
+    async def set_role(self, employee_id: int, role_id: int) -> EmployeeRecord: ...
+
+    async def set_status(self, employee_id: int, status: str) -> EmployeeRecord: ...
+
+    async def get_role(self, role_id: int) -> VaiTroRead | None: ...
+
+    async def list_roles(self, params: VaiTroListQuery) -> RecordPage[VaiTroRead]: ...

@@ -33,14 +33,24 @@ class ForbiddenException(AppException):
     default_message = "Forbidden"
 
 
-class InactiveAccountException(UnauthorizedException):
-    code = "ACCOUNT_INACTIVE"
-    default_message = "Employee account is not active"
-
-
 class ConflictException(AppException):
     code = "CONFLICT"
     default_message = "Resource conflict"
+
+
+class DuplicateCodeException(ConflictException):
+    code = "ma_bi_trung"
+    default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"
+
+
+class PreconditionRequiredException(AppException):
+    code = "thieu_if_match"
+    default_message = "Thiếu header If-Match"
+
+
+class PreconditionFailedException(AppException):
+    code = "du_lieu_da_thay_doi"
+    default_message = "Dữ liệu đã thay đổi; hãy tải lại"
 
 
 class InvalidCredentialsException(UnauthorizedException):

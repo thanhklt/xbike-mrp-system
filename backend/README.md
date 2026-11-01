@@ -166,3 +166,27 @@ poetry run pytest -q
 Test HTTP dùng transaction/savepoint rollback; test concurrency dùng schema riêng trong database test. Tuyệt đối không trỏ TEST_DATABASE_URL về database ứng dụng. Test schema/trigger cần bootstrap SQL thật, không thay bằng `metadata.create_all()`.
 
 `test_schema_contract.py` và `test_postgres_seed.py` còn kiểm tra toàn bộ ORM nghiệp vụ; các lỗi lệch SQL v4 ngoài ba bảng này được giữ để theo dõi, không làm yếu assertion để ép suite xanh. Dev đã xác nhận xử lý phần đó trong tác vụ riêng. Không có test hoặc target Makefile cho migration.
+
+
+## API nhân viên và vai trò
+
+Module có models.py, router.py, schemas.py, ports.py, repository.py, service.py và __init__.py. Xem [sequence nhân viên](../docs/sequence/nhan_vien.md) để đối chiếu chi tiết.
+
+| Method | Path | Quyền |
+| --- | --- | --- |
+| GET | `/api/v1/nhan_vien` | Admin/quản lý, projection theo quyền |
+| GET | `/api/v1/nhan_vien/{id}` | Admin/quản lý hoặc chính mình |
+| POST | `/api/v1/nhan_vien` | Admin |
+| PATCH | `/api/v1/nhan_vien/{id}` | Admin |
+| DELETE | `/api/v1/nhan_vien/{id}` | Admin, chuyển sang bi_khoa |
+| PUT | `/api/v1/nhan_vien/{id}/vai_tro` | Admin |
+| POST | `/api/v1/nhan_vien/{id}/mo_khoa` | Admin |
+| GET | `/api/v1/vai_tro` | Admin/quản lý |
+
+GET chi tiết trả ETag. Gửi nguyên giá trị trong If-Match cho PATCH/PUT/DELETE/mở khóa: thiếu trả 428, cũ trả 412. POST tạo trả 201 cùng Location/ETag; các thao tác còn lại trả 200 cùng ETag, riêng DELETE trả 204 không body cùng ETag mới.
+
+Quyết định ngày 01/11/2026: DELETE là soft delete, thay thế `/vo_hieu_hoa`. DELETE và mở khóa đều nhận body JSON bắt buộc `{"ly_do":"Lý do thao tác"}`. Với HTTPX, dùng client.request("DELETE", ..., json=...). Gọi sai trạng thái trả 409. Tài khoản khóa vẫn được lưu/tra cứu; mở khóa không cấp JWT mới.
+
+Một admin được bootstrap sẵn; API chặn tạo/cấp thêm admin, hạ quyền hoặc khóa admin đó. PATCH chỉ admin và chỉ sửa hồ sơ. Lỗi nhân viên/vai trò dùng error/meta.request_id theo contract v2; client đang đọc success/timestamp cũ cần cập nhật phần xử lý lỗi.
+
+Test PostgreSQL cần TEST_DATABASE_URL trỏ database riêng có tên kết thúc `_test`. test_nhan_vien_postgres.py tạo schema ngẫu nhiên để dùng connection cạnh tranh. Fixture đã commit được giữ trong database test; không reset hoặc ghi vào database ứng dụng.
