@@ -1,11 +1,11 @@
-"""Request parameters and response bodies for the two employee GET endpoints."""
+"""Employee API schemas and internal records shared with the repository."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SecretStr, field_validator
 
 MAX_EMPLOYEE_ID = 2**31 - 1
 
@@ -121,3 +121,90 @@ class AuthIdentity(BaseModel):
     profile: NhanVienRead
     roles: list[str]
     credential_version: str = Field(repr=False, exclude=True)
+
+
+def _date_string(value: object) -> object:
+    if value is not None and (
+        not isinstance(value, str) or len(value) != 10 or value[4] != "-" or value[7] != "-"
+    ):
+        raise ValueError("Use a date string in YYYY-MM-DD format")
+    return value
+
+
+def _decimal_string(value: object) -> object:
+    if value is not None and not isinstance(value, str):
+        raise ValueError("Use a decimal JSON string")
+    return value
+
+
+ProfileDate = Annotated[date | None, BeforeValidator(_date_string)]
+SalaryCoefficient = Annotated[
+    Annotated[Decimal, Field(ge=0, max_digits=5, decimal_places=2)] | None,
+    BeforeValidator(_decimal_string),
+]
+
+
+class NhanVienPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    ho_ten: str | None = None
+    ngay_sinh: ProfileDate = None
+    so_dien_thoai: str | None = None
+    email: str | None = None
+    ngay_vao_lam: ProfileDate = None
+    he_so_luong: SalaryCoefficient = None
+
+
+class NhanVienCreate(NhanVienPatch):
+    ten_dang_nhap: str = Field(min_length=1, max_length=255)
+    ma_nhan_vien: str = Field(pattern=r"^NV-[0-9]{6}$")
+    vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
+    mat_khau: SecretStr = Field(min_length=8, max_length=1024, repr=False, exclude=True)
+
+    @field_validator("ma_nhan_vien")
+    @classmethod
+    def valid_employee_code(cls, value: str) -> str:
+        if value == "NV-000000":
+            raise ValueError("Employee code must be nonzero")
+        return value
+
+
+class DoiVaiTroInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
+
+
+class LyDoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    ly_do: str = Field(min_length=1)
+
+
+class VaiTroListQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class VaiTroRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ma_vai_tro: RoleCode
+    ten_vai_tro: str
+
+
+class VaiTroListResponse(BaseModel):
+    data: list[VaiTroRead]
+    meta: ListResponseMeta
+
+
+@dataclass(frozen=True)
+class NewEmployee:
+    ten_dang_nhap: str
+    ma_nhan_vien: str
+    vai_tro_id: int
+    password_hash: str = field(repr=False)
+    profile: dict[str, object]

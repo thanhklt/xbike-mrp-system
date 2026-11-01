@@ -38,6 +38,21 @@ class ConflictException(AppException):
     default_message = "Resource conflict"
 
 
+class DuplicateCodeException(ConflictException):
+    code = "ma_bi_trung"
+    default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"
+
+
+class PreconditionRequiredException(AppException):
+    code = "thieu_if_match"
+    default_message = "Thiếu header If-Match"
+
+
+class PreconditionFailedException(AppException):
+    code = "du_lieu_da_thay_doi"
+    default_message = "Dữ liệu đã thay đổi; hãy tải lại"
+
+
 class InvalidCredentialsException(UnauthorizedException):
     code = "thong_tin_dang_nhap_khong_hop_le"
     default_message = "Thông tin đăng nhập không hợp lệ"

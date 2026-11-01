@@ -14,6 +14,7 @@ from app.modules.finished_goods_issuing.router import router as finished_goods_r
 from app.modules.inventory.router import router as inventory_router
 from app.modules.material_issuing.router import router as material_issuing_router
 from app.modules.nhan_vien.router import router as nhan_vien_router
+from app.modules.nhan_vien.router import vai_tro_router
 from app.modules.production.router import router as production_router
 from app.modules.receiving.router import router as receiving_router
 from app.modules.reporting.router import router as reporting_router
@@ -85,6 +86,7 @@ async def api_ping():
 api_v1_prefix = settings.api_v1_str
 app.include_router(auth_router, prefix=api_v1_prefix)
 app.include_router(nhan_vien_router, prefix=api_v1_prefix)
+app.include_router(vai_tro_router, prefix=api_v1_prefix)
 app.include_router(catalog_router, prefix=api_v1_prefix)
 app.include_router(suppliers_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)

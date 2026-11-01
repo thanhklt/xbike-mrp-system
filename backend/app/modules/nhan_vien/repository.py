@@ -1,14 +1,19 @@
 """SQLAlchemy employee queries; ORM objects do not leave this adapter."""
 
 from sqlalchemy import false, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.nhan_vien.models import NhanVien
+from app.core.errors import DuplicateCodeException
+from app.modules.nhan_vien.models import NhanVien, VaiTro
 from app.modules.nhan_vien.schemas import (
     MAX_EMPLOYEE_ID,
     EmployeeCredentials,
     EmployeeRecord,
+    NewEmployee,
     NhanVienListQuery,
+    VaiTroListQuery,
+    VaiTroRead,
 )
 from app.shared.records import RecordPage
 
@@ -98,6 +103,80 @@ class SqlAlchemyNhanVienRepository:
         await self.session.execute(
             update(NhanVien).where(NhanVien.id == employee_id).values(mat_khau=password_hash)
         )
+
+    async def get_for_update(self, employee_id: int) -> EmployeeRecord | None:
+        if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
+            return None
+        user = await self.session.scalar(
+            select(NhanVien)
+            .where(NhanVien.id == employee_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return employee_record(user) if user is not None else None
+
+    async def create(self, employee: NewEmployee) -> EmployeeRecord:
+        user = NhanVien(
+            ten_dang_nhap=employee.ten_dang_nhap,
+            ma_nhan_vien=employee.ma_nhan_vien,
+            vai_tro_id=employee.vai_tro_id,
+            mat_khau=employee.password_hash,
+            trang_thai="hoat_dong",
+            **employee.profile,
+        )
+        self.session.add(user)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            original = exc.orig
+            if (
+                getattr(original, "sqlstate", None) == "23505"
+                or getattr(original, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE"
+            ):
+                raise DuplicateCodeException() from exc
+            raise
+        # Read normalized database values (notably NUMERIC(5, 2)) so the ETag
+        # returned by POST matches an immediate GET of the persisted resource.
+        await self.session.refresh(user)
+        return employee_record(user)
+
+    async def _update(self, employee_id: int, changes: dict[str, object]) -> EmployeeRecord:
+        if changes:
+            await self.session.execute(
+                update(NhanVien)
+                .where(NhanVien.id == employee_id)
+                .values(**changes)
+                .execution_options(synchronize_session=False)
+            )
+        # Refresh the identity map, including role, before generating response/ETag/audit.
+        result = await self.get_for_update(employee_id)
+        assert result is not None  # The service holds this employee's row lock.
+        return result
+
+    async def update_profile(self, employee_id: int, changes: dict[str, object]) -> EmployeeRecord:
+        return await self._update(employee_id, changes)
+
+    async def set_role(self, employee_id: int, role_id: int) -> EmployeeRecord:
+        return await self._update(employee_id, {"vai_tro_id": role_id})
+
+    async def set_status(self, employee_id: int, status: str) -> EmployeeRecord:
+        return await self._update(employee_id, {"trang_thai": status})
+
+    async def get_role(self, role_id: int) -> VaiTroRead | None:
+        if not 1 <= role_id <= MAX_EMPLOYEE_ID:
+            return None
+        role = await self.session.get(VaiTro, role_id)
+        return VaiTroRead.model_validate(role) if role is not None else None
+
+    async def list_roles(self, params: VaiTroListQuery) -> RecordPage[VaiTroRead]:
+        total = await self.session.scalar(select(func.count()).select_from(VaiTro)) or 0
+        offset = (params.page - 1) * params.page_size
+        if offset >= total:
+            return RecordPage([], total)
+        roles = await self.session.scalars(
+            select(VaiTro).order_by(VaiTro.id).offset(offset).limit(params.page_size)
+        )
+        return RecordPage([VaiTroRead.model_validate(role) for role in roles], total)
 
 
 def employee_credentials(user: NhanVien) -> EmployeeCredentials:

@@ -77,3 +77,14 @@ Only the three tables `"NhanVien"`, `"VaiTro"`, `"LichSuThaoTac"` have been rena
 - **ACID Guarantee**: Inventory adjustments and material issuance are wrapped in strict database transactions with row-level locks (`SELECT FOR UPDATE`) to prevent negative inventory allocations.
 - **Double-Entry Stock Ledger**: Physical stock changes are recorded as ledger movements (Credit from Location A, Debit to Location B) rather than arbitrary in-place mutations.
 - **Audit Trails**: All status transitions (`DRAFT` -> `PLANNED` -> `RELEASED` -> `IN_PROGRESS` -> `COMPLETED`) generate immutable audit records.
+
+
+### Employee administration (01/11/2026)
+
+The employee module contains models.py, router.py, schemas.py, ports.py, repository.py and service.py, plus __init__.py. DTOs needed internally live in schemas.py; NhanVienService owns reads and mutations through NhanVienRepository. The former dto.py, write_service.py and module errors.py have been consolidated. Auth still calls only the public employee service; audit writes go through AuditService in the same transaction.
+
+The eight employee/role endpoints are documented in [sequence diagrams](sequence/nhan_vien.md). DELETE reversibly blocks an account with a required JSON reason and replaces POST /vo_hieu_hoa. POST /mo_khoa restores activity. Documents, roles and history are retained; list queries still support blocked accounts and status filtering.
+
+One administrator is provisioned by bootstrap. APIs reject creation/promotion of another admin, demotion of the existing admin and blocking that admin. Mutations lock and refresh the administrator row before locking the target and comparing If-Match. The API rechecks account/role/password version after waiting. No singleton-admin database constraint is added; direct SQL is outside this API policy.
+
+Employee changes and audit commit/rollback together. Role changes append thu_hoi_quyen and cap_quyen; DELETE appends vo_hieu_hoa; unlock appends sua with reason and before/after data. Account/role errors use the contract-v2 error/meta envelope, matching auth. Other modules retain their existing error envelopes.
