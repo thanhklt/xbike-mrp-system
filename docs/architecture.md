@@ -51,7 +51,7 @@ The manufacturing lifecycle executes in distinct, auditable phases:
 | :--- | :--- | :--- |
 | **`auth`** | JWT issuance/validation and orchestration through the employee public service. Contains router.py, schema.py and service.py. | `AuthService` |
 | **`nhan_vien`** | Owns employee credentials, profiles and roles; public authentication and atomic password-change operations. | `NhanVien`, `VaiTro`, `NhanVienService` |
-| **`catalog`** | Bicycle models, sub-assemblies, raw parts, and unit of measures. | `Part`, `Assembly`, `Category`, `UnitOfMeasure` |
+| **`mat_hang`** | Owns item master data, soft delete and the application item snapshot. Serves `/mat_hang` and `/danh_muc_mat_hang/`. | `MatHang`, `MatHangReader`, `MatHangService` |
 | **`suppliers`** | Approved vendor list (AVL), vendor lead times, pricing tiers. | `Supplier`, `SupplierPartPricing` |
 | **`bom`** | Multi-level Bill of Materials trees with scrap factor and revisions. | `BOMHeader`, `BOMItem`, `BOMRevision` |
 | **`inventory`** | Real-time stock levels across bins, lots, and movement ledger. | `StockLevel`, `Warehouse`, `BinLocation`, `StockMovement` |
@@ -88,3 +88,12 @@ The eight employee/role endpoints are documented in [sequence diagrams](sequence
 One administrator is provisioned by bootstrap. APIs reject creation/promotion of another admin, demotion of the existing admin and blocking that admin. Mutations lock and refresh the administrator row before locking the target and comparing If-Match. The API rechecks account/role/password version after waiting. No singleton-admin database constraint is added; direct SQL is outside this API policy.
 
 Employee changes and audit commit/rollback together. Role changes append thu_hoi_quyen and cap_quyen; DELETE appends vo_hieu_hoa; unlock appends sua with reason and before/after data. Account/role errors use the contract-v2 error/meta envelope, matching auth. Other modules retain their existing error envelopes.
+
+
+## Phạm vi mặt hàng đã triển khai ngày 01/11/2026
+
+`mat_hang` là chủ sở hữu duy nhất của bảng `"MatHang"` theo `infra/postgres/init.sql`. Dữ liệu tồn đã nằm trong `so_luong_ton` và `ton_kho_updated_at`; module không tạo/xóa dòng ton_kho. Các module còn mapping tồn kho cũ được giữ cho tác vụ sau, không phải một schema thay thế.
+
+Router có sáu endpoint; ba GET mặt hàng đọc cùng snapshot bất biến nạp ở startup. Reader không có repository/session; auth vẫn kiểm tra danh tính hiện hành trong DB. Command service dùng repository + AuditService + transaction và công bố cache sau commit. Adapter synchronizer dùng listener riêng, LISTEN trước initial load, refresh nguyên tử, reconnect và đối soát 30 giây. Giới hạn nhất quán tức thời là một worker; đa worker đồng bộ bất đồng bộ.
+
+Soft delete giữ dữ liệu/quan hệ/số dư, và GET vẫn trả hàng bị khóa. Các service tạo BOM/phiếu/lệnh hiện có gọi public MatHangAvailabilityService trong transaction của caller, khóa dòng để ngăn tranh chấp với vô hiệu hóa. Không thêm endpoint yêu cầu sản xuất hoặc chuyển đổi ORM của các module cũ trong tác vụ này. Xem [sequence](sequence/mat_hang.md) và [plan/giới hạn](plans/2026-11-01-hop-nhat-mat-hang.md).

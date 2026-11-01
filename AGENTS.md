@@ -79,6 +79,15 @@ Nguồn tài liệu đã thống nhất của project:
 - Các bảng còn lại chưa thuộc phạm vi đổi tên của tác vụ này; không tự mở rộng sang toàn bộ schema.
 - Đây là quyết định cho kế hoạch triển khai, không phải xác nhận database đã được đổi tên. Phạm vi hiện tại chỉ demo Docker trên database mới/trống, chưa có migration. Volume PostgreSQL đã khởi tạo không tự cập nhật schema khi sửa `init.sql` hoặc restart/rebuild container; không tự xóa volume, chạy `make clear`/`docker compose down -v` hoặc seed lại dữ liệu để áp dụng schema mới.
 
+## 10. Nguồn schema và giới hạn hợp nhất mặt hàng đã thống nhất ngày 01/11/2026
+
+- `infra/postgres/init.sql` là schema đã chốt cho tác vụ hợp nhất mặt hàng. Đồng bộ ORM `MatHang` trong module `backend/app/modules/mat_hang/` theo bảng `"MatHang"` trong file này, gồm kiểu dữ liệu, nullable, default, khóa và ràng buộc. Quyết định này cập nhật phạm vi mặt hàng so với giới hạn đổi tên của kế hoạch auth tại mục 9; không tự mở rộng sang toàn bộ ORM.
+- SQL hiện tại đã gộp số dư tồn vào `"MatHang".so_luong_ton` và `ton_kho_updated_at`. Trong module `mat_hang`, không tiếp tục tạo/đọc/xóa bản ghi `ton_kho` để quản lý số dư mặt hàng.
+- Các module khác còn dùng `ton_kho` hoặc ORM tồn kho cũ sẽ được sửa trong tác vụ sau. Không tự chuyển đổi các module đó, tạo lại bảng `ton_kho`, hoặc sửa ngược `init.sql` để chiều theo code cũ trong tác vụ hợp nhất này.
+- Chỉ cập nhật các import, đăng ký model/router, dependency và tham chiếu trực tiếp thực sự cần thiết cho hợp nhất. Nếu cần sửa nghiệp vụ tồn kho hoặc đồng bộ thêm ORM của module khác để tiếp tục, nêu rõ phụ thuộc và hỏi dev trước khi mở rộng phạm vi.
+- Bổ sung ràng buộc bắt buộc `ten_mat_hang` trong API, ORM và `init.sql` theo yêu cầu đã chốt; rà soát `seed.sql` và chỉ bổ sung nếu cần. Đây là cập nhật bootstrap cho database mới/trống, không phải quyền sửa database đang chạy hoặc seed lại database đã có dữ liệu.
+- Khi kiểm chứng, tách kết quả của module mặt hàng với lỗi/giới hạn do các module tồn kho cũ chưa được chuyển đổi. Không tự sửa ngoài phạm vi để làm xanh toàn bộ kiểm thử, không làm yếu kiểm thử và không báo toàn hệ thống đã đồng bộ schema hoặc đạt E2E khi chưa có bằng chứng.
+
 ## Hướng dẫn công cụ hiện có
 
 @C:\Users\marcn\.codex\RTK.md

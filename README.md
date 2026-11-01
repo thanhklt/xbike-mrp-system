@@ -51,7 +51,7 @@ xbike-mrp-system/
 │   │   ├── modules/                 # Modular domain-driven feature modules
 │   │   │   ├── auth/                # Authentication & JWT tokens
 │   │   │   ├── users/               # User management & roles
-│   │   │   ├── catalog/             # Bicycle parts, assemblies & specifications
+│   │   │   ├── mat_hang/            # Danh mục mặt hàng, cache và soft delete
 │   │   │   ├── suppliers/           # Vendor management & purchase catalog
 │   │   │   ├── bom/                 # Multi-level Bill of Materials
 │   │   │   ├── inventory/           # Stock on hand, bins & warehouse transactions

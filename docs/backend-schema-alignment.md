@@ -17,7 +17,7 @@ Các đường dẫn dưới đây tính từ thư mục gốc dự án. Với m
 | Module trong `backend/app/modules/` | Bảng được ánh xạ |
 | --- | --- |
 | `nhan_vien/` | `NhanVien`, `VaiTro` |
-| `catalog/` | `mat_hang` |
+| `mat_hang/` | `MatHang` (bao gồm số dư tồn theo SQL hiện tại) |
 | `suppliers/` | `nha_cung_cap` |
 | `bom/` | `bom`, `chi_tiet_bom` |
 | `receiving/` | `phieu_nhap`, `chi_tiet_phieu_nhap` |
@@ -97,3 +97,12 @@ Test dùng transaction ngoài và savepoint để rollback các dữ liệu tạ
 Không đặt biến này tới database ứng dụng.
 
 Kết quả kiểm chứng của refactor hiện tại được ghi trong plan `docs/plans/2026-10-30-auth-nhan-vien-boundaries.md`. Chỉ dùng database test riêng; không seed hoặc thay đổi database ứng dụng. So sánh schema bằng inspector không phải chạy migration.
+
+
+## Cập nhật mặt hàng ngày 01/11/2026
+
+`infra/postgres/init.sql` là chuẩn đã chốt. ORM `MatHang` thuộc module `mat_hang`, bảng `"MatHang"`; giá NUMERIC(18,2), trạng thái NOT NULL DEFAULT true, số dư NOT NULL DEFAULT 0 và thời điểm tồn TIMESTAMPTZ. Tên đã được bổ sung NOT NULL và CHECK không trắng trong bootstrap/ORM; seed hiện có đủ tên, không cần thay dữ liệu seed.
+
+Bổ sung trigger statement-level phát tín hiệu `mat_hang_changed` sau thay đổi bảng, chỉ được giao khi transaction commit. Cache backend đọc cả hai trạng thái; POST/PATCH/soft DELETE và audit atomic, công bố sau commit. Public availability guard dùng DB/row lock, không dùng snapshot để quyết định ghi tài liệu.
+
+Các mô tả inventory/ton_kho ở phần trên phản ánh các module chưa chuyển đổi; không phải nguồn chuẩn thay thế init.sql. Chỉ sửa các FK trực tiếp tới MatHang để registry không trỏ model đã bỏ. Không đồng bộ các bảng nghiệp vụ khác, không tạo lại ton_kho, không chạy migration hoặc sửa DB đang có dữ liệu. Kiểm thử toàn schema vẫn có thể lỗi ở các ORM đó; kết quả chi tiết được bàn giao riêng.
