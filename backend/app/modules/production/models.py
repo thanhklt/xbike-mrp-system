@@ -35,7 +35,7 @@ class ProductionRequest(Base):
     ma_yeu_cau_san_xuat: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_yeu_cau_san_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_yeu_cau_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -99,7 +99,7 @@ class WorkOrder(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     bom_id: Mapped[int] = mapped_column(
@@ -149,9 +149,7 @@ class WorkOrderItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey(
-            "mat_hang.id", name="fk_chi_tiet_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"
-        ),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong_can: Mapped[int] = mapped_column(Integer, nullable=False)

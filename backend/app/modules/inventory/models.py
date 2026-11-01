@@ -28,7 +28,7 @@ class StockLevel(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_ton_kho_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_ton_kho_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
         unique=True,
     )
@@ -50,9 +50,7 @@ class StockAdjustment(Base):
     ma_phieu: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     nhan_vien_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey(
-            "NhanVien.id", name="fk_phieu_dieu_chinh_kho_nhan_vien_id", ondelete="RESTRICT"
-        ),
+        ForeignKey("NhanVien.id", name="fk_phieu_dieu_chinh_kho_nhan_vien_id", ondelete="RESTRICT"),
         nullable=False,
     )
     ly_do: Mapped[str] = mapped_column(Text, nullable=False)
@@ -93,7 +91,7 @@ class StockAdjustmentItem(Base):
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
-            "mat_hang.id", name="fk_chi_tiet_phieu_dieu_chinh_kho_mat_hang_id", ondelete="RESTRICT"
+            "MatHang.id", name="fk_chi_tiet_phieu_dieu_chinh_kho_mat_hang_id", ondelete="RESTRICT"
         ),
         nullable=False,
     )
@@ -180,7 +178,7 @@ class StockMovement(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_giao_dich_kho_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_giao_dich_kho_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     loai_giao_dich: Mapped[str] = mapped_column(String, nullable=False)

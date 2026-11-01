@@ -6,14 +6,22 @@ from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
 from app.modules.bom.ports import BomRepository
 from app.modules.bom.schemas import BOMHeaderCreate, BOMHeaderResponse
+from app.modules.mat_hang.ports import ActiveMatHangReader
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
 
 
 class BomService:
-    def __init__(self, repository: BomRepository, audit: AuditWriter, transaction: Transaction):
+    def __init__(
+        self,
+        repository: BomRepository,
+        audit: AuditWriter,
+        transaction: Transaction,
+        items: ActiveMatHangReader,
+    ):
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+        self.items = items
 
     async def list_entries(self, params: PageParams) -> PaginatedResponse[BOMHeaderResponse]:
         result = await self.repository.list_entries(params)
@@ -27,6 +35,9 @@ class BomService:
 
     async def create_entry(self, payload: BOMHeaderCreate, actor: dict) -> BOMHeaderResponse:
         async with self.transaction:
+            await self.items.require_active_items(
+                [payload.mat_hang_id, *(item.mat_hang_id for item in payload.items)]
+            )
             created = await self.repository.add(payload)
             await self.audit.append(
                 CreationAudit(
