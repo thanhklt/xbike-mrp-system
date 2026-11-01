@@ -4,15 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
+from app.core.database import AsyncSessionLocal
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import logger, setup_logging
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
-from app.modules.catalog.router import router as catalog_router
 from app.modules.finished_goods_issuing.router import router as finished_goods_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
+from app.modules.mat_hang.synchronizer import create_synchronizer
 from app.modules.material_issuing.router import router as material_issuing_router
 from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
@@ -32,7 +34,14 @@ async def lifespan(app: FastAPI):
         settings.version,
         settings.environment,
     )
-    yield
+    synchronizer = create_synchronizer(
+        app.state.mat_hang_cache, settings.database_url, AsyncSessionLocal
+    )
+    try:
+        await synchronizer.start()
+        yield
+    finally:
+        await synchronizer.stop()
     # Shutdown
     logger.info("Shutting down %s...", settings.project_name)
 
@@ -45,6 +54,8 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+app.state.mat_hang_cache = MatHangCache()
 
 # Exception handlers
 register_exception_handlers(app)
@@ -88,7 +99,6 @@ api_v1_prefix = settings.api_v1_str
 app.include_router(auth_router, prefix=api_v1_prefix)
 app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(vai_tro_router, prefix=api_v1_prefix)
-app.include_router(catalog_router, prefix=api_v1_prefix)
 app.include_router(suppliers_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)

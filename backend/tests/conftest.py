@@ -7,6 +7,30 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.fixture
+def item_factory():
+    from app.modules.mat_hang.schemas import MatHangRead
+
+    def make_item(item_id=1, **changes):
+        values = dict(
+            id=item_id,
+            ma_mat_hang=f"MH-{item_id:06d}",
+            sku=f"SKU-{item_id}",
+            ten_mat_hang=f"Mặt hàng {item_id}",
+            loai_mat_hang="linh_kien",
+            don_vi_tinh="chiec",
+            mau_sac=None,
+            mo_ta=None,
+            don_gia=None,
+            is_active=True,
+            so_luong_ton=0,
+            ton_kho_updated_at=None,
+        )
+        return MatHangRead(**(values | changes))
+
+    return make_item
+
+
+@pytest.fixture
 async def async_client():
     """Asynchronous test client fixture for FastAPI app."""
     from app.main import app

@@ -85,7 +85,7 @@ class IssueItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_chi_tiet_phieu_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_phieu_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)

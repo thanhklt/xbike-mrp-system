@@ -36,7 +36,7 @@ backend/
 │       ├── nhan_vien/         # Nhân viên, tài khoản và vai trò
 │       ├── audit/             # Đọc và append lịch sử thao tác
 │       ├── bom/
-│       ├── catalog/
+│       ├── mat_hang/
 │       ├── finished_goods_issuing/
 │       ├── inventory/
 │       ├── material_issuing/
@@ -139,7 +139,7 @@ PostgreSQL tự chạy `init.sql` rồi `seed.sql` trong `/docker-entrypoint-ini
 
 Không có migration hoặc bước Alembic. Restart/rebuild container dùng volume cũ không cập nhật schema hay tự tạo tài khoản seed. Nếu đã có dữ liệu/schema cũ, báo dev để bố trí môi trường demo trống riêng; không tự chạy `make clear`, `docker compose down -v` hoặc seed lại database.
 
-Phạm vi refactor hiện tại là auth, nhân viên và audit; chưa đồng bộ toàn bộ ORM nghiệp vụ với SQL v4. Frontend vẫn dùng luồng demo riêng, chưa tích hợp đăng nhập thật.
+Đã hợp nhất mặt hàng vào mat_hang theo init.sql hiện tại bên cạnh auth, nhân viên và audit; các module còn dùng ton_kho hoặc ORM nghiệp vụ cũ sẽ được chuyển đổi ở tác vụ sau. Frontend vẫn dùng luồng demo riêng, chưa tích hợp đăng nhập thật.
 
 ## Kiểm tra API
 
@@ -190,3 +190,33 @@ Quyết định ngày 01/11/2026: DELETE là soft delete, thay thế `/vo_hieu_h
 Một admin được bootstrap sẵn; API chặn tạo/cấp thêm admin, hạ quyền hoặc khóa admin đó. PATCH chỉ admin và chỉ sửa hồ sơ. Lỗi nhân viên/vai trò dùng error/meta.request_id theo contract v2; client đang đọc success/timestamp cũ cần cập nhật phần xử lý lỗi.
 
 Test PostgreSQL cần TEST_DATABASE_URL trỏ database riêng có tên kết thúc `_test`. test_nhan_vien_postgres.py tạo schema ngẫu nhiên để dùng connection cạnh tranh. Fixture đã commit được giữ trong database test; không reset hoặc ghi vào database ứng dụng.
+
+
+## API mặt hàng và danh mục trong bộ nhớ
+
+Module `mat_hang` sở hữu ORM `MatHang`, bảng `"MatHang"`. Xem [sequence mặt hàng](../docs/sequence/mat_hang.md). Nhóm `catalog/parts` cũ đã được thay thế; không còn module nghiệp vụ `catalog` hoặc `danh_muc_mat_hang` thứ hai.
+
+| Method | Path | Quyền |
+| --- | --- | --- |
+| GET | `/api/v1/danh_muc_mat_hang/` | Admin/quản lý/nhân viên; toàn bộ danh mục, không phân trang |
+| GET | `/api/v1/mat_hang` | Admin/quản lý/nhân viên; tìm kiếm, lọc, sort, phân trang |
+| GET | `/api/v1/mat_hang/{id}` | Admin/quản lý/nhân viên; ETag |
+| POST | `/api/v1/mat_hang` | Chỉ quản lý; 201, Location/ETag |
+| PATCH | `/api/v1/mat_hang/{id}` | Chỉ quản lý; If-Match, 200/ETag |
+| DELETE | `/api/v1/mat_hang/{id}` | Chỉ quản lý; If-Match, 204, soft delete |
+
+GET mặc định bao gồm cả hoạt động và bị khóa. UI dùng `is_active` để hiển thị trạng thái; filter `is_active` chỉ áp dụng khi client gửi rõ. Danh mục trả `{data, meta: {total, request_id}}`; list mặt hàng có meta phân trang. Tên mặt hàng bắt buộc và không được trắng. Giá dùng NUMERIC(18,2)/Decimal, JSON là chuỗi như `"123.45"` hoặc null. `so_luong_ton` và `ton_kho_updated_at` chỉ đọc, không nhận qua POST/PATCH danh mục.
+
+DELETE chỉ đặt `is_active=false`, không xóa bản ghi/quan hệ/tồn kho. Có BOM/chứng từ hoặc tồn dương vẫn được ngừng hoạt động. Mặt hàng bị khóa bị chặn ở backend khi tạo tài liệu mới qua các service nghiệp vụ hiện có. Lịch sử vẫn đọc được; không tự hủy các chứng từ đang xử lý. Các module nghiệp vụ còn lệch ORM/SQL chưa được tuyên bố đạt E2E, và endpoint yêu cầu sản xuất theo contract chưa được bổ sung trong tác vụ này.
+
+Snapshot nạp trong lifespan trước khi phục vụ; auth vẫn kiểm tra DB hiện hành nhưng các GET mặt hàng không SELECT bảng MatHang. Ghi và audit dùng chung transaction; chỉ sau commit mới công bố cache trước response thành công. Cache bất biến theo application instance. Tác vụ async lắng nghe PostgreSQL LISTEN/NOTIFY, gom tín hiệu và nạp lại qua session riêng; reconnect kèm full reload và đối soát mỗi 30 giây. Chưa sẵn sàng/đồng bộ lỗi trả 503 thay vì giả danh mục rỗng hoặc fallback GET trực tiếp DB. Shutdown đóng listener và worker.
+
+Giới hạn thấy-ngay-sau-ghi được kiểm chứng trên một worker. Nhiều worker/instance có snapshot riêng và đồng bộ bất đồng bộ; chưa cam kết GET tức thời giữa các worker. Không sửa init.sql để tạo lại ton_kho cho code cũ. Thay đổi bootstrap yêu cầu database mới/trống; không áp dụng SQL/seed lại lên database ứng dụng hiện có.
+
+Kiểm thử mặt hàng (TEST_DATABASE_URL chỉ trỏ database riêng kết thúc _test):
+
+```powershell
+poetry run pytest tests/test_mat_hang.py tests/test_mat_hang_cache.py tests/test_mat_hang_schema.py tests/test_mat_hang_active_guard.py tests/test_mat_hang_postgres.py -q
+```
+
+Test notification/concurrency cần COMMIT thật trên database test riêng; không thay bằng SQLite hoặc chỉ outer rollback. Thư mục tests và docs/plans có quy tắc ignore hiện hữu; kiểm tra các file mới khi dev chuẩn bị commit, tác vụ này không stage/commit.

@@ -1,21 +1,27 @@
-"""MatHang router: thin controller delegating to MatHangService."""
+"""Six item endpoints; reads use the application snapshot."""
 
+from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 
+from app.core.request_context import get_request_id
 from app.dependencies import (
     get_current_user_payload,
+    get_mat_hang_reader,
     get_mat_hang_service,
     require_roles,
 )
 from app.modules.mat_hang.schemas import (
+    DanhMucMatHangResponse,
     MatHangCreate,
     MatHangListResponse,
     MatHangPatch,
     MatHangSingleResponse,
+    SingleMeta,
 )
 from app.modules.mat_hang.service import (
+    MatHangReader,
     MatHangService,
     generate_mat_hang_etag,
     verify_if_match,
@@ -23,35 +29,38 @@ from app.modules.mat_hang.service import (
 
 __all__ = ["generate_mat_hang_etag", "router", "verify_if_match"]
 
-router = APIRouter(
-    prefix="/mat_hang",
-    tags=["Mặt hàng"],
-    dependencies=[Depends(get_current_user_payload)],
-)
+router = APIRouter(tags=["Mặt hàng"], dependencies=[Depends(get_current_user_payload)])
+Reader = Annotated[MatHangReader, Depends(get_mat_hang_reader)]
+Writer = Annotated[MatHangService, Depends(get_mat_hang_service)]
+ReadRole = Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))]
+WriteRole = Annotated[dict, Depends(require_roles(["quan_ly"]))]
 
 
-@router.get("", response_model=MatHangListResponse)
+@router.get("/danh_muc_mat_hang/", response_model=DanhMucMatHangResponse)
+async def get_danh_muc(request: Request, service: Reader, _: ReadRole):
+    result = await service.danh_muc()
+    result.meta.request_id = get_request_id(request)
+    return result
+
+
+@router.get("/mat_hang", response_model=MatHangListResponse)
 async def list_mat_hang(
-    service: Annotated[MatHangService, Depends(get_mat_hang_service)],
-    _: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
-    q: str | None = Query(None, description="Tìm theo mã, tên hoặc SKU"),
-    loai_mat_hang: (
-        Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"] | None
-    ) = Query(None),
+    request: Request,
+    service: Reader,
+    _: ReadRole,
+    q: str | None = Query(None),
+    loai_mat_hang: Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"]
+    | None = Query(None),
     is_active: bool | None = Query(None),
     don_vi_tinh: str | None = Query(None),
     mau_sac: str | None = Query(None),
-    don_gia_min: int | None = Query(None, ge=0),
-    don_gia_max: int | None = Query(None, ge=0),
+    don_gia_min: Annotated[Decimal | None, Query(ge=0)] = None,
+    don_gia_max: Annotated[Decimal | None, Query(ge=0)] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    sort: str = Query(
-        "id",
-        description="Sort field, prefix '-' for desc. Whitelist: id, ma_mat_hang, ten_mat_hang, don_gia",
-    ),
+    sort: str = Query("id"),
 ):
-    """Lấy danh sách mặt hàng hỗ trợ phân trang, lọc và sắp xếp."""
-    return await service.list_mat_hang(
+    result = await service.list_mat_hang(
         q=q,
         loai_mat_hang=loai_mat_hang,
         is_active=is_active,
@@ -63,57 +72,50 @@ async def list_mat_hang(
         page_size=page_size,
         sort=sort,
     )
+    result.meta.request_id = get_request_id(request)
+    return result
 
 
-@router.get("/{id}", response_model=MatHangSingleResponse)
+@router.get("/mat_hang/{id}", response_model=MatHangSingleResponse)
 async def get_mat_hang_detail(
-    id: int,
-    response: Response,
-    service: Annotated[MatHangService, Depends(get_mat_hang_service)],
-    _: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
+    id: int, request: Request, response: Response, service: Reader, _: ReadRole
 ):
-    """Lấy chi tiết mặt hàng theo ID và trả về header ETag."""
-    data, etag = await service.get_mat_hang(id)
+    record, etag = await service.get_mat_hang(id)
     response.headers["ETag"] = etag
-    return MatHangSingleResponse(data=data)
+    return MatHangSingleResponse(data=record, meta=SingleMeta(request_id=get_request_id(request)))
 
 
-@router.post("", response_model=MatHangSingleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/mat_hang", response_model=MatHangSingleResponse, status_code=status.HTTP_201_CREATED)
 async def create_mat_hang(
-    payload: MatHangCreate,
-    response: Response,
-    service: Annotated[MatHangService, Depends(get_mat_hang_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    payload: MatHangCreate, request: Request, response: Response, service: Writer, actor: WriteRole
 ):
-    """Tạo mới một mặt hàng. Yêu cầu quyền quản lý hoặc quản trị."""
-    data, etag = await service.create_mat_hang(payload, actor)
+    record, etag = await service.create_mat_hang(payload, actor)
     response.headers["ETag"] = etag
-    response.headers["Location"] = f"/api/v1/mat_hang/{data.id}"
-    return MatHangSingleResponse(data=data)
+    response.headers["Location"] = f"/api/v1/mat_hang/{record.id}"
+    return MatHangSingleResponse(data=record, meta=SingleMeta(request_id=get_request_id(request)))
 
 
-@router.patch("/{id}", response_model=MatHangSingleResponse)
+@router.patch("/mat_hang/{id}", response_model=MatHangSingleResponse)
 async def patch_mat_hang(
     id: int,
     payload: MatHangPatch,
+    request: Request,
     response: Response,
-    service: Annotated[MatHangService, Depends(get_mat_hang_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    service: Writer,
+    actor: WriteRole,
     if_match: str | None = Header(None, alias="If-Match"),
 ):
-    """Cập nhật mặt hàng. Bắt buộc header If-Match. Chặn thay đổi các trường bất biến nếu đã có tham chiếu."""
-    data, etag = await service.patch_mat_hang(id, payload, if_match, actor)
+    record, etag = await service.patch_mat_hang(id, payload, if_match, actor)
     response.headers["ETag"] = etag
-    return MatHangSingleResponse(data=data)
+    return MatHangSingleResponse(data=record, meta=SingleMeta(request_id=get_request_id(request)))
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/mat_hang/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_mat_hang(
     id: int,
-    service: Annotated[MatHangService, Depends(get_mat_hang_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    service: Writer,
+    actor: WriteRole,
     if_match: str | None = Header(None, alias="If-Match"),
 ):
-    """Xóa mặt hàng. Bắt buộc If-Match. Chặn xóa nếu có dữ liệu tham chiếu hoặc tồn kho > 0."""
     await service.delete_mat_hang(id, if_match, actor)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Response(status_code=204)

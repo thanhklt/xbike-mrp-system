@@ -35,7 +35,7 @@ class BOMHeader(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_bom_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_bom_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -65,7 +65,7 @@ class BOMItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_chi_tiet_bom_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_bom_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)

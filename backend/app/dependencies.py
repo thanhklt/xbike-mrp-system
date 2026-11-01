@@ -2,7 +2,7 @@
 
 from typing import Annotated, Optional
 
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,14 +15,13 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomService
-from app.modules.catalog.repository import SqlAlchemyCatalogRepository
-from app.modules.catalog.service import CatalogService
 from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGoodsIssuingRepository
 from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
+from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
-from app.modules.mat_hang.service import MatHangService
+from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
 from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
 from app.modules.material_issuing.service import MaterialIssuingService
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
@@ -99,19 +98,26 @@ def get_suppliers_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Suppl
     )
 
 
-def get_catalog_service(db: Annotated[AsyncSession, Depends(get_db)]) -> CatalogService:
-    return CatalogService(
-        SqlAlchemyCatalogRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-    )
+def get_mat_hang_cache(request: Request) -> MatHangCache:
+    return request.app.state.mat_hang_cache
 
 
-def get_mat_hang_service(db: Annotated[AsyncSession, Depends(get_db)]) -> MatHangService:
-    return MatHangService(
-        SqlAlchemyMatHangRepository(db),
-        SqlAlchemyTransaction(db),
-    )
+def get_mat_hang_reader(
+    cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+) -> MatHangReader:
+    return MatHangReader(cache)
+
+
+def get_mat_hang_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> MatHangService:
+    return MatHangService(SqlAlchemyMatHangRepository(db), audit, SqlAlchemyTransaction(db), cache)
+
+
+def get_mat_hang_availability(db: AsyncSession) -> MatHangAvailabilityService:
+    return MatHangAvailabilityService(SqlAlchemyMatHangRepository(db))
 
 
 def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
@@ -119,6 +125,7 @@ def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
         SqlAlchemyBomRepository(db),
         SqlAlchemyAuditRepository(db),
         SqlAlchemyTransaction(db),
+        get_mat_hang_availability(db),
     )
 
 
@@ -127,6 +134,7 @@ def get_receiving_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Recei
         SqlAlchemyReceivingRepository(db),
         SqlAlchemyAuditRepository(db),
         SqlAlchemyTransaction(db),
+        get_mat_hang_availability(db),
     )
 
 
@@ -137,6 +145,7 @@ def get_material_issuing_service(
         SqlAlchemyMaterialIssuingRepository(db),
         SqlAlchemyAuditRepository(db),
         SqlAlchemyTransaction(db),
+        get_mat_hang_availability(db),
     )
 
 
@@ -147,6 +156,7 @@ def get_finished_goods_issuing_service(
         SqlAlchemyFinishedGoodsIssuingRepository(db),
         SqlAlchemyAuditRepository(db),
         SqlAlchemyTransaction(db),
+        get_mat_hang_availability(db),
     )
 
 
@@ -155,6 +165,7 @@ def get_production_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Prod
         SqlAlchemyProductionRepository(db),
         SqlAlchemyAuditRepository(db),
         SqlAlchemyTransaction(db),
+        get_mat_hang_availability(db),
     )
 
 

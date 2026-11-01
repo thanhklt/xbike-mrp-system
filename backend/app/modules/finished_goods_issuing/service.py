@@ -11,6 +11,7 @@ from app.modules.finished_goods_issuing.schemas import (
     FinishedGoodsDispatchCreate,
     FinishedGoodsDispatchResponse,
 )
+from app.modules.mat_hang.ports import ActiveMatHangReader
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
 
 
@@ -20,10 +21,12 @@ class FinishedGoodsIssuingService:
         repository: FinishedGoodsIssuingRepository,
         audit: AuditWriter,
         transaction: Transaction,
+        items: ActiveMatHangReader,
     ):
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+        self.items = items
 
     async def list_entries(
         self, params: PageParams
@@ -44,6 +47,7 @@ class FinishedGoodsIssuingService:
             raise IncorrectIssueType()
         payload = payload.model_copy(update={"nhan_vien_id": int(actor["sub"])})
         async with self.transaction:
+            await self.items.require_active_items([item.mat_hang_id for item in payload.items])
             created = await self.repository.add(payload, created_at=datetime.utcnow())
             await self.audit.append(
                 CreationAudit(

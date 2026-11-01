@@ -1,1 +1,1 @@
-"""Mat hang (Part / Item catalog) domain module."""
+"""Owns MatHang persistence, commands and the application item snapshot."""

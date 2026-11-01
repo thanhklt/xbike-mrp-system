@@ -1,54 +1,38 @@
-"""Persistence operations and boundary contract for mat_hang module."""
+"""Persistence and availability contracts; no session escapes the adapter."""
 
-from collections.abc import Sequence
-from typing import Protocol
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any, Protocol
 
-from app.modules.catalog.models import Part as MatHang
-from app.modules.inventory.models import StockLevel
+from app.modules.mat_hang.schemas import MatHangCreate, MatHangRead
+
+
+@dataclass(frozen=True)
+class ItemReferences:
+    has_bom: bool
+    has_docs: bool
+    has_stock: bool
+
+    @property
+    def has_any(self) -> bool:
+        return self.has_bom or self.has_docs or self.has_stock
 
 
 class MatHangRepository(Protocol):
-    async def list_items(
-        self,
-        *,
-        q: str | None = None,
-        loai_mat_hang: str | None = None,
-        is_active: bool | None = None,
-        don_vi_tinh: str | None = None,
-        mau_sac: str | None = None,
-        don_gia_min: int | None = None,
-        don_gia_max: int | None = None,
-        page: int = 1,
-        page_size: int = 20,
-        sort_field: str = "id",
-        is_desc: bool = False,
-    ) -> tuple[Sequence[MatHang], int]: ...
-
-    async def get_by_id(self, item_id: int) -> MatHang | None: ...
-
+    async def load_all(self) -> list[MatHangRead]: ...
+    async def get_for_update(self, item_id: int) -> MatHangRead | None: ...
     async def find_duplicate(
         self,
         *,
         ma_mat_hang: str | None = None,
         sku: str | None = None,
         exclude_id: int | None = None,
-    ) -> MatHang | None: ...
+    ) -> bool: ...
+    async def get_references(self, item_id: int) -> ItemReferences: ...
+    async def add(self, payload: MatHangCreate) -> MatHangRead: ...
+    async def update(self, item_id: int, changes: dict[str, Any]) -> MatHangRead: ...
+    async def lock_items(self, item_ids: Iterable[int]) -> list[MatHangRead]: ...
 
-    async def get_reference_info(self, item_id: int) -> dict: ...
 
-    async def add(self, item: MatHang) -> MatHang: ...
-
-    async def init_stock(self, item_id: int) -> StockLevel: ...
-
-    async def update(self, item: MatHang) -> MatHang: ...
-
-    async def delete(self, item: MatHang) -> None: ...
-
-    async def log_audit(
-        self,
-        actor_id: int | None,
-        thao_tac: str,
-        record_id: int,
-        before: dict | None,
-        after: dict | None,
-    ) -> None: ...
+class ActiveMatHangReader(Protocol):
+    async def require_active_items(self, item_ids: Iterable[int]) -> None: ...

@@ -6,6 +6,7 @@ from app.core.errors import IncorrectIssueType, NotFoundException
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
+from app.modules.mat_hang.ports import ActiveMatHangReader
 from app.modules.material_issuing.ports import MaterialIssuingRepository
 from app.modules.material_issuing.schemas import (
     MaterialIssueRequestCreate,
@@ -16,11 +17,16 @@ from app.shared.pagination import PageParams, PaginatedResponse, create_paginate
 
 class MaterialIssuingService:
     def __init__(
-        self, repository: MaterialIssuingRepository, audit: AuditWriter, transaction: Transaction
+        self,
+        repository: MaterialIssuingRepository,
+        audit: AuditWriter,
+        transaction: Transaction,
+        items: ActiveMatHangReader,
     ):
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+        self.items = items
 
     async def list_entries(
         self, params: PageParams
@@ -41,6 +47,7 @@ class MaterialIssuingService:
             raise IncorrectIssueType()
         payload = payload.model_copy(update={"nhan_vien_id": int(actor["sub"])})
         async with self.transaction:
+            await self.items.require_active_items([item.mat_hang_id for item in payload.items])
             created = await self.repository.add(payload, created_at=datetime.utcnow())
             await self.audit.append(
                 CreationAudit(

@@ -5,11 +5,24 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.modules.mat_hang.models import MatHang
-from app.modules.mat_hang.schemas import MatHangCreate, MatHangPatch
 from app.modules.mat_hang.router import (
     generate_mat_hang_etag,
     verify_if_match,
 )
+from app.modules.mat_hang.schemas import MatHangCreate, MatHangPatch
+
+
+@pytest.fixture(autouse=True)
+def ready_item_snapshot():
+    from app.dependencies import get_mat_hang_cache
+    from app.main import app
+    from app.modules.mat_hang.cache import MatHangCache
+
+    cache = MatHangCache()
+    cache.replace([])
+    app.dependency_overrides[get_mat_hang_cache] = lambda: cache
+    yield
+    app.dependency_overrides.pop(get_mat_hang_cache, None)
 
 
 def test_mathang_create_valid():
@@ -36,6 +49,7 @@ def test_mathang_create_rejects_ending_zeros():
         MatHangCreate(
             ma_mat_hang="MH-000000",
             sku="khung_01",
+            ten_mat_hang="Khung xe",
             loai_mat_hang="linh_kien",
             don_vi_tinh="chiec",
         )
@@ -47,6 +61,7 @@ def test_mathang_create_rejects_invalid_code_format():
         MatHangCreate(
             ma_mat_hang="PART-123456",
             sku="sku_test",
+            ten_mat_hang="Mặt hàng",
             loai_mat_hang="linh_kien",
             don_vi_tinh="chiec",
         )
@@ -58,6 +73,7 @@ def test_mathang_create_rejects_extra_fields():
         MatHangCreate(
             ma_mat_hang="MH-000001",
             sku="sku_test",
+            ten_mat_hang="Mặt hàng",
             loai_mat_hang="linh_kien",
             don_vi_tinh="chiec",
             extra_field="not_allowed",
@@ -70,6 +86,7 @@ def test_mathang_create_rejects_invalid_don_vi_tinh():
         MatHangCreate(
             ma_mat_hang="MH-000001",
             sku="sku_test",
+            ten_mat_hang="Mặt hàng",
             loai_mat_hang="linh_kien",
             don_vi_tinh="Chiếc Xe",
         )
@@ -98,6 +115,7 @@ def test_etag_generation():
         mo_ta=None,
         don_gia=5000000,
         is_active=True,
+        so_luong_ton=0,
     )
     etag1 = generate_mat_hang_etag(item)
     etag2 = generate_mat_hang_etag(item)
@@ -203,6 +221,24 @@ def test_openapi_schema_contains_mat_hang_endpoints():
     assert "get" in paths["/api/v1/mat_hang/{id}"]
     assert "patch" in paths["/api/v1/mat_hang/{id}"]
     assert "delete" in paths["/api/v1/mat_hang/{id}"]
+    assert "get" in paths["/api/v1/danh_muc_mat_hang/"]
+    assert not any("catalog/parts" in path for path in paths)
+
+
+async def test_unavailable_snapshot_returns_503_without_database_fallback(async_client):
+    from app.dependencies import get_current_user_payload, get_mat_hang_cache
+    from app.main import app
+
+    app.dependency_overrides[get_current_user_payload] = lambda: {"sub": "2", "roles": ["quan_ly"]}
+    app.dependency_overrides[get_mat_hang_cache]().mark_unavailable()
+    try:
+        for path in ("/api/v1/mat_hang", "/api/v1/mat_hang/1", "/api/v1/danh_muc_mat_hang/"):
+            response = await async_client.get(path)
+            assert response.status_code == 503
+            assert response.json()["error"]["code"] == "danh_muc_chua_san_sang"
+            assert response.json()["meta"]["request_id"]
+    finally:
+        app.dependency_overrides.pop(get_current_user_payload, None)
 
 
 @pytest.mark.asyncio
