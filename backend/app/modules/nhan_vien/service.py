@@ -1,0 +1,391 @@
+"""Employee lookup, permissions, projections and contract v2 responses."""
+
+import asyncio
+import hmac
+from hashlib import sha256
+from math import ceil
+
+from app.core.errors import (
+    ConflictException,
+    ForbiddenException,
+    InactiveAccountException,
+    InvalidCredentialsException,
+    NotFoundException,
+    PreconditionFailedException,
+    PreconditionRequiredException,
+    UnauthorizedException,
+)
+from app.core.security import get_password_hash, password_version, verify_password
+from app.core.transactions import Transaction
+from app.modules.audit.service import AuditService, CreationAudit
+from app.modules.nhan_vien.ports import NhanVienRepository
+from app.modules.nhan_vien.schemas import (
+    MAX_EMPLOYEE_ID,
+    AuthIdentity,
+    EmployeeCredentials,
+    EmployeeRecord,
+    ListResponseMeta,
+    NewEmployee,
+    NhanVienAssignmentRead,
+    NhanVienCreate,
+    NhanVienDetailResponse,
+    NhanVienListQuery,
+    NhanVienListResponse,
+    NhanVienPatch,
+    NhanVienRead,
+    ResponseMeta,
+    VaiTroListQuery,
+    VaiTroListResponse,
+    VaiTroRead,
+)
+
+__all__ = ["NhanVienService", "AuthIdentity", "NhanVienRead", "ResponseMeta"]
+
+
+def _require_active(user: EmployeeCredentials) -> None:
+    if user.trang_thai != "hoat_dong":
+        raise InactiveAccountException()
+    if not {"quan_tri_vien", "quan_ly", "nhan_vien"}.intersection(user.roles):
+        raise ForbiddenException()
+
+
+def _require_current_password(user: EmployeeCredentials, version: str) -> None:
+    if (
+        not isinstance(version, str)
+        or not version.isascii()
+        or not hmac.compare_digest(version, password_version(user.password_hash))
+    ):
+        raise UnauthorizedException(message="Please sign in again")
+
+
+def _identity(user: EmployeeCredentials) -> AuthIdentity:
+    return AuthIdentity(
+        profile=NhanVienRead.model_validate(user),
+        roles=user.roles,
+        credential_version=password_version(user.password_hash),
+    )
+
+
+def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = False):
+    full_profile = "quan_tri_vien" in actor["roles"] or (detail and user.id == int(actor["sub"]))
+    schema = NhanVienRead if full_profile else NhanVienAssignmentRead
+    values = {name: getattr(user, name) for name in schema.model_fields if name != "ma_vai_tro"}
+    values["ma_vai_tro"] = user.ma_vai_tro
+    return schema.model_validate(values)
+
+
+def _employee_etag(user: EmployeeRecord, actor: dict) -> str:
+    profile = _employee_response(user, actor, detail=True)
+    return f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
+
+
+def _require_admin(actor: dict) -> None:
+    if "quan_tri_vien" not in actor["roles"]:
+        raise ForbiddenException(message="Chỉ quản trị viên được thực hiện thao tác này")
+
+
+class NhanVienService:
+    def __init__(
+        self, repository: NhanVienRepository, audit: AuditService, transaction: Transaction
+    ):
+        self.repository = repository
+        self.audit = audit
+        self.transaction = transaction
+
+    async def authenticate_employee(
+        self, identifier: str, password: str, *, allow_email: bool = False
+    ) -> AuthIdentity:
+        user = await self.repository.find_by_username(identifier)
+        if user is None and allow_email:
+            user = await self.repository.find_unique_by_email(identifier)
+        if user is None or not await asyncio.to_thread(
+            verify_password, password, user.password_hash
+        ):
+            raise InvalidCredentialsException()
+        _require_active(user)
+        return _identity(user)
+
+    async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
+        if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
+            raise UnauthorizedException(message="Invalid token subject")
+        user = await self.repository.get_credentials_by_id(employee_id)
+        if user is None:
+            raise UnauthorizedException(message="Employee no longer exists")
+        _require_active(user)
+        _require_current_password(user, credential_version)
+        return _identity(user)
+
+    async def change_password(
+        self, employee_id: int, current_password: str, new_password: str, *, credential_version: str
+    ) -> None:
+        async with self.transaction:
+            user = await self.repository.lock_credentials_by_id(employee_id)
+            if user is None:
+                raise UnauthorizedException(message="Employee no longer exists")
+            _require_active(user)
+            _require_current_password(user, credential_version)
+            if not await asyncio.to_thread(verify_password, current_password, user.password_hash):
+                raise InvalidCredentialsException()
+            new_hash = await asyncio.to_thread(get_password_hash, new_password)
+            await self.repository.set_password_hash(user.id, new_hash)
+            await self.audit.append(
+                CreationAudit(
+                    nhan_vien_id=user.id,
+                    loai_doi_tuong="nhan_vien",
+                    doi_tuong_id=user.id,
+                    thao_tac="sua",
+                    du_lieu_sau={"da_doi_mat_khau": True},
+                )
+            )
+
+    async def list_employees(
+        self,
+        params: NhanVienListQuery,
+        actor: dict,
+        request_id: str,
+    ) -> NhanVienListResponse:
+        if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+            raise ForbiddenException()
+        result = await self.repository.list_employees(params)
+        total = result.total
+        records = result.items
+        return NhanVienListResponse(
+            data=[_employee_response(user, actor) for user in records],
+            meta=ListResponseMeta(
+                request_id=request_id,
+                page=params.page,
+                page_size=params.page_size,
+                total=total,
+                total_pages=ceil(total / params.page_size),
+            ),
+        )
+
+    async def get_employee(
+        self,
+        employee_id: int,
+        actor: dict,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        if employee_id > MAX_EMPLOYEE_ID:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        user = await self.repository.get_by_id(employee_id)
+        if user is None:
+            raise NotFoundException(message=f"nhan_vien {employee_id} not found")
+        if (
+            not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"])
+            and int(actor["sub"]) != employee_id
+        ):
+            raise ForbiddenException()
+        return self._result(user, actor, request_id)
+
+    @staticmethod
+    def _result(
+        user: EmployeeRecord, actor: dict, request_id: str
+    ) -> tuple[NhanVienDetailResponse, str]:
+        return (
+            NhanVienDetailResponse(
+                data=_employee_response(user, actor, detail=True),
+                meta=ResponseMeta(request_id=request_id),
+            ),
+            _employee_etag(user, actor),
+        )
+
+    async def _lock_admin(self, actor: dict) -> dict:
+        _require_admin(actor)
+        # The sole admin row serializes administrative writes, including requests
+        # from different tabs. Refresh credentials after waiting for the lock.
+        current = await self.repository.lock_credentials_by_id(int(actor["sub"]))
+        if current is None:
+            raise UnauthorizedException(message="Employee no longer exists")
+        _require_active(current)
+        _require_current_password(current, actor.get("pwdv"))
+        refreshed = {**actor, "roles": current.roles}
+        _require_admin(refreshed)
+        return refreshed
+
+    async def _target(self, employee_id: int, actor: dict, if_match: str | None) -> EmployeeRecord:
+        employee = await self.repository.get_for_update(employee_id)
+        if employee is None:
+            raise NotFoundException(message="Không tìm thấy nhân viên")
+        if if_match is None:
+            raise PreconditionRequiredException()
+        if if_match != _employee_etag(employee, actor):
+            raise PreconditionFailedException()
+        return employee
+
+    async def _role(self, role_id: int) -> VaiTroRead:
+        role = await self.repository.get_role(role_id)
+        if role is None:
+            raise NotFoundException(message="Không tìm thấy vai trò")
+        return role
+
+    async def _audit(
+        self,
+        actor: dict,
+        employee: EmployeeRecord,
+        action: str,
+        *,
+        before: EmployeeRecord | None = None,
+        reason: str | None = None,
+    ) -> None:
+        await self.audit.append(
+            CreationAudit(
+                nhan_vien_id=int(actor["sub"]),
+                loai_doi_tuong="nhan_vien",
+                doi_tuong_id=employee.id,
+                thao_tac=action,
+                du_lieu_sau=_employee_response(employee, actor, detail=True).model_dump(
+                    mode="json"
+                ),
+                du_lieu_truoc=_employee_response(before, actor, detail=True).model_dump(mode="json")
+                if before is not None
+                else None,
+                ly_do=reason,
+            )
+        )
+
+    async def create_employee(
+        self, params: NhanVienCreate, actor: dict, request_id: str
+    ) -> tuple[NhanVienDetailResponse, str]:
+        _require_admin(actor)
+        password_hash = await asyncio.to_thread(
+            get_password_hash, params.mat_khau.get_secret_value()
+        )
+        profile = params.model_dump(exclude={"ten_dang_nhap", "ma_nhan_vien", "vai_tro_id"})
+        async with self.transaction:
+            actor = await self._lock_admin(actor)
+            role = await self._role(params.vai_tro_id)
+            if role.ma_vai_tro == "quan_tri_vien":
+                raise ConflictException(message="Hệ thống chỉ có một quản trị viên")
+            employee = await self.repository.create(
+                NewEmployee(
+                    params.ten_dang_nhap,
+                    params.ma_nhan_vien,
+                    params.vai_tro_id,
+                    password_hash,
+                    profile,
+                )
+            )
+            await self._audit(actor, employee, "tao")
+        return self._result(employee, actor, request_id)
+
+    async def patch_employee(
+        self,
+        employee_id: int,
+        params: NhanVienPatch,
+        actor: dict,
+        if_match: str | None,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        _require_admin(actor)
+        async with self.transaction:
+            actor = await self._lock_admin(actor)
+            before = await self._target(employee_id, actor, if_match)
+            changes = {
+                key: value
+                for key, value in params.model_dump(exclude_unset=True).items()
+                if getattr(before, key) != value
+            }
+            employee = before
+            if changes:
+                employee = await self.repository.update_profile(employee_id, changes)
+                await self._audit(actor, employee, "sua", before=before)
+        return self._result(employee, actor, request_id)
+
+    async def change_role(
+        self,
+        employee_id: int,
+        role_id: int,
+        actor: dict,
+        if_match: str | None,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        _require_admin(actor)
+        async with self.transaction:
+            actor = await self._lock_admin(actor)
+            before = await self._target(employee_id, actor, if_match)
+            role = await self._role(role_id)
+            employee = before
+            if before.vai_tro_id != role_id:
+                if "quan_tri_vien" in {before.ma_vai_tro, role.ma_vai_tro}:
+                    raise ConflictException(message="Không được thay đổi quản trị viên duy nhất")
+                employee = await self.repository.set_role(employee_id, role_id)
+                await self._audit(actor, employee, "thu_hoi_quyen", before=before)
+                await self._audit(actor, employee, "cap_quyen", before=before)
+        return self._result(employee, actor, request_id)
+
+    async def _change_status(
+        self,
+        employee_id: int,
+        actor: dict,
+        if_match: str | None,
+        reason: str,
+        request_id: str,
+        *,
+        status: str,
+        action: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        _require_admin(actor)
+        async with self.transaction:
+            actor = await self._lock_admin(actor)
+            before = await self._target(employee_id, actor, if_match)
+            if before.trang_thai == status:
+                raise ConflictException(message="Tài khoản không ở trạng thái phù hợp")
+            if status == "bi_khoa" and before.ma_vai_tro == "quan_tri_vien":
+                raise ConflictException(message="Không được khóa quản trị viên duy nhất")
+            employee = await self.repository.set_status(employee_id, status)
+            await self._audit(actor, employee, action, before=before, reason=reason)
+        return self._result(employee, actor, request_id)
+
+    async def soft_delete_employee(
+        self,
+        employee_id: int,
+        actor: dict,
+        if_match: str | None,
+        reason: str,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        return await self._change_status(
+            employee_id,
+            actor,
+            if_match,
+            reason,
+            request_id,
+            status="bi_khoa",
+            action="vo_hieu_hoa",
+        )
+
+    async def unlock_employee(
+        self,
+        employee_id: int,
+        actor: dict,
+        if_match: str | None,
+        reason: str,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        return await self._change_status(
+            employee_id,
+            actor,
+            if_match,
+            reason,
+            request_id,
+            status="hoat_dong",
+            action="sua",
+        )
+
+    async def list_roles(
+        self, params: VaiTroListQuery, actor: dict, request_id: str
+    ) -> VaiTroListResponse:
+        if not {"quan_tri_vien", "quan_ly"}.intersection(actor["roles"]):
+            raise ForbiddenException()
+        result = await self.repository.list_roles(params)
+        return VaiTroListResponse(
+            data=list(result.items),
+            meta=ListResponseMeta(
+                request_id=request_id,
+                page=params.page,
+                page_size=params.page_size,
+                total=result.total,
+                total_pages=ceil(result.total / params.page_size),
+            ),
+        )

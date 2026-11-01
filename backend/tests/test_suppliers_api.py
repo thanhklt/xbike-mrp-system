@@ -54,7 +54,7 @@ async def test_list_contract_and_stable_pagination(supplier_context):
     assert body["meta"]["request_id"]
 
 
-async def test_detail_contract_has_stable_etag(supplier_context):
+async def test_detail_contract_without_etag(supplier_context):
     client, _, headers = supplier_context
     first = await client.get(f"{BASE}/1", headers=headers)
     second = await client.get(f"{BASE}/1", headers=headers)
@@ -68,8 +68,8 @@ async def test_detail_contract_has_stable_etag(supplier_context):
         "phuong": "tay_ho",
         "tinh": "ha_noi",
     }
-    assert first.headers["etag"] == second.headers["etag"]
-    assert first.headers["etag"].startswith('"')
+    assert "etag" not in first.headers
+    assert "etag" not in second.headers
     assert first.json()["meta"]["request_id"] != second.json()["meta"]["request_id"]
 
 
@@ -163,16 +163,14 @@ async def test_pagination_boundaries_and_detail_query(supplier_context):
     assert response.json()["meta"]["total"] == 3
 
 
-async def test_null_legacy_name_and_etag_change(supplier_context):
+async def test_null_legacy_name(supplier_context):
     client, sessions, headers = supplier_context
-    before = await client.get(f"{BASE}/1", headers=headers)
     async with sessions() as db:
-        await db.execute(text("UPDATE nha_cung_cap SET ten_ncc=NULL WHERE id=1"))
+        await db.execute(text('UPDATE "NhaCungCap" SET ten_ncc=NULL WHERE id=1'))
         await db.commit()
     after = await client.get(f"{BASE}/1", headers=headers)
     assert after.status_code == 200
     assert after.json()["data"]["ten_ncc"] is None
-    assert before.headers["etag"] != after.headers["etag"]
 
 
 async def test_get_never_writes(supplier_context):
@@ -193,14 +191,10 @@ async def test_get_never_writes(supplier_context):
     assert set(statements) <= {"SELECT", "SAVEPOINT", "RELEASE", "ROLLBACK"}
 
 
-async def test_legacy_get_compatibility(supplier_context):
+@pytest.mark.parametrize("path", ["/api/v1/suppliers", "/api/v1/suppliers/1"])
+async def test_legacy_get_routes_removed(supplier_context, path):
     client, _, headers = supplier_context
-    response = await client.get("/api/v1/suppliers", headers=headers)
-    assert response.status_code == 200
-    assert "pagination" in response.json()
-    detail = await client.get("/api/v1/suppliers/1", headers=headers)
-    assert detail.status_code == 200
-    assert detail.json()["ma_ncc"] == "NCC-000001"
+    assert (await client.get(path, headers=headers)).status_code == 404
 
 
 def test_read_openapi():
@@ -216,4 +210,5 @@ def test_read_openapi():
         "phuong",
     }
     assert listing["security"] == detail["security"] == [{"OAuth2PasswordBearer": []}]
-    assert "ETag" in detail["responses"]["200"]["headers"]
+    assert "ETag" not in detail["responses"]["200"].get("headers", {})
+    assert not any(path.startswith("/api/v1/suppliers") for path in paths)

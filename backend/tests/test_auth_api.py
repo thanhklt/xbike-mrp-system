@@ -19,11 +19,13 @@ from app.core.security import create_access_token
 from app.core.sqlalchemy_transaction import SqlAlchemyTransaction
 from app.dependencies import get_auth_service
 from app.main import app
-from app.modules.audit.models import AuditTrailLog
+from app.modules.audit.models import LichSuThaoTac
 from app.modules.audit.repository import SqlAlchemyAuditRepository
-from app.modules.auth.repository import SqlAlchemyAuthRepository
+from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
-from app.modules.users.models import Role, User
+from app.modules.nhan_vien.models import NhanVien, VaiTro
+from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
+from app.modules.nhan_vien.service import NhanVienService
 
 PASSWORD = "MatKhauCu-123"
 NEW_PASSWORD = "Mật khẩu mới-456"
@@ -45,7 +47,7 @@ async def auth_context():
         await connection.execute(text(f'SET LOCAL search_path TO "{schema}"'))
         await connection.run_sync(
             lambda sync: Base.metadata.create_all(
-                sync, tables=[Role.__table__, User.__table__, AuditTrailLog.__table__]
+                sync, tables=[VaiTro.__table__, NhanVien.__table__, LichSuThaoTac.__table__]
             )
         )
         sessions = async_sessionmaker(
@@ -53,12 +55,12 @@ async def auth_context():
         )
         async with sessions() as db:
             for index, role in enumerate(("quan_tri_vien", "quan_ly", "nhan_vien"), 1):
-                db.add(Role(id=index, ma_vai_tro=role, ten_vai_tro=role))
+                db.add(VaiTro(id=index, ma_vai_tro=role, ten_vai_tro=role))
             await db.flush()
             hashed = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt(rounds=4)).decode()
             for index in range(1, 4):
                 db.add(
-                    User(
+                    NhanVien(
                         id=index,
                         vai_tro_id=index,
                         ten_dang_nhap=f"user{index}",
@@ -95,6 +97,76 @@ async def login(client, index=1, password=PASSWORD):
             "mat_khau": password,
         },
     )
+
+
+async def test_removed_legacy_json_login_is_not_a_route(async_client):
+    response = await async_client.post(
+        f"{BASE}/login", json={"email": "unused", "password": "unused"}
+    )
+    assert response.status_code == 404
+
+
+async def test_duplicate_email_does_not_select_an_arbitrary_account(auth_context):
+    client, sessions = auth_context
+    async with sessions() as db:
+        user = await db.get(NhanVien, 2)
+        user.email = "user1@example.test"
+        await db.commit()
+    denied = await client.post(
+        f"{BASE}/token", data={"username": "user1@example.test", "password": PASSWORD}
+    )
+    assert denied.status_code == 401
+    assert (await login(client)).status_code == 200
+
+
+async def test_username_wins_when_it_matches_another_accounts_email(auth_context):
+    client, sessions = auth_context
+    async with sessions() as db:
+        user = await db.get(NhanVien, 2)
+        user.ten_dang_nhap = "user1@example.test"
+        await db.commit()
+    response = await client.post(
+        f"{BASE}/token", data={"username": "user1@example.test", "password": PASSWORD}
+    )
+    assert response.status_code == 200
+    profile = await client.get(
+        f"{BASE}/me", headers={"Authorization": f"Bearer {response.json()['access_token']}"}
+    )
+    assert profile.json()["data"]["id"] == 2
+
+
+async def test_commit_constraint_error_rolls_back_password_and_audit(auth_context):
+    client, sessions = auth_context
+    token = (await login(client)).json()["data"]["access_token"]
+
+    def conflicting_service(db: Annotated[object, Depends(get_db)]):
+        class ConflictingAudit:
+            async def append(self, entry):
+                await SqlAlchemyAuditRepository(db).append(
+                    entry.model_copy(update={"thao_tac": "invalid_action"})
+                )
+
+        return AuthService(
+            NhanVienService(
+                SqlAlchemyNhanVienRepository(db), ConflictingAudit(), SqlAlchemyTransaction(db)
+            )
+        )
+
+    app.dependency_overrides[get_auth_service] = conflicting_service
+    try:
+        response = await client.post(
+            f"{BASE}/doi_mat_khau",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        )
+    finally:
+        app.dependency_overrides.pop(get_auth_service, None)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "trang_thai_khong_hop_le"
+    assert (await login(client)).status_code == 200
+    assert (await login(client, password=NEW_PASSWORD)).status_code == 401
+    async with sessions() as db:
+        assert (await db.scalars(select(LichSuThaoTac))).all() == []
 
 
 @pytest.mark.parametrize("index", [1, 2, 3])
@@ -143,10 +215,10 @@ async def test_password_change_revokes_all_old_tokens_and_writes_safe_audit(auth
     assert (await login(client)).status_code == 401
     assert (await login(client, password=NEW_PASSWORD)).status_code == 200
     async with sessions() as db:
-        user = await db.get(User, 1)
+        user = await db.get(NhanVien, 1)
         assert user.mat_khau.startswith("$argon2id$")
-        assert (await db.get(User, 2)).mat_khau.startswith("$2")
-        audit = (await db.scalars(select(AuditTrailLog))).one()
+        assert (await db.get(NhanVien, 2)).mat_khau.startswith("$2")
+        audit = (await db.scalars(select(LichSuThaoTac))).one()
         assert audit.nhan_vien_id == audit.doi_tuong_id == 1
         assert audit.thao_tac == "sua"
         assert audit.du_lieu_sau == {"da_doi_mat_khau": True}
@@ -187,7 +259,7 @@ async def test_lock_is_checked_on_login_and_each_request(auth_context):
     client, sessions = auth_context
     token = (await login(client)).json()["data"]["access_token"]
     async with sessions() as db:
-        await db.execute(text("UPDATE nhan_vien SET trang_thai='bi_khoa' WHERE id=1"))
+        await db.execute(text("UPDATE \"NhanVien\" SET trang_thai='bi_khoa' WHERE id=1"))
         await db.commit()
     assert (await login(client)).status_code == 403
     assert (
@@ -228,7 +300,7 @@ async def test_change_validation_keeps_credentials_unchanged(auth_context, body)
     assert PASSWORD not in response.text and NEW_PASSWORD not in response.text
     assert (await login(client)).status_code == 200
     async with sessions() as db:
-        assert (await db.scalars(select(AuditTrailLog))).all() == []
+        assert (await db.scalars(select(LichSuThaoTac))).all() == []
 
 
 async def test_wrong_current_password_rolls_back(auth_context):
@@ -246,13 +318,13 @@ async def test_wrong_current_password_rolls_back(auth_context):
     assert (await login(client)).status_code == 200
     assert (await login(client, password=NEW_PASSWORD)).status_code == 401
     async with sessions() as db:
-        assert (await db.scalars(select(AuditTrailLog))).all() == []
+        assert (await db.scalars(select(LichSuThaoTac))).all() == []
 
 
-async def test_legacy_login_endpoints_issue_revocable_tokens(auth_context):
+async def test_oauth_username_and_email_issue_revocable_tokens(auth_context):
     client, _ = auth_context
     json_login = await client.post(
-        f"{BASE}/login", json={"email": "user1@example.test", "password": PASSWORD}
+        f"{BASE}/token", data={"username": "user1@example.test", "password": PASSWORD}
     )
     form_login = await client.post(
         f"{BASE}/token", data={"username": "user1", "password": PASSWORD}
@@ -271,7 +343,7 @@ async def test_roles_are_read_from_database_and_query_cannot_select_another_user
     token = (await login(client)).json()["data"]["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     async with sessions() as db:
-        await db.execute(text("UPDATE nhan_vien SET vai_tro_id=3 WHERE id=1"))
+        await db.execute(text('UPDATE "NhanVien" SET vai_tro_id=3 WHERE id=1'))
         await db.commit()
     response = await client.get(f"{BASE}/me", headers=headers)
     assert response.json()["data"]["ma_vai_tro"] == "nhan_vien"
@@ -287,7 +359,7 @@ async def test_missing_account_and_legacy_unversioned_token_are_rejected(auth_co
         await client.get(f"{BASE}/me", headers={"Authorization": f"Bearer {legacy}"})
     ).status_code == 401
     async with sessions() as db:
-        await db.execute(text("DELETE FROM nhan_vien WHERE id=3"))
+        await db.execute(text('DELETE FROM "NhanVien" WHERE id=3'))
         await db.commit()
     assert (
         await client.get(f"{BASE}/me", headers={"Authorization": f"Bearer {token}"})
@@ -319,7 +391,11 @@ async def test_audit_failure_rolls_back_password_and_returns_safe_error(auth_con
             raise RuntimeError("private database details must not reach the response")
 
     def service_with_failing_audit(db: Annotated[object, Depends(get_db)]):
-        return AuthService(SqlAlchemyAuthRepository(db), FailingAudit(), SqlAlchemyTransaction(db))
+        return AuthService(
+            NhanVienService(
+                SqlAlchemyNhanVienRepository(db), FailingAudit(), SqlAlchemyTransaction(db)
+            )
+        )
 
     app.dependency_overrides[get_auth_service] = service_with_failing_audit
     try:
@@ -345,7 +421,7 @@ async def test_audit_failure_rolls_back_password_and_returns_safe_error(auth_con
         await client.get(f"{BASE}/me", headers={"Authorization": f"Bearer {token}"})
     ).status_code == 200
     async with sessions() as db:
-        assert (await db.scalars(select(AuditTrailLog))).all() == []
+        assert (await db.scalars(select(LichSuThaoTac))).all() == []
 
 
 @pytest.mark.parametrize("path,method", [("me", "get"), ("doi_mat_khau", "post")])
@@ -394,15 +470,15 @@ async def test_simultaneous_changes_only_one_commits():
         await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         await connection.run_sync(
             lambda sync: Base.metadata.create_all(
-                sync, tables=[Role.__table__, User.__table__, AuditTrailLog.__table__]
+                sync, tables=[VaiTro.__table__, NhanVien.__table__, LichSuThaoTac.__table__]
             )
         )
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as db:
-        db.add(Role(id=101, ma_vai_tro="nhan_vien", ten_vai_tro="Nhân viên"))
+        db.add(VaiTro(id=101, ma_vai_tro="nhan_vien", ten_vai_tro="Nhân viên"))
         await db.flush()
         db.add(
-            User(
+            NhanVien(
                 id=101,
                 vai_tro_id=101,
                 ten_dang_nhap="user101",
@@ -427,7 +503,11 @@ async def test_simultaneous_changes_only_one_commits():
 
     def concurrent_service(db: Annotated[object, Depends(get_db)]):
         return ConcurrentAuthService(
-            SqlAlchemyAuthRepository(db), SqlAlchemyAuditRepository(db), SqlAlchemyTransaction(db)
+            NhanVienService(
+                SqlAlchemyNhanVienRepository(db),
+                AuditService(SqlAlchemyAuditRepository(db)),
+                SqlAlchemyTransaction(db),
+            )
         )
 
     app.dependency_overrides[get_db] = independent_db
@@ -459,7 +539,7 @@ async def test_simultaneous_changes_only_one_commits():
             assert (await login(client, 101, NEW_PASSWORD + str(winner))).status_code == 200
             assert (await login(client, 101, NEW_PASSWORD + str(1 - winner))).status_code == 401
         async with sessions() as db:
-            assert len((await db.scalars(select(AuditTrailLog))).all()) == 1
+            assert len((await db.scalars(select(LichSuThaoTac))).all()) == 1
     finally:
         app.dependency_overrides.pop(get_auth_service, None)
         app.dependency_overrides.pop(get_db, None)

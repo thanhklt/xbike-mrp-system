@@ -30,12 +30,12 @@ class GoodsReceiptNote(Base):
     ma_phieu_nhap: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     nhan_vien_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("nhan_vien.id", name="fk_phieu_nhap_nhan_vien_id", ondelete="RESTRICT"),
+        ForeignKey("NhanVien.id", name="fk_phieu_nhap_nhan_vien_id", ondelete="RESTRICT"),
         nullable=True,
     )
     ncc_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("nha_cung_cap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
+        ForeignKey("NhaCungCap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
         nullable=True,
     )
     tong_tien: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -69,7 +69,7 @@ class ReceiptItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_chi_tiet_phieu_nhap_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_phieu_nhap_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)

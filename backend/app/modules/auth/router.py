@@ -6,11 +6,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.request_context import get_request_id, reject_query
 from app.dependencies import get_auth_service, get_current_user_payload
-from app.modules.auth.schemas import (
+from app.modules.auth.schema import (
     AuthErrorResponse,
     DoiMatKhauInput,
     LoginInput,
-    LoginRequest,
     LoginResponse,
     MeResponse,
     PasswordChanged,
@@ -18,7 +17,7 @@ from app.modules.auth.schemas import (
     TokenResponse,
 )
 from app.modules.auth.service import AuthService
-from app.modules.users.schemas import ResponseMeta
+from app.modules.nhan_vien.service import ResponseMeta
 
 
 def auth_response_headers(response: Response) -> None:
@@ -42,6 +41,7 @@ async def dang_nhap(
 ) -> LoginResponse:
     token = await service.login(credentials.ten_dang_nhap, credentials.mat_khau.get_secret_value())
     return LoginResponse(data=token, meta=ResponseMeta(request_id=request_id))
+
 
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(

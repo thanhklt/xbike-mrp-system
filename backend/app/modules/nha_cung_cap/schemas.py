@@ -2,9 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
-
-from app.modules.users.schemas import ListResponseMeta, ResponseMeta
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 SupplierSort = Literal["id", "-id", "ma_ncc", "-ma_ncc", "ten_ncc", "-ten_ncc"]
 
@@ -31,24 +29,6 @@ class NhaCungCapCreate(BaseModel):
     tinh: str | None = None
 
 
-class NhaCungCapPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    ma_ncc: SupplierCode | None = None
-    ten_ncc: str | None = Field(default=None, min_length=1)
-    so_dien_thoai: str | None = None
-    dia_chi: str | None = None
-    phuong: str | None = None
-    tinh: str | None = None
-
-    @field_validator("ma_ncc", "ten_ncc")
-    @classmethod
-    def reject_explicit_null(cls, value: str | None) -> str:
-        if value is None:
-            raise ValueError("This field cannot be null when supplied")
-        return value
-
-
 class NhaCungCapListQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -72,19 +52,19 @@ class SupplierResponse(BaseModel):
     tinh: str | None
 
 
-class SupplierCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    ma_ncc: str
-    ten_ncc: str | None = None
-    so_dien_thoai: str | None = None
-    dia_chi: str | None = None
-    phuong: str | None = None
-    tinh: str | None = None
-
-
 class NhaCungCapRead(SupplierResponse):
     """Legacy rows may have no supplier name, as explicitly agreed for GET."""
+
+
+class ResponseMeta(BaseModel):
+    request_id: str
+
+
+class ListResponseMeta(ResponseMeta):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
 
 
 class NhaCungCapListResponse(BaseModel):

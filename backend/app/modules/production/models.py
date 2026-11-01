@@ -35,19 +35,19 @@ class ProductionRequest(Base):
     ma_yeu_cau_san_xuat: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_yeu_cau_san_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_yeu_cau_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
     nhan_vien_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("nhan_vien.id", name="fk_yeu_cau_san_xuat_nhan_vien_id", ondelete="RESTRICT"),
+        ForeignKey("NhanVien.id", name="fk_yeu_cau_san_xuat_nhan_vien_id", ondelete="RESTRICT"),
         nullable=False,
     )
     nhan_vien_duoc_giao_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
-            "nhan_vien.id", name="fk_yeu_cau_san_xuat_nhan_vien_duoc_giao_id", ondelete="RESTRICT"
+            "NhanVien.id", name="fk_yeu_cau_san_xuat_nhan_vien_duoc_giao_id", ondelete="RESTRICT"
         ),
         nullable=True,
     )
@@ -99,7 +99,7 @@ class WorkOrder(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     bom_id: Mapped[int] = mapped_column(
@@ -110,7 +110,7 @@ class WorkOrder(Base):
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
     nhan_vien_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("nhan_vien.id", name="fk_lenh_san_xuat_nhan_vien_id", ondelete="RESTRICT"),
+        ForeignKey("NhanVien.id", name="fk_lenh_san_xuat_nhan_vien_id", ondelete="RESTRICT"),
         nullable=True,
     )
     trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'nhap'"))
@@ -149,9 +149,7 @@ class WorkOrderItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey(
-            "mat_hang.id", name="fk_chi_tiet_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"
-        ),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_lenh_san_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong_can: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -184,7 +182,7 @@ class ProductionCompletion(Base):
     nhan_vien_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
-            "nhan_vien.id", name="fk_chung_tu_hoan_thanh_sx_nhan_vien_id", ondelete="RESTRICT"
+            "NhanVien.id", name="fk_chung_tu_hoan_thanh_sx_nhan_vien_id", ondelete="RESTRICT"
         ),
         nullable=True,
     )

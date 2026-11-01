@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.config import settings
+from app.config.settings import settings
 from app.core.errors import (
     AppException,
     BadRequestException,
@@ -28,10 +31,6 @@ __all__ = [
 ]
 
 ERROR_STATUS = {
-    "ma_bi_trung": 409,
-    "dang_duoc_tham_chieu": 409,
-    "thieu_if_match": 428,
-    "du_lieu_da_thay_doi": 412,
     "thong_tin_dang_nhap_khong_hop_le": 401,
     "tai_khoan_bi_vo_hieu_hoa": 403,
     "NOT_FOUND": 404,
@@ -39,16 +38,20 @@ ERROR_STATUS = {
     "UNAUTHORIZED": 401,
     "FORBIDDEN": 403,
     "CONFLICT": 409,
+    "ma_bi_trung": 409,
+    "thieu_if_match": 428,
+    "du_lieu_da_thay_doi": 412,
+    "danh_muc_chua_san_sang": 503,
+    "mat_hang_ngung_hoat_dong": 409,
 }
 
 
 def _uses_contract_envelope(request: Request) -> bool:
     path = request.url.path
-    suppliers = f"{settings.API_V1_STR}/nha_cung_cap"
-    return (
-        path.startswith(f"{settings.API_V1_STR}/auth/")
-        or path == suppliers
-        or path.startswith(f"{suppliers}/")
+    prefix = settings.api_v1_str
+    return path.startswith(f"{prefix}/auth/") or any(
+        path == f"{prefix}/{resource}" or path.startswith(f"{prefix}/{resource}/")
+        for resource in ("nhan_vien", "vai_tro", "mat_hang", "danh_muc_mat_hang", "nha_cung_cap")
     )
 
 
@@ -70,6 +73,24 @@ def _contract_error(
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Registers custom exception handlers on the FastAPI app instance."""
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        prefix = settings.api_v1_str
+        if any(
+            request.url.path == f"{prefix}/{name}"
+            or request.url.path.startswith(f"{prefix}/{name}/")
+            for name in ("mat_hang", "danh_muc_mat_hang")
+        ):
+            code = {
+                412: "du_lieu_da_thay_doi",
+                428: "thieu_if_match",
+                422: "du_lieu_khong_hop_le",
+            }.get(exc.status_code, "loi_http")
+            response = _contract_error(request, exc.status_code, code, str(exc.detail), [])
+            response.headers.update(exc.headers or {})
+            return response
+        return await http_exception_handler(request, exc)
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
@@ -115,7 +136,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": "Input validation failed",
-                    "details": exc.errors(),
+                    "details": jsonable_encoder(exc.errors()),
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },

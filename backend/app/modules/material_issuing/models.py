@@ -41,7 +41,7 @@ class IssueNote(Base):
     ma_phieu_xuat: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     nhan_vien_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("nhan_vien.id", name="fk_phieu_xuat_nhan_vien_id", ondelete="RESTRICT"),
+        ForeignKey("NhanVien.id", name="fk_phieu_xuat_nhan_vien_id", ondelete="RESTRICT"),
         nullable=True,
     )
     loai_phieu: Mapped[str] = mapped_column(String, nullable=False)
@@ -85,7 +85,7 @@ class IssueItem(Base):
     )
     mat_hang_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("mat_hang.id", name="fk_chi_tiet_phieu_xuat_mat_hang_id", ondelete="RESTRICT"),
+        ForeignKey("MatHang.id", name="fk_chi_tiet_phieu_xuat_mat_hang_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)

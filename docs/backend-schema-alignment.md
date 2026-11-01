@@ -1,10 +1,12 @@
 # Đồng bộ backend với PostgreSQL
 
-Nguồn chuẩn là `infra/postgres/init.sql` và `infra/postgres/seed.sql`.
-ORM ánh xạ đúng 20 bảng, tên cột tiếng Việt, kiểu dữ liệu, nullable,
-identity `BY DEFAULT`, server default, CHECK, UNIQUE, khóa ngoại `RESTRICT`,
-index và comment. Số lượng và tiền dùng `INTEGER`; thời gian dùng
-`TIMESTAMP WITHOUT TIME ZONE`; lịch sử dùng `JSONB`.
+Nguồn schema demo hiện tại là SQL v4 trong `infra/postgres/init.sql` và `infra/postgres/seed.sql`, cùng các quyết định trực tiếp của dev ngày 30/10/2026.
+
+Refactor hiện tại đồng bộ ba ORM/bảng `NhanVien`, `VaiTro`, `LichSuThaoTac`: IDENTITY BY DEFAULT, nullability, kiểu dữ liệu, defaults, CHECK, UNIQUE, FK DEFERRABLE INITIALLY IMMEDIATE và index. Audit dùng JSONB và TIMESTAMPTZ; SQL trigger chặn sửa/xóa lịch sử. Tên cột và giá trị nghiệp vụ không đổi theo tên bảng.
+
+Auth gọi public service nhân viên; nhân viên gọi public audit service, dùng chung session/transaction khi đổi mật khẩu. FK từ các ORM khác được cập nhật sang NhanVien, nhưng không đồng bộ toàn bộ schema nghiệp vụ trong tác vụ này. Test toàn schema còn báo thiếu mapping chi_tiet_ticket_loi_dieu_chinh và khác biệt cột/kiểu/FK/index ở các module khác; dev đã chốt giữ phạm vi auth/nhân viên/audit.
+
+Demo chạy bằng bootstrap Docker trên database mới/trống; không có migration. Nội dung ghi nhận các lần đồng bộ cũ bên dưới là lịch sử và không chứng nhận toàn bộ ORM hiện tại khớp SQL v4.
 
 ## Vị trí sửa
 
@@ -14,8 +16,8 @@ Các đường dẫn dưới đây tính từ thư mục gốc dự án. Với m
 
 | Module trong `backend/app/modules/` | Bảng được ánh xạ |
 | --- | --- |
-| `users/` | `nhan_vien`, `vai_tro` |
-| `catalog/` | `mat_hang` |
+| `nhan_vien/` | `NhanVien`, `VaiTro` |
+| `mat_hang/` | `MatHang` (bao gồm số dư tồn theo SQL hiện tại) |
 | `suppliers/` | `nha_cung_cap` |
 | `bom/` | `bom`, `chi_tiet_bom` |
 | `receiving/` | `phieu_nhap`, `chi_tiet_phieu_nhap` |
@@ -23,7 +25,7 @@ Các đường dẫn dưới đây tính từ thư mục gốc dự án. Với m
 | `finished_goods_issuing/` | Dùng lại ORM và schema của phiếu xuất; lọc `loai_phieu = 'xuat_thanh_pham'` |
 | `production/` | `yeu_cau_san_xuat`, `lenh_san_xuat`, `chi_tiet_lenh_san_xuat`, `chung_tu_hoan_thanh_sx` |
 | `inventory/` | `ton_kho`, `giao_dich_kho`, `phieu_dieu_chinh_kho`, `chi_tiet_phieu_dieu_chinh_kho`, `ticket_loi_dieu_chinh` |
-| `audit/` | `lich_su_thao_tac` |
+| `audit/` | `LichSuThaoTac` |
 
 Các file liên quan:
 
@@ -94,7 +96,13 @@ Integration test cần một database test riêng đã chạy `init.sql` rồi
 Test dùng transaction ngoài và savepoint để rollback các dữ liệu tạo thêm.
 Không đặt biến này tới database ứng dụng.
 
-Đã xác minh bằng PostgreSQL 16 trong Docker: Alembic không có schema diff,
-seed hoàn tất, đăng nhập tài khoản seed thành công và tồn kho/sổ kho giữ
-nguyên khi tạo phiếu nháp. Database ứng dụng đã được nạp seed sau khi kiểm
-tra cả 20 bảng đều rỗng do lần seed lỗi trước đó rollback.
+Kết quả kiểm chứng của refactor hiện tại được ghi trong plan `docs/plans/2026-10-30-auth-nhan-vien-boundaries.md`. Chỉ dùng database test riêng; không seed hoặc thay đổi database ứng dụng. So sánh schema bằng inspector không phải chạy migration.
+
+
+## Cập nhật mặt hàng ngày 01/11/2026
+
+`infra/postgres/init.sql` là chuẩn đã chốt. ORM `MatHang` thuộc module `mat_hang`, bảng `"MatHang"`; giá NUMERIC(18,2), trạng thái NOT NULL DEFAULT true, số dư NOT NULL DEFAULT 0 và thời điểm tồn TIMESTAMPTZ. Tên đã được bổ sung NOT NULL và CHECK không trắng trong bootstrap/ORM; seed hiện có đủ tên, không cần thay dữ liệu seed.
+
+Bổ sung trigger statement-level phát tín hiệu `mat_hang_changed` sau thay đổi bảng, chỉ được giao khi transaction commit. Cache backend đọc cả hai trạng thái; POST/PATCH/soft DELETE và audit atomic, công bố sau commit. Public availability guard dùng DB/row lock, không dùng snapshot để quyết định ghi tài liệu.
+
+Các mô tả inventory/ton_kho ở phần trên phản ánh các module chưa chuyển đổi; không phải nguồn chuẩn thay thế init.sql. Chỉ sửa các FK trực tiếp tới MatHang để registry không trỏ model đã bỏ. Không đồng bộ các bảng nghiệp vụ khác, không tạo lại ton_kho, không chạy migration hoặc sửa DB đang có dữ liệu. Kiểm thử toàn schema vẫn có thể lỗi ở các ORM đó; kết quả chi tiết được bàn giao riêng.

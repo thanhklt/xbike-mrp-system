@@ -23,9 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock poetry.toml ./
 RUN if [ "$INSTALL_DEV" = "true" ]; then \
-        poetry sync --with dev --no-ansi; \
+    poetry sync --with dev --no-ansi; \
     else \
-        poetry sync --only main --no-ansi; \
+    poetry sync --only main --no-ansi; \
     fi
 
 # Copy backend code

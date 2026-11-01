@@ -6,6 +6,7 @@ from app.core.errors import NotFoundException
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
+from app.modules.mat_hang.ports import ActiveMatHangReader
 from app.modules.receiving.ports import ReceivingRepository
 from app.modules.receiving.schemas import GoodsReceiptNoteCreate, GoodsReceiptNoteResponse
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
@@ -13,11 +14,16 @@ from app.shared.pagination import PageParams, PaginatedResponse, create_paginate
 
 class ReceivingService:
     def __init__(
-        self, repository: ReceivingRepository, audit: AuditWriter, transaction: Transaction
+        self,
+        repository: ReceivingRepository,
+        audit: AuditWriter,
+        transaction: Transaction,
+        items: ActiveMatHangReader,
     ):
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+        self.items = items
 
     async def list_entries(self, params: PageParams) -> PaginatedResponse[GoodsReceiptNoteResponse]:
         result = await self.repository.list_entries(params)
@@ -34,6 +40,7 @@ class ReceivingService:
     ) -> GoodsReceiptNoteResponse:
         payload = payload.model_copy(update={"nhan_vien_id": int(actor["sub"])})
         async with self.transaction:
+            await self.items.require_active_items([item.mat_hang_id for item in payload.items])
             created = await self.repository.add(payload, created_at=datetime.utcnow())
             await self.audit.append(
                 CreationAudit(

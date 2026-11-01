@@ -7,7 +7,7 @@ from app.core.database import Base
 
 
 class Supplier(Base):
-    __tablename__ = "nha_cung_cap"
+    __tablename__ = "NhaCungCap"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     ma_ncc: Mapped[str] = mapped_column(String, nullable=False, unique=True)

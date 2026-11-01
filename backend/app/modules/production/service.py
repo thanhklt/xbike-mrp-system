@@ -6,6 +6,7 @@ from app.core.errors import NotFoundException, WorkflowNotImplemented
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
+from app.modules.mat_hang.ports import ActiveMatHangReader
 from app.modules.production.ports import ProductionRepository
 from app.modules.production.schemas import WorkOrderCreate, WorkOrderResponse
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
@@ -13,11 +14,16 @@ from app.shared.pagination import PageParams, PaginatedResponse, create_paginate
 
 class ProductionService:
     def __init__(
-        self, repository: ProductionRepository, audit: AuditWriter, transaction: Transaction
+        self,
+        repository: ProductionRepository,
+        audit: AuditWriter,
+        transaction: Transaction,
+        items: ActiveMatHangReader,
     ):
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+        self.items = items
 
     async def list_entries(self, params: PageParams) -> PaginatedResponse[WorkOrderResponse]:
         result = await self.repository.list_entries(params)
@@ -31,6 +37,9 @@ class ProductionService:
 
     async def create_entry(self, payload: WorkOrderCreate, actor: dict) -> WorkOrderResponse:
         async with self.transaction:
+            await self.items.require_active_items(
+                [payload.mat_hang_id, *(item.mat_hang_id for item in payload.items)]
+            )
             created = await self.repository.add(payload, created_at=datetime.utcnow())
             await self.audit.append(
                 CreationAudit(
