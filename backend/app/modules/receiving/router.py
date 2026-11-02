@@ -5,7 +5,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.dependencies import (
-    get_current_user_payload,
     get_pagination_params,
     get_receiving_service,
     require_roles,
@@ -15,7 +14,9 @@ from app.modules.receiving.service import ReceivingService
 from app.shared.pagination import PageParams, PaginatedResponse
 
 router = APIRouter(
-    prefix="/receiving", tags=["Receiving"], dependencies=[Depends(get_current_user_payload)]
+    prefix="/receiving",
+    tags=["Receiving"],
+    dependencies=[Depends(require_roles(["quan_ly", "nhan_vien"]))],
 )
 
 
@@ -38,6 +39,6 @@ async def get_entry(
 async def create_entry(
     payload: GoodsReceiptNoteCreate,
     service: Annotated[ReceivingService, Depends(get_receiving_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
+    actor: Annotated[dict, Depends(require_roles(["quan_ly", "nhan_vien"]))],
 ):
     return await service.create_entry(payload, actor)

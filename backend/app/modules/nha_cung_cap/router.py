@@ -35,7 +35,7 @@ def reject_repeated_query(request: Request) -> None:
         )
 
 
-read_actor = require_roles(["quan_tri_vien", "quan_ly"])
+read_actor = require_roles(["quan_ly"])
 write_actor = require_roles(["quan_ly"])
 router = APIRouter(
     prefix="/nha_cung_cap",

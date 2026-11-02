@@ -16,7 +16,7 @@ class CreationAudit(BaseModel):
     ly_do: str | None = None
 
 
-class AuditLogResponse(BaseModel):
+class AuditLogSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -55,7 +55,10 @@ class AuditLogResponse(BaseModel):
         "giai_quyet",
         "xac_nhan",
     ]
-    du_lieu_truoc: dict | None
-    du_lieu_sau: dict | None
     ly_do: str | None
     created_at: datetime
+
+
+class AuditLogResponse(AuditLogSummary):
+    du_lieu_truoc: dict | None
+    du_lieu_sau: dict | None

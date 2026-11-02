@@ -5,7 +5,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.dependencies import (
-    get_current_user_payload,
     get_pagination_params,
     get_production_service,
     require_roles,
@@ -15,7 +14,9 @@ from app.modules.production.service import ProductionService
 from app.shared.pagination import PageParams, PaginatedResponse
 
 router = APIRouter(
-    prefix="/production", tags=["Production"], dependencies=[Depends(get_current_user_payload)]
+    prefix="/production",
+    tags=["Production"],
+    dependencies=[Depends(require_roles(["quan_ly", "nhan_vien"]))],
 )
 
 
@@ -38,7 +39,7 @@ async def get_entry(
 async def create_entry(
     payload: WorkOrderCreate,
     service: Annotated[ProductionService, Depends(get_production_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    actor: Annotated[dict, Depends(require_roles(["quan_ly"]))],
 ):
     return await service.create_entry(payload, actor)
 
@@ -47,6 +48,6 @@ async def create_entry(
 async def update_work_order_status(
     wo_id: int,
     service: Annotated[ProductionService, Depends(get_production_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
+    actor: Annotated[dict, Depends(require_roles(["quan_ly", "nhan_vien"]))],
 ):
     await service.update_work_order_status(wo_id)

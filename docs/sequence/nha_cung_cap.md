@@ -9,7 +9,7 @@ trả 404. PATCH/DELETE đường dẫn chi tiết trả 405 và không ghi audi
 
 Lỗi nghiệp vụ, xác thực, validation và lỗi nội bộ dùng
 `{error: {code, message, details}, meta: {request_id}}`. Lỗi 401 có
-`WWW-Authenticate: Bearer`. A là `quan_tri_vien`, Q là `quan_ly`.
+`WWW-Authenticate: Bearer`. Q là `quan_ly`. Admin (`quan_tri_vien`) và nhân viên nhận 403 ở cả ba endpoint.
 
 ## GET /api/v1/nha_cung_cap
 
@@ -39,10 +39,10 @@ sequenceDiagram
             Employees-->>Client: 403 tai_khoan_bi_vo_hieu_hoa
         else Tài khoản hoạt động, token còn hiệu lực
             Employees-->>Auth: AuthIdentity
-            Auth->>Auth: Lấy roles hiện tại, kiểm tra quyền A/Q
-            alt Không có quyền A/Q
+            Auth->>Auth: Lấy roles hiện tại, kiểm tra quyền Q
+            alt Không có quyền Q
                 Auth-->>Client: 403 khong_co_quyen
-            else Có quyền A/Q
+            else Có quyền Q
                 Router->>Router: Validate query, từ chối trường lạ hoặc tham số lặp
                 alt Query không hợp lệ
                     Router-->>Client: 422 du_lieu_khong_hop_le
@@ -72,7 +72,7 @@ sequenceDiagram
   các bộ lọc kết hợp AND.
 - Sort hỗ trợ `id`, `ma_ncc`, `ten_ncc` và tiền tố `-` để giảm dần;
   mặc định `id` tăng dần. ID tăng dần là tiêu chí phụ, NULL theo PostgreSQL.
-- A/Q nhận cùng bảy trường: `id`, `ma_ncc`, `ten_ncc`, `so_dien_thoai`,
+- Q nhận bảy trường: `id`, `ma_ncc`, `ten_ncc`, `so_dien_thoai`,
   `dia_chi`, `phuong`, `tinh`. Meta gồm `request_id`, `page`, `page_size`,
   `total`, `total_pages`. Dữ liệu cũ được phép có `ten_ncc=null`.
 - GET chỉ SELECT, không ghi audit hoặc cập nhật dữ liệu.
@@ -105,10 +105,10 @@ sequenceDiagram
             Employees-->>Client: 403 tai_khoan_bi_vo_hieu_hoa
         else Tài khoản hoạt động, token còn hiệu lực
             Employees-->>Auth: AuthIdentity
-            Auth->>Auth: Lấy roles hiện tại, kiểm tra quyền A/Q
-            alt Không có quyền A/Q
+            Auth->>Auth: Lấy roles hiện tại, kiểm tra quyền Q
+            alt Không có quyền Q
                 Auth-->>Client: 403 khong_co_quyen
-            else Có quyền A/Q
+            else Có quyền Q
                 Router->>Router: Validate ID nguyên dương, không nhận query
                 alt ID/query không hợp lệ
                     Router-->>Client: 422 du_lieu_khong_hop_le
@@ -135,7 +135,7 @@ sequenceDiagram
     Note over Router,DB: Handler chuyển lỗi chưa phân loại thành 500 loi_noi_bo, không trả SQL hoặc stack trace
 ```
 
-A/Q nhận cùng bảy trường như GET list, cho phép `ten_ncc=null` với dữ liệu cũ.
+Q nhận bảy trường như GET list, cho phép `ten_ncc=null` với dữ liệu cũ.
 GET chi tiết không trả ETag, không ghi audit hoặc cập nhật dữ liệu.
 
 ## POST /api/v1/nha_cung_cap

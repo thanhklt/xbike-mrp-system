@@ -32,7 +32,7 @@ __all__ = ["generate_mat_hang_etag", "router", "verify_if_match"]
 router = APIRouter(tags=["Mặt hàng"], dependencies=[Depends(get_current_user_payload)])
 Reader = Annotated[MatHangReader, Depends(get_mat_hang_reader)]
 Writer = Annotated[MatHangService, Depends(get_mat_hang_service)]
-ReadRole = Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))]
+ReadRole = Annotated[dict, Depends(require_roles(["quan_ly", "nhan_vien"]))]
 WriteRole = Annotated[dict, Depends(require_roles(["quan_ly"]))]
 
 
