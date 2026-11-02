@@ -43,7 +43,7 @@ sequenceDiagram
                 P->>DB: COUNT NhanVien theo bộ lọc
                 DB-->>P: total
                 opt offset nhỏ hơn total
-                    P->>DB: SELECT theo bộ lọc, sort và id, OFFSET/LIMIT; tải VaiTro
+                    P->>DB: SELECT theo bộ lọc, sort và id, OFFSET/LIMIT#59; tải VaiTro
                     DB-->>P: Nhân viên và vai trò
                 end
                 P-->>N: RecordPage các EmployeeRecord

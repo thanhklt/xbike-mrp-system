@@ -43,6 +43,9 @@ ERROR_STATUS = {
     "du_lieu_da_thay_doi": 412,
     "danh_muc_chua_san_sang": 503,
     "mat_hang_ngung_hoat_dong": 409,
+    "bom_co_chu_trinh": 409,
+    "thieu_bom": 409,
+    "du_lieu_khong_hop_le": 422,
 }
 
 
@@ -51,7 +54,14 @@ def _uses_contract_envelope(request: Request) -> bool:
     prefix = settings.api_v1_str
     return path.startswith(f"{prefix}/auth/") or any(
         path == f"{prefix}/{resource}" or path.startswith(f"{prefix}/{resource}/")
-        for resource in ("nhan_vien", "vai_tro", "mat_hang", "danh_muc_mat_hang", "nha_cung_cap")
+        for resource in (
+            "nhan_vien",
+            "vai_tro",
+            "mat_hang",
+            "danh_muc_mat_hang",
+            "nha_cung_cap",
+            "bom",
+        )
     )
 
 

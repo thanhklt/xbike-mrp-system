@@ -31,7 +31,7 @@ actor C as Client
         S-->>R: Response DTO
         R-->>C: 200 + pagination
     end
-    Note over S,D: SQL/ORM chưa tương thích có thể lỗi 500; đang hoãn đồng bộ
+    Note over S,D: SQL/ORM chưa tương thích có thể lỗi 500#59; đang hoãn đồng bộ
 ```
 
 ## GET /api/v1/material-issuing/{issue_id}
@@ -61,7 +61,7 @@ actor C as Client
         S-->>R: Response DTO
         R-->>C: 200
     end
-    Note over S,D: SQL/ORM chưa tương thích có thể lỗi 500; đang hoãn đồng bộ
+    Note over S,D: SQL/ORM chưa tương thích có thể lỗi 500#59; đang hoãn đồng bộ
 ```
 
 ## POST /api/v1/material-issuing
