@@ -176,11 +176,11 @@ actor C as Client
         S->>K: Chuẩn bị snapshot mới, chưa công bố
         alt Audit / constraint / commit lỗi
             S->>D: ROLLBACK
-            Note over S,K: Không công bố; commit không xác định thì cache unavailable
+            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
             S-->>C: 409 (constraint) hoặc 500
         else Commit thành công
             S->>D: COMMIT
-            D-->>S: Thành công; trigger phát NOTIFY sau commit
+            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
             S->>K: Công bố snapshot trước khi trả response
             S-->>R: DTO / hoàn tất
             R-->>C: 201 + Location + ETag + data/meta
@@ -237,11 +237,11 @@ actor C as Client
         S->>K: Chuẩn bị snapshot mới, chưa công bố
         alt Audit / constraint / commit lỗi
             S->>D: ROLLBACK
-            Note over S,K: Không công bố; commit không xác định thì cache unavailable
+            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
             S-->>C: 409 (constraint) hoặc 500
         else Commit thành công
             S->>D: COMMIT
-            D-->>S: Thành công; trigger phát NOTIFY sau commit
+            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
             S->>K: Công bố snapshot trước khi trả response
             S-->>R: DTO / hoàn tất
             R-->>C: 200 + ETag + data/meta
@@ -298,11 +298,11 @@ actor C as Client
         S->>K: Chuẩn bị snapshot mới, chưa công bố
         alt Audit / constraint / commit lỗi
             S->>D: ROLLBACK
-            Note over S,K: Không công bố; commit không xác định thì cache unavailable
+            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
             S-->>C: 409 (constraint) hoặc 500
         else Commit thành công
             S->>D: COMMIT
-            D-->>S: Thành công; trigger phát NOTIFY sau commit
+            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
             S->>K: Công bố snapshot trước khi trả response
             S-->>R: DTO / hoàn tất
             R-->>C: 204 không body
