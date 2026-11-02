@@ -43,6 +43,21 @@ class DuplicateCodeException(ConflictException):
     default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"
 
 
+class BomCycleException(ConflictException):
+    code = "bom_co_chu_trinh"
+    default_message = "BOM tạo chu trình trong cấu trúc"
+
+
+class MissingBomException(ConflictException):
+    code = "thieu_bom"
+    default_message = "Bán thành phẩm chưa có BOM hiện hành"
+
+
+class InvalidInputException(AppException):
+    code = "du_lieu_khong_hop_le"
+    default_message = "Dữ liệu không hợp lệ"
+
+
 class PreconditionRequiredException(AppException):
     code = "thieu_if_match"
     default_message = "Thiếu header If-Match"

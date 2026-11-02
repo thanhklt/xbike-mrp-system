@@ -104,7 +104,7 @@ class WorkOrder(Base):
     )
     bom_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("bom.id", name="fk_lenh_san_xuat_bom_id", ondelete="RESTRICT"),
+        ForeignKey("Bom.id", name="fk_lenh_san_xuat_bom_id", ondelete="RESTRICT"),
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)

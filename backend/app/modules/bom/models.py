@@ -1,4 +1,4 @@
-"""ORM mapping matching infra/postgres/init.sql."""
+"""BOM snapshots mapped to the agreed PostgreSQL bootstrap schema."""
 
 from datetime import datetime
 
@@ -10,7 +10,6 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,54 +17,43 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
-class BOMHeader(Base):
-    __tablename__ = "bom"
+class Bom(Base):
+    __tablename__ = "Bom"
     __table_args__ = (
-        CheckConstraint("version > 0", name="ck_bom_1"),
+        CheckConstraint("version > 0", name="ck_bom_version"),
         CheckConstraint(
-            "end_time IS NULL OR start_time IS NULL OR end_time > start_time", name="ck_bom_2"
+            "end_time IS NULL OR (start_time IS NOT NULL AND end_time > start_time)",
+            name="ck_bom_thoi_gian",
         ),
-        UniqueConstraint("mat_hang_id", "version", name="uq_bom_source"),
-        Index("ix_bom_mat_hang_id", "mat_hang_id"),
-        Index(
-            "uq_bom_active", "mat_hang_id", unique=True, postgresql_where=text("is_active IS TRUE")
-        ),
+        Index("Bom_mat_hang_id_version_idx", "mat_hang_id", "version", unique=True),
+        Index("uq_bom_hien_hanh", "mat_hang_id", unique=True, postgresql_where=text("is_active")),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     mat_hang_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("MatHang.id", name="fk_bom_mat_hang_id", ondelete="RESTRICT"),
-        nullable=False,
+        Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
-    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
-    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
-    is_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-
-    items: Mapped[list["BOMItem"]] = relationship(
-        "BOMItem", foreign_keys="BOMItem.bom_id", lazy="selectin", passive_deletes="all"
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    chi_tiet: Mapped[list["ChiTietBom"]] = relationship(
+        lazy="selectin", order_by="ChiTietBom.id", passive_deletes="all"
     )
 
 
-class BOMItem(Base):
-    __tablename__ = "chi_tiet_bom"
+class ChiTietBom(Base):
+    __tablename__ = "ChiTietBom"
     __table_args__ = (
-        CheckConstraint("so_luong > 0", name="ck_chi_tiet_bom_1"),
-        UniqueConstraint("bom_id", "mat_hang_id", name="uq_chi_tiet_bom_source"),
-        Index("ix_chi_tiet_bom_bom_id", "bom_id"),
-        Index("ix_chi_tiet_bom_mat_hang_id", "mat_hang_id"),
+        CheckConstraint("so_luong > 0", name="ck_chi_tiet_bom_so_luong"),
+        Index("ChiTietBom_bom_id_mat_hang_id_idx", "bom_id", "mat_hang_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     bom_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("bom.id", name="fk_chi_tiet_bom_bom_id", ondelete="RESTRICT"),
-        nullable=False,
+        Integer, ForeignKey("Bom.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
     mat_hang_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("MatHang.id", name="fk_chi_tiet_bom_mat_hang_id", ondelete="RESTRICT"),
-        nullable=False,
+        Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
