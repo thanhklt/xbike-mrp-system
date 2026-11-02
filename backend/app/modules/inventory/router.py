@@ -5,7 +5,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.dependencies import (
-    get_current_user_payload,
     get_inventory_service,
     get_pagination_params,
     require_roles,
@@ -15,7 +14,9 @@ from app.modules.inventory.service import InventoryService
 from app.shared.pagination import PageParams, PaginatedResponse
 
 router = APIRouter(
-    prefix="/inventory", tags=["Inventory"], dependencies=[Depends(get_current_user_payload)]
+    prefix="/inventory",
+    tags=["Inventory"],
+    dependencies=[Depends(require_roles(["quan_ly", "nhan_vien"]))],
 )
 
 
@@ -38,6 +39,6 @@ async def list_1(
 @router.post("/movements")
 async def record_movement(
     service: Annotated[InventoryService, Depends(get_inventory_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    actor: Annotated[dict, Depends(require_roles(["quan_ly"]))],
 ):
     await service.record_movement()

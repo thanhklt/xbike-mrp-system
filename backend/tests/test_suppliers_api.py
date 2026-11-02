@@ -31,7 +31,7 @@ async def supplier_context(auth_context):
             ]
         )
         await db.commit()
-    token = (await login(client)).json()["data"]["access_token"]
+    token = (await login(client, 2)).json()["data"]["access_token"]
     yield client, sessions, {"Authorization": f"Bearer {token}"}
 
 
@@ -73,7 +73,7 @@ async def test_detail_contract_without_etag(supplier_context):
     assert first.json()["meta"]["request_id"] != second.json()["meta"]["request_id"]
 
 
-@pytest.mark.parametrize("index,status", [(1, 200), (2, 200), (3, 403)])
+@pytest.mark.parametrize("index,status", [(1, 403), (2, 200), (3, 403)])
 async def test_read_permissions(supplier_context, index, status):
     client, _, _ = supplier_context
     token = (await login(client, index)).json()["data"]["access_token"]

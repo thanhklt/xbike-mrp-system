@@ -1,6 +1,6 @@
 # Sequence — mat_hang
 
-Module sở hữu ORM `MatHang` ánh xạ bảng `"MatHang"`. Có sáu endpoint thực tế; đường dẫn danh mục cũng thuộc router này. A/Q/N được đọc, chỉ Q (`quan_ly`) được ghi.
+Module sở hữu ORM `MatHang` ánh xạ bảng `"MatHang"`. Có sáu endpoint thực tế; đường dẫn danh mục cũng thuộc router này. Q/N được đọc, admin nhận 403, chỉ Q (`quan_ly`) được ghi.
 
 GET trả cả bản ghi hoạt động và bị khóa; `is_active=false` không làm mất khả năng đọc. GET mặt hàng không truy vấn bảng MatHang; auth vẫn đọc DB để kiểm tra danh tính hiện hành. Giá là chuỗi decimal hai chữ số hoặc null; số dư và thời điểm tồn chỉ đọc. Snapshot gồm DTO bất biến, không giữ ORM/session.
 
@@ -23,7 +23,7 @@ actor C as Client
     else Tài khoản bị khóa
         A-->>C: 403
     end
-    R->>A: Yêu cầu A/Q/N
+    R->>A: Yêu cầu Q/N, admin nhận 403
     alt Không có vai trò được phép
         A-->>C: 403
     end
@@ -64,7 +64,7 @@ actor C as Client
     else Tài khoản bị khóa
         A-->>C: 403
     end
-    R->>A: Yêu cầu A/Q/N
+    R->>A: Yêu cầu Q/N, admin nhận 403
     alt Không có vai trò được phép
         A-->>C: 403
     end
@@ -105,7 +105,7 @@ actor C as Client
     else Tài khoản bị khóa
         A-->>C: 403
     end
-    R->>A: Yêu cầu A/Q/N
+    R->>A: Yêu cầu Q/N, admin nhận 403
     alt Không có vai trò được phép
         A-->>C: 403
     end

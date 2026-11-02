@@ -87,6 +87,7 @@ def require_roles(allowed_roles: list[str]):
             raise ForbiddenException(message="You do not have permission to perform this action")
         return payload
 
+    role_checker.allowed_roles = frozenset(allowed_roles)
     return role_checker
 
 

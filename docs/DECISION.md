@@ -118,3 +118,35 @@ Enum `thao_tac` trong init.sql không có `kich_hoat` hay `xoa`, nên dùng các
 - Kiểm tra bằng `EXISTS`, không lọc theo trạng thái lệnh sản xuất. Chỉ cần có lệnh gắn với đúng version BOM đó là được xem là đã sử dụng.
 - Đây là trường tính toán của response, không phải cột lưu trong bảng `"Bom"` và không phụ thuộc `is_active` của BOM.
 - Nguồn đối chiếu: dev xác nhận ngày 02/11/2026 và truy vấn `_used` trong `backend/app/modules/bom/repository.py`.
+
+## Phân quyền quản trị viên (chốt ngày 02/11/2026)
+
+Nguồn: yêu cầu dev thực thi `.handoff/plan-phan-quyen-quan-tri-vien.md`, contract v2 §3/§5/§7 và router/service hiện tại. Các quyết định này thay thế quyền đọc danh mục của admin trong contract v2. D-BOM-09 giữ nguyên.
+
+### D-PQ-01. Phạm vi truy cập của quản trị viên
+
+- `quan_tri_vien` chỉ xem và thay đổi dữ liệu nhân viên/vai trò qua `/api/v1/nhan_vien` và `/api/v1/vai_tro`, trong giới hạn của các endpoint đã triển khai.
+- Admin được dùng `/api/v1/auth/*` để đăng nhập, xem hồ sơ và đổi mật khẩu của chính mình, cùng `GET /api/v1/audit`, `GET /health`, `GET /api/v1/ping`.
+- Mọi endpoint nghiệp vụ còn lại trả 403 cho admin. Mỗi route nghiệp vụ phải có role guard loại trừ `quan_tri_vien`; kiểm thử chính sách rà soát toàn bộ route để phát hiện endpoint mới thiếu guard.
+- Quyền của `quan_ly` và `nhan_vien` giữ nguyên trong phạm vi tác vụ này.
+
+### D-PQ-02. Audit rút gọn cho quản trị viên
+
+- Admin thấy tất cả dòng audit, không lọc `loai_doi_tuong`, và vẫn nhận `ly_do`.
+- Response của admin bỏ hẳn hai key `du_lieu_truoc` và `du_lieu_sau`, kể cả audit nhân viên/vai trò. Không thay bằng `null`, vì `null` vẫn có nghĩa riêng trong response đầy đủ, ví dụ dữ liệu trước của thao tác tạo.
+- Dev xác nhận khi thực thi ngày 02/11/2026: chỉ loại hai trường khỏi DTO/response. Giữ helper `select_page` và cách đọc ORM đầy đủ hiện tại; không yêu cầu loại hai cột khỏi câu SELECT hoặc bộ nhớ của session.
+- Admin gửi `sort_by=du_lieu_truoc` hoặc `sort_by=du_lieu_sau` thì server chuyển sang `created_at`, giữ các tham số khác. Quản lý vẫn nhận đủ hai trường và giữ cách sắp xếp hiện tại. Nhân viên không được đọc audit.
+- Đánh đổi chấp nhận: admin vẫn thấy ai thao tác, loại/ID đối tượng và thời điểm, kể cả siêu dữ liệu nghiệp vụ. Nội dung `ly_do` vẫn hiển thị và tìm được qua `search`; các cột JSON không được tìm kiếm.
+- Admin cũng không thấy giá trị trước/sau khi đổi thông tin hoặc vai trò nhân viên trong audit; trạng thái hiện tại vẫn xem qua `/nhan_vien` theo quyền hiện có.
+
+### D-PQ-03. Điểm lệch so với contract v2
+
+- Contract v2 §3/§5 cho admin tra cứu danh mục, gồm `/mat_hang` và `/nha_cung_cap`. Quyết định mới bỏ quyền đó: admin nhận 403, kể cả `/danh_muc_mat_hang/`.
+- Frontend cần ẩn menu mặt hàng/nhà cung cấp đối với admin và hỗ trợ response audit không có hai trường JSON. Frontend được xử lý trong tác vụ riêng.
+
+### D-PQ-04. Bỏ API tồn kho riêng trong contract
+
+- Bỏ API-029/030 (`/ton_kho`). Số dư và thời điểm cập nhật được trả qua `MatHangRead.so_luong_ton` và `ton_kho_updated_at`, là phần bổ sung so với contract v2 §5, chỉ quản lý/nhân viên đọc được.
+- Endpoint legacy `GET /inventory/stock` vẫn tồn tại và được chặn admin trong tác vụ này; việc gỡ endpoint và chuyển đổi ORM tồn kho thuộc tác vụ sau.
+
+Ghi chú triển khai/hoàn tác: thay đổi nằm ở role guard và projection audit, không đổi schema hay dữ liệu đã lưu. Khi cần hoàn tác, khôi phục các guard và hợp đồng đọc audit về bản trước tác vụ cùng lúc, kèm kiểm thử và sequence tương ứng; không cần migration hoặc phục hồi dữ liệu.

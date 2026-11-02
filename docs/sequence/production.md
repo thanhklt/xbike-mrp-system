@@ -2,7 +2,7 @@
 
 Đối chiếu router/service/repository/schema hiện có. Các tên bảng/ORM nghiệp vụ cũ trong module này chưa được chuyển sang SQL đã chốt; tác vụ hiện tại chỉ thêm guard mặt hàng và sửa FK trực tiếp cần thiết. Các sơ đồ mô tả luồng code khi persistence tương thích; không phải xác nhận E2E với init.sql hiện tại. Endpoint chưa triển khai không được bổ sung vào đây.
 
-GET giữ response và pagination hiện có, vẫn đọc DB của module; yêu cầu GET từ cache chỉ áp dụng danh mục/mặt hàng. GET có auth, không thêm giới hạn vai trò mới. POST giữ nhóm vai trò cũ: quan_tri_vien / quan_ly. Auth dùng public nhân viên service và kiểm tra trạng thái/credential hiện hành.
+GET giữ response và pagination hiện có, vẫn đọc DB của module; yêu cầu GET từ cache chỉ áp dụng danh mục/mặt hàng. Mọi endpoint yêu cầu vai trò quan_ly / nhan_vien ở mức router, admin nhận 403 trước xử lý nghiệp vụ. POST chỉ cho quan_ly, PATCH trạng thái cho quan_ly / nhan_vien. Auth dùng public nhân viên service và kiểm tra trạng thái/credential hiện hành.
 
 ## GET /api/v1/production/work-orders
 
@@ -19,6 +19,8 @@ actor C as Client
     alt Chưa xác thực / token lỗi
         A-->>C: 401
     else Tài khoản bị khóa
+        A-->>C: 403
+    else Vai trò không thuộc quan_ly / nhan_vien (gồm admin)
         A-->>C: 403
     end
     R->>R: Validate path/query (422)
@@ -49,6 +51,8 @@ actor C as Client
     alt Chưa xác thực / token lỗi
         A-->>C: 401
     else Tài khoản bị khóa
+        A-->>C: 403
+    else Vai trò không thuộc quan_ly / nhan_vien (gồm admin)
         A-->>C: 403
     end
     R->>R: Validate path/query (422)
@@ -82,8 +86,10 @@ actor C as Client
         A-->>C: 401
     else Tài khoản bị khóa
         A-->>C: 403
+    else Vai trò không thuộc quan_ly / nhan_vien (gồm admin)
+        A-->>C: 403
     end
-    R->>A: Kiểm tra vai trò tạo theo router
+    R->>A: Kiểm tra quyền tạo: quan_ly
     alt Không được phép
         A-->>C: 403
     end
@@ -134,8 +140,10 @@ actor C as Client
         A-->>C: 401
     else Tài khoản bị khóa
         A-->>C: 403
+    else Vai trò không thuộc quan_ly / nhan_vien (gồm admin)
+        A-->>C: 403
     end
-    R->>A: Yêu cầu A/Q/N
+    R->>A: Yêu cầu Q/N
     alt Không có vai trò được phép
         A-->>C: 403
     end
