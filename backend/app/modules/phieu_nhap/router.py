@@ -1,4 +1,4 @@
-"""Persisted receiving endpoints. Demo data lives only in seed.sql."""
+"""Six receipt endpoints under the shared /phieu_nhap router."""
 
 from typing import Annotated
 
@@ -11,14 +11,10 @@ from app.core.request_context import (
     reject_repeated_query,
 )
 from app.dependencies import (
-    get_current_user_payload,
-    get_pagination_params,
     get_receiving_service,
     require_roles,
 )
 from app.modules.phieu_nhap.schemas import (
-    GoodsReceiptNoteCreate,
-    GoodsReceiptNoteResponse,
     PhieuNhapActionResponse,
     PhieuNhapCompleteInput,
     PhieuNhapCreate,
@@ -29,39 +25,9 @@ from app.modules.phieu_nhap.schemas import (
     PhieuNhapPatch,
 )
 from app.modules.phieu_nhap.service import PhieuNhapService
-from app.shared.pagination import PageParams, PaginatedResponse
-
-legacy_router = APIRouter(
-    prefix="/receiving", tags=["Receiving"], dependencies=[Depends(get_current_user_payload)]
-)
-
-
-@legacy_router.get("", response_model=PaginatedResponse[GoodsReceiptNoteResponse])
-async def list_entries(
-    params: Annotated[PageParams, Depends(get_pagination_params)],
-    service: Annotated[PhieuNhapService, Depends(get_receiving_service)],
-):
-    return await service.list_entries(params)
-
-
-@legacy_router.get("/{grn_id}", response_model=GoodsReceiptNoteResponse)
-async def get_entry(
-    grn_id: int, service: Annotated[PhieuNhapService, Depends(get_receiving_service)]
-):
-    return await service.get_entry(grn_id)
-
-
-@legacy_router.post("", response_model=GoodsReceiptNoteResponse, status_code=201)
-async def create_entry(
-    payload: GoodsReceiptNoteCreate,
-    service: Annotated[PhieuNhapService, Depends(get_receiving_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
-):
-    return await service.create_entry(payload, actor)
-
 
 receipt_actor = require_roles(["quan_ly"])
-contract_router = APIRouter(
+router = APIRouter(
     prefix="/phieu_nhap",
     tags=["phieu_nhap"],
     dependencies=[Depends(receipt_actor)],
@@ -72,9 +38,7 @@ detail_headers = {
 }
 
 
-@contract_router.get(
-    "", response_model=PhieuNhapListResponse, dependencies=[Depends(reject_repeated_query)]
-)
+@router.get("", response_model=PhieuNhapListResponse, dependencies=[Depends(reject_repeated_query)])
 async def list_receipts(
     params: Annotated[PhieuNhapListQuery, Query()],
     service: Annotated[PhieuNhapService, Depends(get_receiving_service)],
@@ -83,7 +47,7 @@ async def list_receipts(
     return await service.list_receipts(params, request_id)
 
 
-@contract_router.get(
+@router.get(
     "/{id}",
     response_model=PhieuNhapDetailResponse,
     dependencies=[Depends(reject_query)],
@@ -100,7 +64,7 @@ async def get_receipt(
     return result
 
 
-@contract_router.post(
+@router.post(
     "",
     status_code=201,
     response_model=PhieuNhapDetailResponse,
@@ -128,7 +92,7 @@ async def create_receipt(
 mutation_errors = {code: {"model": PhieuNhapErrorResponse} for code in (404, 409, 412, 428)}
 
 
-@contract_router.patch(
+@router.patch(
     "/{id}",
     response_model=PhieuNhapDetailResponse,
     dependencies=[Depends(reject_query)],
@@ -148,7 +112,7 @@ async def patch_receipt(
     return result
 
 
-@contract_router.delete(
+@router.delete(
     "/{id}",
     status_code=204,
     response_class=Response,
@@ -165,7 +129,7 @@ async def delete_receipt(
     return Response(status_code=204)
 
 
-@contract_router.post(
+@router.post(
     "/{id}/hoan_tat",
     response_model=PhieuNhapActionResponse,
     dependencies=[Depends(reject_query)],
@@ -183,8 +147,3 @@ async def complete_receipt(
     result, etag = await service.complete_receipt(id, if_match, actor, request_id)
     response.headers["ETag"] = etag
     return result
-
-
-router = APIRouter()
-router.include_router(contract_router)
-router.include_router(legacy_router)

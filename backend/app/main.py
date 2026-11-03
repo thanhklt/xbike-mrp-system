@@ -58,6 +58,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/", tags=["Root"])
+async def notify():
+    return "Run successfully"
 
 # Root Health check endpoints
 @app.get("/health", tags=["Health"])
