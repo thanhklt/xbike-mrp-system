@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Shield, User } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
