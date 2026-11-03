@@ -5,7 +5,9 @@ Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yT
 
 ## Mở sơ đồ từng endpoint
 
-Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`, A = `quan_tri_vien`, N = `nhan_vien`.
+Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`.
+
+Ba route cũ GET `/api/v1/receiving`, GET `/api/v1/receiving/{grn_id}` và POST `/api/v1/receiving` đã được gỡ theo yêu cầu của dev. Các URL này trả 404; client cần chuyển sang `/api/v1/phieu_nhap` với payload, quyền và response hiện tại.
 
 | Endpoint | Quyền | Ảnh sequence |
 |---|---|---|

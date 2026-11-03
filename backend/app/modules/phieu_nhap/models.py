@@ -22,7 +22,7 @@ from app.core.database import Base
 
 
 class GoodsReceiptNote(Base):
-    __tablename__ = "PhieuNhap"
+    __tablename__ = "phieu_nhap"
     __table_args__ = (
         Index("ix_phieu_nhap_nhan_vien_id", "nhan_vien_id"),
         Index("ix_phieu_nhap_ncc_id", "ncc_id"),
@@ -58,7 +58,7 @@ class GoodsReceiptNote(Base):
 
 
 class ReceiptItem(Base):
-    __tablename__ = "ChiTietPhieuNhap"
+    __tablename__ = "chi_tiet_phieu_nhap"
     __table_args__ = (
         CheckConstraint("so_luong > 0", name="ck_chi_tiet_phieu_nhap_1"),
         UniqueConstraint("phieu_nhap_id", "mat_hang_id", name="uq_chi_tiet_phieu_nhap_source"),

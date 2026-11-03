@@ -55,17 +55,6 @@ def validate_lines(items) -> None:
         raise ValueError("tong_tien exceeds numeric(18,2) range")
 
 
-class ReceiptItemResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    phieu_nhap_id: int
-    mat_hang_id: int
-    so_luong: int
-    don_gia_thuc: ReceiptMoney | None
-    tong_gia: ReceiptMoney | None
-
-
 class ReceiptItemCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -73,21 +62,6 @@ class ReceiptItemCreate(BaseModel):
     so_luong: ReceiptId
     don_gia_thuc: ReceiptMoney
     tong_gia: ReceiptMoney | None = None
-
-
-class GoodsReceiptNoteResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    ma_phieu_nhap: str
-    nhan_vien_id: int
-    ncc_id: int
-    ngay_nhap: ReceiptDate
-    ghi_chu: str | None
-    tong_tien: ReceiptMoney | None
-    trang_thai: Literal["nhap", "hoan_thanh"]
-    created_at: datetime | None
-    items: list[ReceiptItemResponse] = Field(default_factory=list)
 
 
 class GoodsReceiptNoteCreate(BaseModel):
