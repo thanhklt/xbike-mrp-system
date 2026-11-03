@@ -1,7 +1,7 @@
 """Receipt API contract and transaction tests against isolated PostgreSQL data."""
 
 import asyncio
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Annotated
 
 import pytest
@@ -30,7 +30,11 @@ from tests.test_supplier_writes import concurrent_write_context as concurrent_wr
 
 BASE = "/api/v1/phieu_nhap"
 
-BODY = {"ncc_id": 1, "chi_tiet": [{"mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": 100}]}
+BODY = {
+    "ncc_id": 1,
+    "ngay_nhap": "2026-11-03",
+    "chi_tiet": [{"mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": 100}],
+}
 
 
 @pytest.fixture
@@ -80,10 +84,10 @@ async def test_create_read_list_and_audit(receipt_context):
     record = response.json()["data"]
     assert record["trang_thai"] == "nhap"
     assert record["nhan_vien_id"] == 2
-    assert record["tong_tien"] == 300
+    assert record["tong_tien"] == "300.00"
     assert record["created_at"].endswith("Z")
     assert record["chi_tiet"] == [
-        {"id": 1, "mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": 100, "tong_gia": 300}
+        {"id": 1, "mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": "100.00", "tong_gia": "300.00"}
     ]
     detail = await client.get(response.headers["location"], headers=headers)
     assert detail.status_code == 200
@@ -118,12 +122,16 @@ async def test_create_read_list_and_audit(receipt_context):
         {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 1, "don_gia_thuc": -1}]},
         {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 1.0, "don_gia_thuc": 1}]},
         {"chi_tiet": [{"mat_hang_id": True, "so_luong": 1, "don_gia_thuc": 1}]},
-        {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 2147483647, "don_gia_thuc": 2}]},
+        {
+            "chi_tiet": [
+                {"mat_hang_id": 1, "so_luong": 2147483647, "don_gia_thuc": "9999999999999999.99"}
+            ]
+        },
     ],
 )
 async def test_create_validation_is_atomic(receipt_context, body):
     client, sessions, headers = receipt_context
-    response = await client.post(BASE, headers=headers, json=body)
+    response = await client.post(BASE, headers=headers, json=({**BODY, **body} if body else {}))
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "du_lieu_khong_hop_le"
     async with sessions() as db:
@@ -134,8 +142,8 @@ async def test_create_validation_is_atomic(receipt_context, body):
 @pytest.mark.parametrize("part_id,status", [(3, 409), (4, 409), (5, 409), (6, 409), (99, 404)])
 async def test_reject_invalid_part(receipt_context, part_id, status):
     client, _, headers = receipt_context
-    body = {"chi_tiet": [{"mat_hang_id": part_id, "so_luong": 1, "don_gia_thuc": 0}]}
-    response = await client.post(BASE, headers=headers, json=body)
+    body = {**BODY, "chi_tiet": [{"mat_hang_id": part_id, "so_luong": 1, "don_gia_thuc": 0}]}
+    response = await client.post(BASE, headers=headers, json={**BODY, **body})
     assert response.status_code == status
 
 
@@ -144,7 +152,12 @@ async def test_nullable_legacy_record(receipt_context):
     async with sessions() as db:
         db.add(
             GoodsReceiptNote(
-                id=1, ma_phieu_nhap="PN-202610-000001", created_at=datetime(2026, 10, 1)
+                id=1,
+                ma_phieu_nhap="PN-202610-000001",
+                nhan_vien_id=2,
+                ncc_id=1,
+                ngay_nhap=date(2026, 10, 1),
+                created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
             )
         )
         await db.commit()
@@ -152,7 +165,7 @@ async def test_nullable_legacy_record(receipt_context):
     assert response.status_code == 200
     record = response.json()["data"]
     assert record["created_at"] == "2026-10-01T00:00:00Z"
-    assert record["tong_tien"] is record["nhan_vien_id"] is None
+    assert record["tong_tien"] is None and record["nhan_vien_id"] == 2
 
 
 def test_openapi_receipt_contract():
@@ -278,7 +291,8 @@ async def test_list_filters_dates_sort_and_pagination(receipt_context):
                 GoodsReceiptNote(
                     id=index,
                     ma_phieu_nhap=f"PN-202610-{index:06d}",
-                    created_at=stamp,
+                    created_at=stamp.replace(tzinfo=timezone.utc),
+                    ngay_nhap=stamp.date(),
                     ncc_id=1,
                     nhan_vien_id=2,
                     trang_thai="nhap" if index < 4 else "hoan_thanh",
@@ -309,13 +323,13 @@ async def test_list_filters_dates_sort_and_pagination(receipt_context):
         assert result.json()["data"] == []
 
 
-async def test_create_without_supplier_and_zero_price(receipt_context):
+async def test_create_with_supplier_and_zero_price(receipt_context):
     client, _, headers = receipt_context
-    body = {"chi_tiet": [{"mat_hang_id": 2, "so_luong": 2, "don_gia_thuc": 0}]}
-    response = await client.post(BASE, headers=headers, json=body)
+    body = {**BODY, "chi_tiet": [{"mat_hang_id": 2, "so_luong": 2, "don_gia_thuc": 0}]}
+    response = await client.post(BASE, headers=headers, json={**BODY, **body})
     assert response.status_code == 201
-    assert response.json()["data"]["tong_tien"] == 0
-    assert response.json()["data"]["ncc_id"] is None
+    assert response.json()["data"]["tong_tien"] == "0.00"
+    assert response.json()["data"]["ncc_id"] == 1
 
 
 async def test_missing_supplier_and_query_rejected(receipt_context):
@@ -353,10 +367,11 @@ async def test_audit_failure_rolls_back_parent_and_all_items(receipt_context):
                 BASE,
                 headers=headers,
                 json={
+                    **BODY,
                     "chi_tiet": [
                         BODY["chi_tiet"][0],
                         {"mat_hang_id": 2, "so_luong": 2, "don_gia_thuc": 50},
-                    ]
+                    ],
                 },
             )
         assert response.status_code == 500
@@ -396,9 +411,9 @@ async def test_concurrent_creates_have_unique_codes_ids_and_atomic_audits(
     barrier = asyncio.Barrier(6)
 
     class RacingRepository(SqlAlchemyReceivingRepository):
-        async def _allocate(self, item_count, prefix):
+        async def lock_parts(self, ids):
             await asyncio.wait_for(barrier.wait(), 5)
-            return await super()._allocate(item_count, prefix)
+            return await super().lock_parts(ids)
 
     def racing_service(db: Annotated[AsyncSession, Depends(get_db)]):
         return ReceivingService(
@@ -458,13 +473,15 @@ async def test_monthly_code_uses_vietnam_time_and_audit_history(receipt_context,
             GoodsReceiptNoteCreate(
                 ma_phieu_nhap="",
                 nhan_vien_id=2,
+                ncc_id=1,
+                ngay_nhap=date(2026, 10, 31),
                 tong_tien=1,
                 items=[ReceiptItemCreate(mat_hang_id=1, so_luong=1, don_gia_thuc=1, tong_gia=1)],
             ),
-            created_at=stamp,
+            created_at=stamp.replace(tzinfo=timezone.utc),
         )
-        assert record.id == 92
-        assert record.chi_tiet[0].id == 102
+        assert record.id == 1
+        assert record.chi_tiet[0].id == 1
         assert record.ma_phieu_nhap == prefix + ("000001" if stamp.hour == 16 else "000011")
         await db.rollback()
 
@@ -491,6 +508,14 @@ async def test_exhausted_allocation_rolls_back(receipt_context, exhausted):
             )
         )
         await db.commit()
+    if exhausted in ("parent", "item"):
+        table = "phieu_nhap" if exhausted == "parent" else "chi_tiet_phieu_nhap"
+        async with sessions() as db:
+            await db.execute(
+                text("SELECT setval(pg_get_serial_sequence(:table,'id'),2147483647,true)"),
+                {"table": table},
+            )
+            await db.commit()
     response = await client.post(BASE, headers=headers, json=BODY)
     assert response.status_code == 409
     async with sessions() as db:
@@ -514,7 +539,7 @@ async def test_exhausted_allocation_rolls_back(receipt_context, exhausted):
 async def test_item_fields_are_strict(receipt_context, field, value):
     client, _, headers = receipt_context
     item = {**BODY["chi_tiet"][0], field: value}
-    response = await client.post(BASE, headers=headers, json={"chi_tiet": [item]})
+    response = await client.post(BASE, headers=headers, json={**BODY, "chi_tiet": [item]})
     assert response.status_code == 422
 
 
@@ -524,10 +549,11 @@ async def test_multi_item_total_overflow(receipt_context):
         BASE,
         headers=headers,
         json={
+            **BODY,
             "chi_tiet": [
-                {"mat_hang_id": 1, "so_luong": 1, "don_gia_thuc": 2147483647},
+                {"mat_hang_id": 1, "so_luong": 1, "don_gia_thuc": "9999999999999999.99"},
                 {"mat_hang_id": 2, "so_luong": 1, "don_gia_thuc": 1},
-            ]
+            ],
         },
     )
     assert response.status_code == 422
@@ -538,7 +564,12 @@ async def test_legacy_receiving_route_shares_allocator_and_preserves_shape(recei
     legacy = await client.post(
         "/api/v1/receiving",
         headers=headers,
-        json={"ma_phieu_nhap": "PN-202610-000555", "items": [{"mat_hang_id": 1, "so_luong": 1}]},
+        json={
+            "ma_phieu_nhap": "PN-202610-000555",
+            "ncc_id": 1,
+            "ngay_nhap": "2026-11-03",
+            "items": [{"mat_hang_id": 1, "so_luong": 1, "don_gia_thuc": 0}],
+        },
     )
     assert legacy.status_code == 201
     assert "items" in legacy.json()

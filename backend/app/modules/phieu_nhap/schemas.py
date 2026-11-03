@@ -2,12 +2,57 @@
 
 import re
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
 from app.modules.users.schemas import ListResponseMeta, ResponseMeta
+
+INT_MAX = 2**31 - 1
+MONEY_MAX = Decimal("9999999999999999.99")
+ReceiptId = Annotated[int, Field(strict=True, gt=0, le=INT_MAX)]
+
+
+def exact_money(value: object) -> object:
+    if isinstance(value, (bool, float)):
+        raise ValueError("Money must be an exact decimal string or integer")
+    return value
+
+
+ReceiptMoney = Annotated[
+    Decimal,
+    BeforeValidator(exact_money, json_schema_input_type=int | str),
+    Field(ge=0, max_digits=18, decimal_places=2, allow_inf_nan=False),
+    AfterValidator(lambda value: value.quantize(Decimal("0.01"))),
+]
+
+
+def receipt_date(value: object) -> object:
+    if isinstance(value, datetime) or not isinstance(value, (date, str)):
+        raise ValueError("ngay_nhap must use YYYY-MM-DD")
+    if isinstance(value, str) and not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise ValueError("ngay_nhap must use YYYY-MM-DD")
+    return value
+
+
+ReceiptDate = Annotated[date, BeforeValidator(receipt_date)]
+
+
+def validate_lines(items) -> None:
+    if len({item.mat_hang_id for item in items}) != len(items):
+        raise ValueError("Items must not contain duplicate mat_hang_id")
+    if sum((item.so_luong * item.don_gia_thuc for item in items), Decimal(0)) > MONEY_MAX:
+        raise ValueError("tong_tien exceeds numeric(18,2) range")
 
 
 class ReceiptItemResponse(BaseModel):
@@ -17,17 +62,17 @@ class ReceiptItemResponse(BaseModel):
     phieu_nhap_id: int
     mat_hang_id: int
     so_luong: int
-    don_gia_thuc: int | None
-    tong_gia: int | None
+    don_gia_thuc: ReceiptMoney | None
+    tong_gia: ReceiptMoney | None
 
 
 class ReceiptItemCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mat_hang_id: int
-    so_luong: int = Field(gt=0)
-    don_gia_thuc: int | None = Field(default=None, ge=0)
-    tong_gia: int | None = Field(default=None, ge=0)
+    mat_hang_id: ReceiptId
+    so_luong: ReceiptId
+    don_gia_thuc: ReceiptMoney
+    tong_gia: ReceiptMoney | None = None
 
 
 class GoodsReceiptNoteResponse(BaseModel):
@@ -35,9 +80,11 @@ class GoodsReceiptNoteResponse(BaseModel):
 
     id: int
     ma_phieu_nhap: str
-    nhan_vien_id: int | None
-    ncc_id: int | None
-    tong_tien: int | None
+    nhan_vien_id: int
+    ncc_id: int
+    ngay_nhap: ReceiptDate
+    ghi_chu: str | None
+    tong_tien: ReceiptMoney | None
     trang_thai: Literal["nhap", "hoan_thanh"]
     created_at: datetime | None
     items: list[ReceiptItemResponse] = Field(default_factory=list)
@@ -48,15 +95,17 @@ class GoodsReceiptNoteCreate(BaseModel):
 
     ma_phieu_nhap: str
     nhan_vien_id: int | None = None
-    ncc_id: int | None = None
-    tong_tien: int | None = Field(default=None, ge=0)
+    ncc_id: ReceiptId
+    ngay_nhap: ReceiptDate
+    ghi_chu: str | None = None
+    tong_tien: ReceiptMoney | None = None
     trang_thai: Literal["nhap"] = "nhap"
-    items: list[ReceiptItemCreate] = Field(default_factory=list)
+    items: list[ReceiptItemCreate] = Field(min_length=1)
 
-
-INT_MAX = 2**31 - 1
-ReceiptId = Annotated[int, Field(strict=True, gt=0, le=INT_MAX)]
-ReceiptMoney = Annotated[int, Field(strict=True, ge=0, le=INT_MAX)]
+    @model_validator(mode="after")
+    def validate_items(self) -> Self:
+        validate_lines(self.items)
+        return self
 
 
 class ChiTietPhieuNhapCreate(BaseModel):
@@ -70,23 +119,23 @@ class ChiTietPhieuNhapCreate(BaseModel):
 class PhieuNhapCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ncc_id: ReceiptId | None = None
+    ncc_id: ReceiptId
+    ngay_nhap: ReceiptDate
+    ghi_chu: str | None = None
     chi_tiet: list[ChiTietPhieuNhapCreate] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_items(self) -> Self:
-        ids = [item.mat_hang_id for item in self.chi_tiet]
-        if len(ids) != len(set(ids)):
-            raise ValueError("chi_tiet must not contain duplicate mat_hang_id")
-        if sum(item.so_luong * item.don_gia_thuc for item in self.chi_tiet) > INT_MAX:
-            raise ValueError("tong_tien exceeds PostgreSQL INTEGER range")
+        validate_lines(self.chi_tiet)
         return self
 
 
 class PhieuNhapPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ncc_id: ReceiptId | None = None
+    ncc_id: ReceiptId | SkipJsonSchema[None] = None
+    ngay_nhap: ReceiptDate | SkipJsonSchema[None] = None
+    ghi_chu: str | None = None
     chi_tiet: (
         Annotated[list[ChiTietPhieuNhapCreate], Field(min_length=1)] | SkipJsonSchema[None]
     ) = None
@@ -98,7 +147,15 @@ class PhieuNhapPatch(BaseModel):
     ) -> list[ChiTietPhieuNhapCreate]:
         if value is None:
             raise ValueError("chi_tiet cannot be null")
-        return PhieuNhapCreate(chi_tiet=value).chi_tiet
+        validate_lines(value)
+        return value
+
+    @field_validator("ncc_id", "ngay_nhap")
+    @classmethod
+    def require_non_null(cls, value):
+        if value is None:
+            raise ValueError("Field cannot be null")
+        return value
 
 
 class PhieuNhapCompleteInput(BaseModel):
@@ -111,8 +168,8 @@ class ChiTietPhieuNhapRead(BaseModel):
     id: int
     mat_hang_id: int
     so_luong: int
-    don_gia_thuc: int | None
-    tong_gia: int | None
+    don_gia_thuc: ReceiptMoney | None
+    tong_gia: ReceiptMoney | None
 
 
 class PhieuNhapRead(BaseModel):
@@ -120,9 +177,11 @@ class PhieuNhapRead(BaseModel):
 
     id: int
     ma_phieu_nhap: str
-    nhan_vien_id: int | None
-    ncc_id: int | None
-    tong_tien: int | None
+    nhan_vien_id: int
+    ncc_id: int
+    ngay_nhap: date
+    ghi_chu: str | None
+    tong_tien: ReceiptMoney | None
     trang_thai: Literal["nhap", "hoan_thanh"]
     created_at: datetime | None
     chi_tiet: list[ChiTietPhieuNhapRead] = Field(validation_alias="items")

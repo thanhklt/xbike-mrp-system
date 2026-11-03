@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from datetime import date
 from typing import Annotated
 from uuid import uuid4
 
@@ -216,7 +217,16 @@ async def test_duplicate_code_is_409_and_rollback(write_context, method):
 async def test_referenced_supplier_cannot_delete_or_change_code(write_context, state):
     client, sessions, headers = write_context
     async with sessions() as db:
-        db.add(GoodsReceiptNote(id=1, ma_phieu_nhap="PN-202610-000001", ncc_id=1, trang_thai=state))
+        db.add(
+            GoodsReceiptNote(
+                nhan_vien_id=2,
+                ngay_nhap=date(2026, 11, 3),
+                id=1,
+                ma_phieu_nhap="PN-202610-000001",
+                ncc_id=1,
+                trang_thai=state,
+            )
+        )
         await db.commit()
     etag = (await client.get(f"{BASE}/1", headers=headers)).headers["etag"]
     for method, body in (("patch", {"ma_ncc": "NCC-000099"}), ("delete", None)):
@@ -546,7 +556,14 @@ async def test_reference_insert_wins_before_mutation_lock(concurrent_write_conte
     app.dependency_overrides[get_db] = observed_db
     async with sessions() as receipt_db:
         receipt_db.add(
-            GoodsReceiptNote(id=1, ma_phieu_nhap="PN-202610-000001", ncc_id=1, trang_thai="nhap")
+            GoodsReceiptNote(
+                nhan_vien_id=2,
+                ngay_nhap=date(2026, 11, 3),
+                id=1,
+                ma_phieu_nhap="PN-202610-000001",
+                ncc_id=1,
+                trang_thai="nhap",
+            )
         )
         await receipt_db.flush()
         task = asyncio.create_task(
@@ -607,7 +624,12 @@ async def test_delete_wins_before_concurrent_reference_insert(concurrent_write_c
             pid = await receipt_db.scalar(select(func.pg_backend_pid()))
             receipt_db.add(
                 GoodsReceiptNote(
-                    id=1, ma_phieu_nhap="PN-202610-000001", ncc_id=1, trang_thai="nhap"
+                    nhan_vien_id=2,
+                    ngay_nhap=date(2026, 11, 3),
+                    id=1,
+                    ma_phieu_nhap="PN-202610-000001",
+                    ncc_id=1,
+                    trang_thai="nhap",
                 )
             )
             insert_task = asyncio.create_task(receipt_db.flush())

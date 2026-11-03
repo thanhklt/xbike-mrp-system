@@ -1,5 +1,7 @@
 # Kiểm chứng API phiếu nhập — 22/10/2026
 
+> Báo cáo lịch sử trước refactor. Cấu trúc/request/response và kết quả kiểm thử v3.1 ngày 03/11/2026 nằm trong [receipt-v31-refactor.md](receipt-v31-refactor.md); không dùng ví dụ dưới đây làm payload v3.1.
+
 ## Phạm vi và nguồn
 
 Triển khai API-033 đến API-038 theo [API contract v2](https://drive.google.com/file/d/16hj1yTLvhQ4peRENCLjbCKhNdGy_L2Xz/view), mục 2, 3, 5, 7, 13, 14, 17; đối chiếu `infra/postgres/init.sql` và ORM đang có. Ảnh đầu việc dẫn contract v1, nhưng quyết định của project là tiếp tục contract v2. Đợt bổ sung hiện tại tập trung PATCH, DELETE và hoàn tất.

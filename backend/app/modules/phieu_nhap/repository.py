@@ -3,7 +3,7 @@
 from datetime import datetime, time, timedelta
 
 from sqlalchemy import DateTime, delete, func, literal, select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, selectinload
 
@@ -16,7 +16,6 @@ from app.modules.phieu_nhap.errors import ReceiptCodeConflict, ReceiptReferenced
 from app.modules.phieu_nhap.models import GoodsReceiptNote, ReceiptItem
 from app.modules.phieu_nhap.ports import ReceiptPart, ReceiptPosting
 from app.modules.phieu_nhap.schemas import (
-    INT_MAX,
     GoodsReceiptNoteCreate,
     GoodsReceiptNoteResponse,
     PhieuNhapListQuery,
@@ -31,6 +30,14 @@ class SqlAlchemyReceivingRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def _flush(self) -> None:
+        try:
+            await self.session.flush()
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "2200H":
+                raise ConflictException(message="Receipt ID range exhausted") from exc
+            raise
+
     async def list_receipts(self, params: PhieuNhapListQuery) -> RecordPage[PhieuNhapRead]:
         query = select(GoodsReceiptNote)
         if params.q:
@@ -41,22 +48,16 @@ class SqlAlchemyReceivingRepository:
                 query = query.where(getattr(GoodsReceiptNote, field) == value)
         if params.tu_ngay:
             start = func.timezone(
-                "UTC",
-                func.timezone(
-                    "Asia/Ho_Chi_Minh",
-                    literal(datetime.combine(params.tu_ngay, time.min), type_=DateTime()),
-                ),
+                "Asia/Ho_Chi_Minh",
+                literal(datetime.combine(params.tu_ngay, time.min), type_=DateTime()),
             )
             query = query.where(GoodsReceiptNote.created_at >= start)
         if params.den_ngay:
             end = func.timezone(
-                "UTC",
-                func.timezone(
-                    "Asia/Ho_Chi_Minh",
-                    literal(
-                        datetime.combine(params.den_ngay + timedelta(days=1), time.min),
-                        type_=DateTime(),
-                    ),
+                "Asia/Ho_Chi_Minh",
+                literal(
+                    datetime.combine(params.den_ngay + timedelta(days=1), time.min),
+                    type_=DateTime(),
                 ),
             )
             query = query.where(GoodsReceiptNote.created_at < end)
@@ -147,23 +148,15 @@ class SqlAlchemyReceivingRepository:
         self, record_id: int, changes: dict, items: list[ReceiptItemCreate] | None
     ) -> PhieuNhapRead:
         if items is not None:
-            state = await self._allocation_state("")
-            if state.item_id + len(items) > INT_MAX:
-                raise ConflictException(message="Receipt item ID range exhausted")
             await self._delete_items(record_id)
             self.session.add_all(
-                [
-                    ReceiptItem(
-                        id=state.item_id + index + 1, phieu_nhap_id=record_id, **item.model_dump()
-                    )
-                    for index, item in enumerate(items)
-                ]
+                [ReceiptItem(phieu_nhap_id=record_id, **item.model_dump()) for item in items]
             )
         if changes:
             await self.session.execute(
                 update(GoodsReceiptNote).where(GoodsReceiptNote.id == record_id).values(**changes)
             )
-        await self.session.flush()
+        await self._flush()
         return await self.get_receipt(record_id)
 
     async def delete_draft(self, record_id: int) -> None:
@@ -193,49 +186,32 @@ class SqlAlchemyReceivingRepository:
                 select(Part.id, Part.loai_mat_hang, Part.is_active)
                 .where(Part.id.in_(ids))
                 .order_by(Part.id)
-                .with_for_update(read=True)
+                .with_for_update()
             )
         ).all()
         return [ReceiptPart(*row) for row in rows]
 
-    async def _allocation_state(self, prefix: str):
-        # All receipt writers, including the legacy route, share this transaction lock.
+    async def _next_code(self, prefix: str) -> str:
+        # Only code generation needs an advisory lock; IDs belong to database sequences.
         await self.session.execute(text("SELECT pg_advisory_xact_lock(20261022, 1)"))
-        result = (
-            await self.session.execute(
-                text("""
+        serial = await self.session.scalar(
+            text("""
             WITH history AS (
-                SELECT doi_tuong_id, du_lieu_truoc AS snapshot FROM lich_su_thao_tac
+                SELECT du_lieu_truoc AS snapshot FROM lich_su_thao_tac
                 WHERE loai_doi_tuong = 'phieu_nhap'
-                UNION ALL
-                SELECT doi_tuong_id, du_lieu_sau FROM lich_su_thao_tac
+                UNION ALL SELECT du_lieu_sau FROM lich_su_thao_tac
                 WHERE loai_doi_tuong = 'phieu_nhap'
-            ), historical_items AS (
-                SELECT item FROM history,
-                LATERAL jsonb_array_elements(COALESCE(NULLIF(snapshot->'chi_tiet', 'null'::jsonb), NULLIF(snapshot->'items', 'null'::jsonb), '[]'::jsonb)) AS item
             ), codes AS (
                 SELECT ma_phieu_nhap AS code FROM phieu_nhap
                 UNION ALL SELECT snapshot->>'ma_phieu_nhap' FROM history
             )
-            SELECT
-                GREATEST(COALESCE((SELECT max(id) FROM phieu_nhap), 0), COALESCE((SELECT max(doi_tuong_id) FROM history), 0)) AS parent_id,
-                GREATEST(COALESCE((SELECT max(id) FROM chi_tiet_phieu_nhap), 0), COALESCE((SELECT max((item->>'id')::bigint) FROM historical_items WHERE item->>'id' ~ '^[0-9]{1,10}$'), 0)) AS item_id,
-                COALESCE((SELECT max(right(code, 6)::int) FROM codes WHERE code ~ :pattern), 0) AS serial
+            SELECT COALESCE(max(right(code, 6)::int), 0) FROM codes WHERE code ~ :pattern
         """),
-                {"pattern": f"^{prefix}[0-9]{{6}}$"},
-            )
-        ).one()
-        return result
-
-    async def _allocate(self, item_count: int, prefix: str) -> tuple[int, int, str]:
-        result = await self._allocation_state(prefix)
-        if (
-            result.parent_id >= INT_MAX
-            or result.item_id + item_count > INT_MAX
-            or result.serial >= 999999
-        ):
-            raise ConflictException(message="Receipt ID or monthly code range exhausted")
-        return result.parent_id + 1, result.item_id + 1, f"{prefix}{result.serial + 1:06d}"
+            {"pattern": f"^{prefix}[0-9]{{6}}$"},
+        )
+        if serial >= 999999:
+            raise ConflictException(message="Receipt monthly code range exhausted")
+        return f"{prefix}{serial + 1:06d}"
 
     async def _insert(
         self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
@@ -245,24 +221,21 @@ class SqlAlchemyReceivingRepository:
                 func.to_char(
                     func.timezone(
                         "Asia/Ho_Chi_Minh",
-                        func.timezone("UTC", literal(created_at, type_=DateTime())),
+                        literal(created_at, type_=DateTime(timezone=True)),
                     ),
                     "YYYYMM",
                 )
             )
         )
         prefix = f"PN-{month}-"
-        parent_id, item_id, code = await self._allocate(len(payload.items), prefix)
+        code = await self._next_code(prefix)
         fields = payload.model_dump(exclude={"items"})
         fields["ma_phieu_nhap"] = payload.ma_phieu_nhap or code
-        record = GoodsReceiptNote(id=parent_id, **fields, created_at=created_at)
-        record.items = [
-            ReceiptItem(id=item_id + index, **item.model_dump())
-            for index, item in enumerate(payload.items)
-        ]
+        record = GoodsReceiptNote(**fields, created_at=created_at)
+        record.items = [ReceiptItem(**item.model_dump()) for item in payload.items]
         self.session.add(record)
         try:
-            await self.session.flush()
+            await self._flush()
         except IntegrityError as exc:
             if (
                 getattr(exc.orig.__cause__, "constraint_name", None)

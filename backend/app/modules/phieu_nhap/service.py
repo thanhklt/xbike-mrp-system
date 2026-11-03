@@ -1,6 +1,7 @@
 """Receipt lifecycle with atomic stock posting and audit."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from hashlib import sha256
 
 from pydantic import ValidationError
@@ -106,6 +107,11 @@ class ReceivingService:
             await self._require_editable(before)
             changes = {}
             items = None
+            for field in ("ngay_nhap", "ghi_chu"):
+                if field in payload.model_fields_set and getattr(payload, field) != getattr(
+                    before, field
+                ):
+                    changes[field] = getattr(payload, field)
             if "ncc_id" in payload.model_fields_set and payload.ncc_id != before.ncc_id:
                 if payload.ncc_id is not None and not await self.repository.lock_supplier(
                     payload.ncc_id
@@ -187,6 +193,7 @@ class ReceivingService:
                 try:
                     valid = PhieuNhapCreate(
                         ncc_id=before.ncc_id,
+                        ngay_nhap=before.ngay_nhap,
                         chi_tiet=[
                             {
                                 "mat_hang_id": item.mat_hang_id,
@@ -273,12 +280,12 @@ class ReceivingService:
                 ma_phieu_nhap="",
                 nhan_vien_id=int(actor["sub"]),
                 ncc_id=payload.ncc_id,
+                ngay_nhap=payload.ngay_nhap,
+                ghi_chu=payload.ghi_chu,
                 tong_tien=sum(item.tong_gia for item in items),
                 items=items,
             )
-            record = await self.repository.add_draft(
-                draft, created_at=datetime.now(timezone.utc).replace(tzinfo=None)
-            )
+            record = await self.repository.add_draft(draft, created_at=datetime.now(timezone.utc))
             await self.audit.append(
                 CreationAudit(
                     nhan_vien_id=int(actor["sub"]),
@@ -302,9 +309,22 @@ class ReceivingService:
     async def create_entry(
         self, payload: GoodsReceiptNoteCreate, actor: dict
     ) -> GoodsReceiptNoteResponse:
-        payload = payload.model_copy(update={"nhan_vien_id": int(actor["sub"])})
         async with self.transaction:
-            created = await self.repository.add(payload, created_at=datetime.utcnow())
+            if not await self.repository.lock_supplier(payload.ncc_id):
+                raise NotFoundException(message="Supplier not found")
+            await self._validate_parts([item.mat_hang_id for item in payload.items])
+            items = [
+                item.model_copy(update={"tong_gia": item.so_luong * item.don_gia_thuc})
+                for item in payload.items
+            ]
+            payload = payload.model_copy(
+                update={
+                    "nhan_vien_id": int(actor["sub"]),
+                    "items": items,
+                    "tong_tien": sum((item.tong_gia for item in items), Decimal(0)),
+                }
+            )
+            created = await self.repository.add(payload, created_at=datetime.now(timezone.utc))
             await self.audit.append(
                 CreationAudit(
                     nhan_vien_id=int(actor["sub"]),

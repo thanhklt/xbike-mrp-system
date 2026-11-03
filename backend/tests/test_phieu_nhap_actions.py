@@ -49,12 +49,15 @@ async def test_patch_replaces_items_and_delete_preserves_audit(action_context):
     patched = await client.patch(
         path,
         headers={**headers, "If-Match": etag},
-        json={"ncc_id": None, "chi_tiet": [{"mat_hang_id": 2, "so_luong": 4, "don_gia_thuc": 10}]},
+        json={
+            "ghi_chu": "updated",
+            "chi_tiet": [{"mat_hang_id": 2, "so_luong": 4, "don_gia_thuc": 10}],
+        },
     )
     assert patched.status_code == 200, patched.text
     after = patched.json()["data"]
-    assert after["ncc_id"] is None
-    assert after["tong_tien"] == 40
+    assert after["ghi_chu"] == "updated"
+    assert after["tong_tien"] == "40.00"
     assert after["ma_phieu_nhap"] == before["ma_phieu_nhap"]
     assert after["chi_tiet"][0]["id"] > before["chi_tiet"][0]["id"]
     deleted = await client.delete(path, headers={**headers, "If-Match": patched.headers["etag"]})
@@ -68,6 +71,7 @@ async def test_patch_replaces_items_and_delete_preserves_audit(action_context):
         assert audits[1].du_lieu_sau == audits[2].du_lieu_truoc == after
         assert audits[2].du_lieu_sau is None
         assert await db.scalar(select(func.count()).select_from(StockLevel)) == 0
+        assert await db.scalar(select(func.sum(Part.so_luong_ton))) == 0
         assert await db.scalar(select(func.count()).select_from(StockMovement)) == 0
 
 
@@ -97,9 +101,9 @@ async def test_complete_posts_once_and_returns_existing_result_on_retry(action_c
         )
         assert result.status_code == 409
     async with sessions() as db:
-        stock = (await db.scalars(select(StockLevel))).one()
+        stock = (await db.scalars(select(Part).where(Part.id == 1))).one()
         movement = (await db.scalars(select(StockMovement))).one()
-        assert stock.so_luong == movement.so_luong_bien_dong == 3
+        assert stock.so_luong_ton == movement.so_luong_bien_dong == 3
         assert movement.chi_tiet_phieu_nhap_id == before["chi_tiet"][0]["id"]
         assert movement.loai_giao_dich == "nhap_vat_tu"
         assert movement.nhan_vien_id == 2
@@ -176,7 +180,7 @@ def test_openapi_actions():
         {"nhan_vien_id": 1},
         {"ncc_id": -1},
         {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 1.5, "don_gia_thuc": 0}]},
-        {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 2, "don_gia_thuc": 2147483647}]},
+        {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 2, "don_gia_thuc": "9999999999999999.99"}]},
     ],
 )
 async def test_patch_validation(action_context, body):
@@ -267,6 +271,7 @@ async def test_complete_rechecks_persisted_draft(action_context, problem):
     async with sessions() as db:
         assert await db.scalar(select(func.count()).select_from(StockMovement)) == 0
         assert await db.scalar(select(func.count()).select_from(StockLevel)) == 0
+        assert await db.scalar(select(func.sum(Part.so_luong_ton))) == 0
         assert await db.scalar(select(GoodsReceiptNote.trang_thai)) == "nhap"
 
 
@@ -359,6 +364,7 @@ async def test_completion_failure_rolls_back_every_write(action_context, phase):
     async with sessions() as db:
         assert await db.scalar(select(GoodsReceiptNote.trang_thai)) == "nhap"
         assert await db.scalar(select(func.count()).select_from(StockLevel)) == 0
+        assert await db.scalar(select(func.sum(Part.so_luong_ton))) == 0
         assert await db.scalar(select(func.count()).select_from(StockMovement)) == 0
         assert await db.scalar(select(func.count()).select_from(AuditTrailLog)) == 2
     retry = await client.post(
@@ -405,7 +411,7 @@ async def test_concurrent_actions_use_locked_version(concurrent_receipt_context,
             )
         if method == "patch":
             return await client.patch(
-                path, headers={**headers, "If-Match": etag}, json={"ncc_id": None}
+                path, headers={**headers, "If-Match": etag}, json={"ghi_chu": "updated"}
             )
         return await client.delete(path, headers={**headers, "If-Match": etag})
 
@@ -429,7 +435,7 @@ async def test_concurrent_actions_use_locked_version(concurrent_receipt_context,
             for r in results
         )
         assert await db.scalar(select(func.count()).select_from(StockMovement)) == int(posted)
-        assert (await db.scalar(select(func.sum(StockLevel.so_luong))) or 0) == (3 if posted else 0)
+        assert (await db.scalar(select(func.sum(Part.so_luong_ton))) or 0) == (3 if posted else 0)
 
 
 async def test_distinct_receipts_concurrently_add_to_same_stock(concurrent_receipt_context):
@@ -437,17 +443,17 @@ async def test_distinct_receipts_concurrently_add_to_same_stock(concurrent_recei
     receipts = [await client.post(BASE, headers=headers, json=BODY) for _ in range(6)]
     barrier = asyncio.Barrier(6)
 
-    class RacingInventory(SqlAlchemyInventoryRepository):
-        async def receive_receipt(self, *args):
+    class RacingRepository(SqlAlchemyReceivingRepository):
+        async def lock_receipt(self, record_id):
             await asyncio.wait_for(barrier.wait(), 5)
-            return await super().receive_receipt(*args)
+            return await super().lock_receipt(record_id)
 
     def racing_service(db: Annotated[AsyncSession, Depends(get_db)]):
         return ReceivingService(
-            SqlAlchemyReceivingRepository(db),
+            RacingRepository(db),
             SqlAlchemyAuditRepository(db),
             SqlAlchemyTransaction(db),
-            RacingInventory(db),
+            SqlAlchemyInventoryRepository(db),
         )
 
     app.dependency_overrides[get_receiving_service] = racing_service
@@ -469,7 +475,7 @@ async def test_distinct_receipts_concurrently_add_to_same_stock(concurrent_recei
         app.dependency_overrides.pop(get_receiving_service, None)
     assert [r.status_code for r in results] == [200] * 6
     async with sessions() as db:
-        assert (await db.scalars(select(StockLevel.so_luong))).one() == 18
+        assert (await db.scalars(select(Part.so_luong_ton))).one() == 18
         assert await db.scalar(select(func.sum(StockMovement.so_luong_bien_dong))) == 18
         assert await db.scalar(select(func.count()).select_from(StockMovement)) == 6
         assert await db.scalar(select(func.count()).select_from(AuditTrailLog)) == 12
@@ -533,8 +539,8 @@ async def test_get_parent_and_items_are_one_consistent_version(
         assert read_result.status_code == write_result.status_code == 200
         data = read_result.json()["data"]
         record = data[0] if list_request else data
-        assert record["tong_tien"] == 300 and record["chi_tiet"][0]["so_luong"] == 3
-        assert write_result.json()["data"]["tong_tien"] == 700
+        assert record["tong_tien"] == "300.00" and record["chi_tiet"][0]["so_luong"] == 3
+        assert write_result.json()["data"]["tong_tien"] == "700.00"
     finally:
         read_children.set()
         event.remove(engine, "after_cursor_execute", pause_after_parent)
@@ -600,14 +606,17 @@ async def test_delete_then_create_does_not_reuse_ids_or_code(action_context):
     assert new_record["ma_phieu_nhap"] != record["ma_phieu_nhap"]
 
 
-@pytest.mark.parametrize("problem", ["overflow", "drift", "stock_id_exhausted"])
+@pytest.mark.parametrize("problem", ["overflow", "drift"])
 async def test_stock_invariants_abort_entire_receipt(action_context, problem):
     client, sessions, headers, record, etag = action_context
     if problem == "overflow":
         large = await client.post(
             BASE,
             headers=headers,
-            json={"chi_tiet": [{"mat_hang_id": 1, "so_luong": 2147483647, "don_gia_thuc": 0}]},
+            json={
+                **BODY,
+                "chi_tiet": [{"mat_hang_id": 1, "so_luong": 2147483647, "don_gia_thuc": 0}],
+            },
         )
         assert large.status_code == 201
         done = await client.post(
@@ -618,13 +627,7 @@ async def test_stock_invariants_abort_entire_receipt(action_context, problem):
         assert done.status_code == 200
     else:
         async with sessions() as db:
-            db.add(
-                StockLevel(
-                    id=2147483647 if problem == "stock_id_exhausted" else 1,
-                    mat_hang_id=2 if problem == "stock_id_exhausted" else 1,
-                    so_luong=0 if problem == "stock_id_exhausted" else 10,
-                )
-            )
+            await db.execute(update(Part).where(Part.id == 1).values(so_luong_ton=10))
             await db.commit()
     response = await client.post(
         f"{BASE}/{record['id']}/hoan_tat", headers={**headers, "If-Match": etag}, json={}
@@ -672,7 +675,9 @@ async def test_patch_preserves_omitted_items_and_validates_new_references(action
     ):
         response = await client.patch(path, headers={**headers, "If-Match": etag}, json=body)
         assert response.status_code == status
-    changed = await client.patch(path, headers={**headers, "If-Match": etag}, json={"ncc_id": None})
+    changed = await client.patch(
+        path, headers={**headers, "If-Match": etag}, json={"ghi_chu": "updated"}
+    )
     assert changed.status_code == 200
     assert changed.json()["data"]["chi_tiet"] == record["chi_tiet"]
     assert changed.json()["data"]["tong_tien"] == record["tong_tien"]

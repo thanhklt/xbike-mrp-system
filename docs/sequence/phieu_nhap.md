@@ -1,7 +1,25 @@
 # Luồng API phiếu nhập
 
-Đối chiếu ngày 22/10/2026 với router, service, repository, schema, ORM và dependency hiện tại trong `backend/app/modules/phieu_nhap/`.
+Đối chiếu ngày 03/11/2026 với router, service, repository, schema, ORM và dependency hiện tại trong `backend/app/modules/phieu_nhap/`. Cấu trúc phiếu nhập/tồn nâng theo ERD v3.1 và quyết định của dev; giữ tên bảng snake_case.
 Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yTLvhQ4peRENCLjbCKhNdGy_L2Xz/view), mục 2, 3, 5, 7, 13, 14 và quy ước mã trong `infra/postgres/init.sql`.
+
+## Mở sơ đồ từng endpoint
+
+Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`, A = `quan_tri_vien`, N = `nhan_vien`.
+
+| Endpoint | Quyền | Ảnh sequence |
+|---|---|---|
+| GET `/api/v1/phieu_nhap` | Q | [Danh sách phiếu nhập](assets/phieu_nhap/01-danh-sach.png) |
+| GET `/api/v1/phieu_nhap/{id}` | Q | [Chi tiết phiếu nhập](assets/phieu_nhap/02-chi-tiet.png) |
+| POST `/api/v1/phieu_nhap` | Q | [Tạo phiếu nháp](assets/phieu_nhap/03-tao-nhap.png) |
+| PATCH `/api/v1/phieu_nhap/{id}` | Q | [Sửa phiếu nháp](assets/phieu_nhap/04-sua-nhap.png) |
+| DELETE `/api/v1/phieu_nhap/{id}` | Q | [Xóa phiếu nháp](assets/phieu_nhap/05-xoa-nhap.png) |
+| POST `/api/v1/phieu_nhap/{id}/hoan_tat` | Q | [Hoàn tất và ghi sổ kho](assets/phieu_nhap/06-hoan-tat.png) |
+| GET `/api/v1/receiving` | A/Q/N | [Danh sách qua route cũ](assets/phieu_nhap/07-receiving-danh-sach.png) |
+| GET `/api/v1/receiving/{grn_id}` | A/Q/N | [Chi tiết qua route cũ](assets/phieu_nhap/08-receiving-chi-tiet.png) |
+| POST `/api/v1/receiving` | A/Q/N | [Tạo nháp qua route cũ](assets/phieu_nhap/09-receiving-tao-nhap.png) |
+
+Các bước xác thực và validation trong sơ đồ được nhóm để dễ đọc; FastAPI có thể xử lý dependency/validation xen kẽ trước khi vào handler. Transaction dùng chung session đã được mở khi xác thực. Mũi tên lỗi gửi về Client biểu diễn HTTP response sau exception handler, không phải repository tự tạo HTTP response.
 
 ## Quy ước đang triển khai
 
@@ -11,13 +29,13 @@ Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yT
 - POST tạo mới chỉ tạo trạng thái `nhap`, không ghi `ton_kho` hoặc `giao_dich_kho`. PATCH/DELETE chỉ tác động nháp chưa có giao dịch kho. Chỉ action `hoan_tat` cộng tồn, ghi ledger và chuyển trạng thái.
 - PATCH, DELETE và hoàn tất yêu cầu If-Match. Sau khi khóa phiếu, không tìm thấy trả 404, thiếu header trả 428. ETag cũ trả 412; riêng hoàn tất đã thành công cho phép retry với ETag cũ nhưng vẫn cần header. Header lặp trả 422.
 - GET mới giữ khóa FOR SHARE trên phiếu đến khi đọc xong chi tiết để response và ETag cùng một phiên bản. GET không ghi dữ liệu. COUNT và trang danh sách là hai truy vấn, tổng số có thể thay đổi khi có request tạo/xóa đồng thời.
-- Hoàn tất khóa phiếu và chi tiết FOR UPDATE, khóa mặt hàng FOR SHARE theo ID tăng dần, rồi lấy advisory transaction lock tồn kho `(20261022, 2)`. Khóa các dòng tồn theo mã mặt hàng, cấp ID cho dòng tồn chưa có bằng MAX(id)+1 dưới khóa, đúng SQL không Identity. Các lần ghi sổ phiếu nhập được tuần tự hóa tại khóa này.
+- Hoàn tất khóa phiếu, chi tiết rồi mặt hàng FOR UPDATE theo ID tăng dần. Cập nhật trực tiếp `mat_hang.so_luong_ton` và `ton_kho_updated_at`; không truy vấn hoặc ghi `ton_kho`, không cấp ID tồn hay lấy advisory lock tồn. Các phiếu dùng chung mặt hàng được tuần tự hóa bằng khóa dòng.
 - Trước cộng tồn, số dư phải khớp tổng ledger và số lượng mới không vượt INTEGER. Sai lệch trả 409, không tự sửa số dư. Mỗi chi tiết sinh đúng một `nhap_vat_tu` dương với duy nhất FK nguồn `chi_tiet_phieu_nhap_id`. Tồn, ledger, trạng thái và audit cùng commit hoặc cùng rollback.
-- Theo quyết định của dev: giữ SQL, backend cấp ID phiếu và dòng dưới advisory transaction lock `(20261022, 1)`. Xét ID/mã lớn nhất trong bảng và snapshot audit để không tái sử dụng những giá trị đã lưu lịch sử.
+- PostgreSQL cấp ID phiếu và chi tiết bằng IDENTITY. Advisory transaction lock `(20261022, 1)` chỉ bảo vệ mã tháng; mã lớn nhất xét cả bảng và snapshot audit. Migration đồng bộ sequence theo ID đang có và lịch sử; rollback có thể tạo khoảng trống ID.
 - Mã `PN-YYYYMM-NNNNNN` do server sinh theo tháng Asia/Ho_Chi_Minh, từ 000001 đến 999999. PostgreSQL chuyển múi giờ, không phụ thuộc tzdata trên máy Windows. Hết dải trả 409, không quay vòng.
-- `created_at` lưu UTC vào cột TIMESTAMP WITHOUT TIME ZONE, API mới trả UTC có Z. Dữ liệu cũ giữ NULL ở người tạo, tiền, thời gian và đơn giá; không tự sửa dữ liệu cũ.
-- Tiền và số lượng đầu vào là JSON integer nghiêm ngặt. Số lượng > 0, giá >= 0; tổng tiền không vượt INTEGER PostgreSQL (2,147,483,647). ID dòng/mã phiếu/tổng/trạng thái/người tạo/thời gian do server quản lý.
-- POST khóa nhà cung cấp bằng FOR KEY SHARE và mặt hàng bằng FOR SHARE theo ID tăng dần trước khi kiểm tra; giữ khóa đến commit/rollback. Chỉ nhận mặt hàng active là NVL hoặc linh kiện.
+- `created_at` là TIMESTAMPTZ, API mới trả UTC có Z; `ngay_nhap` là DATE bắt buộc, `ghi_chu` nullable. Người lập/NCC/thời gian không được NULL sau nâng cấp. Tiền NULL cũ được giữ nhưng phiếu có giá/tổng không hợp lệ không được hoàn tất.
+- Tiền dùng Decimal/numeric(18,2), giá >= 0, tối đa 9999999999999999.99 và hai chữ số thập phân; request nhận chuỗi hoặc integer, từ chối float/bool. Response tiền là chuỗi hai chữ số. Số lượng/ID vẫn integer nghiêm ngặt trong dải INTEGER. Tổng do server tính.
+- POST khóa nhà cung cấp bằng FOR KEY SHARE và mặt hàng bằng FOR UPDATE theo ID tăng dần trước khi kiểm tra; giữ khóa đến commit/rollback. Chỉ nhận mặt hàng active là NVL hoặc linh kiện. PATCH cũng khóa mặt hàng trước khi kiểm tra/thay dòng; tránh nâng khóa SHARE sang UPDATE khi hoàn tất.
 - Tạo phiếu, mọi dòng và audit `tao` cùng transaction. Audit lỗi thì rollback tất cả. Audit lưu snapshot PhieuNhapRead và người thực hiện từ JWT.
 - `/receiving` là các route cũ vẫn được giữ để tương thích, có quyền/payload/envelope khác; không xem chúng là contract v2.
 
@@ -103,7 +121,7 @@ sequenceDiagram
 
 ## POST /api/v1/phieu_nhap
 
-Body: `ncc_id` tùy chọn nullable, `chi_tiet` bắt buộc có ít nhất một dòng `{mat_hang_id, so_luong, don_gia_thuc}`. Không trùng mặt hàng. Không cần If-Match khi tạo mới. Nếu nhà cung cấp/mặt hàng không tồn tại trả 404; mặt hàng không active hoặc sai loại trả 409 `phu_thuoc_khong_hop_le`.
+Body: `ncc_id`, `ngay_nhap` (YYYY-MM-DD) và `chi_tiet` bắt buộc; `ghi_chu` tùy chọn nullable. Chi tiết có ít nhất một dòng `{mat_hang_id, so_luong, don_gia_thuc}`, không trùng mặt hàng. Không cần If-Match khi tạo mới. Nếu nhà cung cấp/mặt hàng không tồn tại trả 404; mặt hàng không active hoặc sai loại trả 409 `phu_thuoc_khong_hop_le`.
 
 ```mermaid
 sequenceDiagram
@@ -121,31 +139,29 @@ sequenceDiagram
     alt Không xác thực hoặc không có quyền
         D-->>C: 401 hoặc 403
     else Được phép
-        R->>R: Validate body, số nguyên, tổng tiền, dòng trùng, cấm query
+        R->>R: Validate NCC/ngày nhập, Decimal, số lượng, tổng tiền, dòng trùng và query
         alt Input không hợp lệ
             R-->>C: 422 du_lieu_khong_hop_le
         else Hợp lệ
             R->>S: create_receipt(payload, actor, request_id)
             S->>T: Vào transaction của session
-            opt Có ncc_id
-                S->>P: lock_supplier(ncc_id)
-                P->>DB: SELECT FOR KEY SHARE
-            end
+            S->>P: lock_supplier(ncc_id)
+            P->>DB: SELECT NCC FOR KEY SHARE
             S->>P: lock_parts(ids)
-            P->>DB: SELECT FOR SHARE theo ID tăng dần
+            P->>DB: SELECT FOR UPDATE mặt hàng theo ID tăng dần
             alt Không tồn tại tham chiếu hoặc mặt hàng không được nhập
                 S->>T: Rollback
                 S-->>C: 404 hoặc 409
             else Tham chiếu hợp lệ
                 S->>S: Lấy người tạo từ JWT, tính tiền, đặt nhap và UTC
                 S->>P: add_draft
-                P->>DB: Advisory lock và đọc ID, mã trong bảng cùng audit
+                P->>DB: Advisory lock mã tháng, đọc mã trong bảng cùng audit
                 alt Hết dải ID hoặc mã tháng
                     P-->>S: Conflict
                     S->>T: Rollback
                     S-->>C: 409
-                else Cấp được ID và mã
-                    P->>DB: INSERT phiếu và mọi dòng chi tiết
+                else Cấp được mã
+                    P->>DB: INSERT phiếu và mọi dòng chi tiết bằng IDENTITY
                     P-->>S: PhieuNhapRead
                     S->>A: append audit tao với snapshot sau tạo
                     A->>DB: Đưa audit vào cùng session
@@ -162,12 +178,12 @@ sequenceDiagram
             end
         end
     end
-    Note over S,DB: Không có thao tác ghi ton_kho hoặc giao_dich_kho
+    Note over S,DB: Chỉ lưu nháp và audit, không cập nhật tồn mat_hang hoặc ghi giao_dich_kho
 ```
 
 ## PATCH /api/v1/phieu_nhap/{id}
 
-Body nhận `ncc_id` và `chi_tiet` tùy chọn. Bỏ trường nghĩa là giữ nguyên; `ncc_id: null` bỏ liên kết NCC. `chi_tiet` nếu gửi phải là mảng có ít nhất một dòng, thay toàn bộ chi tiết, không nhận null hoặc mặt hàng trùng. Server tính lại tiền và cấp ID mới cho bộ chi tiết thay thế. Payload không làm thay đổi dữ liệu trả 200 với ETag cũ, không ghi audit. Không sửa phiếu hoàn thành hoặc phiếu có ledger.
+Body nhận `ncc_id`, `ngay_nhap`, `ghi_chu` và `chi_tiet` tùy chọn. Bỏ trường nghĩa là giữ nguyên; chỉ `ghi_chu` được gửi null để xóa ghi chú. `chi_tiet` nếu gửi phải là mảng có ít nhất một dòng, thay toàn bộ chi tiết, không nhận null hoặc mặt hàng trùng. Server tính lại tiền; database cấp ID mới cho bộ chi tiết thay thế. Payload không làm thay đổi dữ liệu trả 200 với ETag cũ, không ghi audit. Không sửa phiếu hoàn thành hoặc phiếu có ledger.
 
 ```mermaid
 sequenceDiagram
@@ -205,7 +221,7 @@ sequenceDiagram
                     S-->>C: 412 hoặc 409
                 else Có thể sửa
                     S->>P: Khóa NCC mới nếu có và mặt hàng khi gửi chi_tiet
-                    P->>DB: NCC FOR KEY SHARE, mặt hàng FOR SHARE theo ID
+                    P->>DB: NCC FOR KEY SHARE, mặt hàng FOR UPDATE theo ID
                     alt Tham chiếu thiếu hoặc mặt hàng inactive, sai loại
                         S->>T: Rollback
                         S-->>C: 404 hoặc 409
@@ -213,7 +229,7 @@ sequenceDiagram
                         S->>S: Tính tiền và xác định thay đổi
                         opt Dữ liệu thực sự thay đổi
                             S->>P: patch_draft
-                            P->>DB: Khi thay chi tiết, advisory lock cấp ID rồi DELETE và INSERT dòng
+                            P->>DB: Khi thay chi tiết, DELETE và INSERT dòng với IDENTITY
                             P->>DB: UPDATE phiếu và đọc lại dữ liệu
                             S->>A: append sua với snapshot trước và sau
                             A->>DB: Ghi audit cùng session
@@ -237,7 +253,7 @@ sequenceDiagram
 
 ## DELETE /api/v1/phieu_nhap/{id}
 
-Không nhận query. Xóa chi tiết rồi phiếu nháp trong cùng transaction với audit `xoa_nhap`, snapshot trước xóa và snapshot sau là NULL. Giữ lịch sử ID/mã trong audit để allocator không tái sử dụng. Thành công 204 không body. Phiếu hoàn thành hoặc đã có giao dịch phụ thuộc không được xóa.
+Không nhận query. Xóa chi tiết rồi phiếu nháp trong cùng transaction với audit `xoa_nhap`, snapshot trước xóa và snapshot sau là NULL. Giữ lịch sử trong audit; sequence không quay lùi khi xóa nháp, mã xét cả lịch sử. Thành công 204 không body. Phiếu hoàn thành hoặc đã có giao dịch phụ thuộc không được xóa.
 
 ```mermaid
 sequenceDiagram
@@ -346,19 +362,19 @@ sequenceDiagram
                         S-->>C: 412 hoặc 409
                     else Nháp hợp lệ
                         S->>P: lock_parts theo ID tăng dần
-                        P->>DB: FOR SHARE mặt hàng
+                        P->>DB: FOR UPDATE mặt hàng
                         alt Thiếu mặt hàng, inactive hoặc không phải NVL/linh kiện
                             S->>T: Rollback
                             S-->>C: 404 hoặc 409
                         else Được nhập
                             S->>I: receive_receipt(lines, actor, posted_at)
-                            I->>DB: Advisory lock tồn kho rồi FOR UPDATE các dòng tồn theo mặt hàng
-                            I->>DB: Đọc tổng ledger và MAX ID tồn kho
+                            I->>DB: SELECT mat_hang FOR UPDATE theo ID tăng dần (khóa đã giữ từ validate)
+                            I->>DB: Đọc tổng biến động ledger cho từng mặt hàng
                             alt Số dư không khớp ledger hoặc tràn INTEGER
                                 S->>T: Rollback
                                 S-->>C: 409
                             else Có thể ghi sổ
-                                I->>DB: UPDATE tồn hoặc INSERT dòng tồn với ID cấp dưới khóa
+                                I->>DB: UPDATE mat_hang.so_luong_ton và ton_kho_updated_at
                                 I->>DB: INSERT một nhap_vat_tu dương cho mỗi chi tiết
                                 I-->>S: Danh sách ID giao dịch
                                 S->>P: mark_completed
@@ -399,7 +415,7 @@ sequenceDiagram
     R->>D: Kiểm tra JWT và tài khoản
     D->>DB: Đọc account hiện tại
     alt JWT sai hoặc tài khoản không hoạt động
-        D-->>C: 401 hoặc 403 theo envelope cũ
+        D-->>C: 401 hoặc 403 qua exception handler
     else Hợp lệ
         R->>R: Validate PageParams
         alt Phân trang sai
@@ -454,7 +470,7 @@ sequenceDiagram
 
 ## POST /api/v1/receiving
 
-Route cũ vẫn cho A/Q/N, nhận ma_phieu_nhap, items, tổng tiền và giá dòng theo schema cũ, cho phép nháp rỗng. Người tạo luôn được ghi đè bằng JWT. Đây không phải validation của contract v2. Cùng allocator dưới khóa với API mới để không cấp trùng ID; route cũ vẫn giữ mã do client cung cấp.
+Route cũ vẫn cho A/Q/N, giữ mã do client cung cấp, `items` và response trực tiếp. Do ràng buộc v3.1, bắt buộc NCC/ngày nhập, ít nhất một dòng và giá không NULL; kiểm tra mặt hàng active NVL/linh kiện như API mới. Người tạo luôn lấy từ JWT; giá trị tổng client gửi được tính lại. IDENTITY cấp ID, chung khóa mã với API mới; tiền response là chuỗi Decimal.
 
 ```mermaid
 sequenceDiagram
@@ -477,21 +493,27 @@ sequenceDiagram
             R-->>C: 422
         else Hợp lệ
             R->>S: create_entry
-            S->>S: Ghi đè nhan_vien_id bằng JWT
             S->>T: Vào transaction
-            S->>P: add
-            P->>DB: Advisory lock, cấp ID phiếu và dòng
-            P->>DB: INSERT phiếu và items
-            P-->>S: CreatedRecord và snapshot cũ
-            S->>A: append audit tao
-            A->>DB: Đưa audit vào cùng session
-            S->>T: Commit
-            alt Trùng mã, constraint, hết dải hoặc lỗi nội bộ
-                T->>DB: ROLLBACK
-                T-->>C: 409 hoặc 500
-            else Thành công
-                T->>DB: COMMIT
-                R-->>C: 201 GoodsReceiptNoteResponse trực tiếp
+            S->>P: lock_supplier và lock_parts theo ID
+            P->>DB: NCC FOR KEY SHARE, mặt hàng FOR UPDATE
+            alt Thiếu NCC/mặt hàng hoặc mặt hàng không hợp lệ
+                S-->>C: 404 hoặc 409, rollback transaction
+            else Tham chiếu hợp lệ
+                S->>S: Lấy nhan_vien_id từ JWT, tính lại tổng bằng Decimal
+                S->>P: add
+                P->>DB: Advisory lock mã tháng, database cấp IDENTITY phiếu/dòng
+                P->>DB: INSERT phiếu và items
+                P-->>S: CreatedRecord và snapshot
+                S->>A: append audit tao
+                A->>DB: Đưa audit vào cùng session
+                S->>T: Commit
+                alt Trùng mã, constraint, hết dải hoặc lỗi nội bộ
+                    T->>DB: ROLLBACK
+                    T-->>C: 409 hoặc 500
+                else Thành công
+                    T->>DB: COMMIT
+                    R-->>C: 201 GoodsReceiptNoteResponse trực tiếp
+                end
             end
         end
     end

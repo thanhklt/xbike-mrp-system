@@ -32,7 +32,7 @@ async def migration_connection():
     await engine.dispose()
 
 
-def migrate(connection, action="upgrade", revision="head"):
+def migrate(connection, action="upgrade", revision="20261018_auth_status"):
     root = Path(__file__).resolve().parents[1]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "migrations"))

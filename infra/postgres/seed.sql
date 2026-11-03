@@ -185,9 +185,11 @@ INSERT INTO giao_dich_kho (mat_hang_id,loai_giao_dich,so_luong_bien_dong,
                            chi_tiet_phieu_dieu_chinh_id,nhan_vien_id,posted_at)
 SELECT mat_hang_id,'dieu_chinh_ton_kho',so_luong_bien_dong,id,2,TIMESTAMP '2026-10-14 08:00:00'
 FROM chi_tiet_phieu_dieu_chinh_kho WHERE phieu_dieu_chinh_kho_id=1;
-INSERT INTO ton_kho (id,mat_hang_id,so_luong,updated_at)
-SELECT m.id,m.id,COALESCE(SUM(g.so_luong_bien_dong),0)::INTEGER,TIMESTAMP '2026-10-14 08:00:00'
-FROM mat_hang m LEFT JOIN giao_dich_kho g ON g.mat_hang_id=m.id GROUP BY m.id;
+UPDATE mat_hang m SET so_luong_ton = balance.quantity,
+    ton_kho_updated_at = TIMESTAMPTZ '2026-10-14 08:00:00+00'
+FROM (SELECT mat_hang_id, SUM(so_luong_bien_dong)::INTEGER AS quantity
+      FROM giao_dich_kho GROUP BY mat_hang_id) balance
+WHERE balance.mat_hang_id=m.id;
 INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,du_lieu_truoc,du_lieu_sau,ly_do)
 VALUES (2,'phieu_dieu_chinh_kho',1,'duyet','{"trang_thai":"cho_duyet"}',
         '{"trang_thai":"da_duyet","nguon":"du_lieu_mau","kiem_ke_doc_lap":true}',
@@ -215,8 +217,8 @@ INSERT INTO lich_su_thao_tac (nhan_vien_id,loai_doi_tuong,doi_tuong_id,thao_tac,
 VALUES (2,'yeu_cau_san_xuat',1,'gui','{"trang_thai":"nhap"}','{"trang_thai":"da_gui","nhan_vien_duoc_giao_id":3}');
 
 -- Phiếu nhập nháp: chưa cộng tồn kho.
-INSERT INTO phieu_nhap (id,ma_phieu_nhap,nhan_vien_id,ncc_id,tong_tien,trang_thai,created_at)
-VALUES (1,'PN-202610-000001',2,1,1200000,'nhap',TIMESTAMP '2026-10-14 09:00:00');
+INSERT INTO phieu_nhap (id,ma_phieu_nhap,nhan_vien_id,ncc_id,ngay_nhap,tong_tien,trang_thai,created_at)
+VALUES (1,'PN-202610-000001',2,1,DATE '2026-10-14',1200000,'nhap',TIMESTAMPTZ '2026-10-14 09:00:00+00');
 INSERT INTO chi_tiet_phieu_nhap (id,phieu_nhap_id,mat_hang_id,so_luong,don_gia_thuc,tong_gia)
 VALUES (1,1,8,10,120000,1200000);
 
@@ -258,11 +260,11 @@ $$;
 DO $$
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM ton_kho t LEFT JOIN (
+        SELECT 1 FROM mat_hang t LEFT JOIN (
             SELECT mat_hang_id,SUM(so_luong_bien_dong) AS so_luong_ghi_so
             FROM giao_dich_kho GROUP BY mat_hang_id
-        ) g USING(mat_hang_id)
-        WHERE t.so_luong <> COALESCE(g.so_luong_ghi_so,0)
+        ) g ON g.mat_hang_id=t.id
+        WHERE t.so_luong_ton <> COALESCE(g.so_luong_ghi_so,0)
     ) THEN
         RAISE EXCEPTION 'Tồn kho không khớp tổng biến động trong sổ giao dịch kho';
     END IF;

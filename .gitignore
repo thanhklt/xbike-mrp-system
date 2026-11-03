@@ -32,6 +32,8 @@ backend/tests/*
 !backend/tests/test_supplier_writes.py
 !backend/tests/test_phieu_nhap_api.py
 !backend/tests/test_phieu_nhap_actions.py
+!backend/tests/test_receipt_v31.py
+!backend/tests/test_receipt_v31_migration.py
 
 # Virtual Environments
 venv/

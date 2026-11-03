@@ -1,13 +1,17 @@
 """ORM mapping matching infra/postgres/init.sql."""
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
+    Identity,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     text,
@@ -25,21 +29,25 @@ class GoodsReceiptNote(Base):
         CheckConstraint("trang_thai IN ('nhap', 'hoan_thanh')", name="phieu_nhap_trang_thai_check"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     ma_phieu_nhap: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    nhan_vien_id: Mapped[int | None] = mapped_column(
+    nhan_vien_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("nhan_vien.id", name="fk_phieu_nhap_nhan_vien_id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
     )
-    ncc_id: Mapped[int | None] = mapped_column(
+    ncc_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("nha_cung_cap.id", name="fk_phieu_nhap_ncc_id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
     )
-    tong_tien: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ngay_nhap: Mapped[date] = mapped_column(Date, nullable=False)
+    ghi_chu: Mapped[str | None] = mapped_column(String, nullable=True)
+    tong_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
     trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'nhap'"))
-    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
 
     items: Mapped[list["ReceiptItem"]] = relationship(
         "ReceiptItem",
@@ -58,7 +66,7 @@ class ReceiptItem(Base):
         Index("ix_chi_tiet_phieu_nhap_mat_hang_id", "mat_hang_id"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     phieu_nhap_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
@@ -72,5 +80,5 @@ class ReceiptItem(Base):
         nullable=False,
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
-    don_gia_thuc: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    tong_gia: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    don_gia_thuc: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    tong_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
