@@ -1,6 +1,5 @@
 """Six item endpoints; reads use the application snapshot."""
 
-from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
@@ -54,8 +53,8 @@ async def list_mat_hang(
     is_active: bool | None = Query(None),
     don_vi_tinh: str | None = Query(None),
     mau_sac: str | None = Query(None),
-    don_gia_min: Annotated[Decimal | None, Query(ge=0)] = None,
-    don_gia_max: Annotated[Decimal | None, Query(ge=0)] = None,
+    don_gia_min: Annotated[int | None, Query(ge=0)] = None,
+    don_gia_max: Annotated[int | None, Query(ge=0)] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort: str = Query("id"),

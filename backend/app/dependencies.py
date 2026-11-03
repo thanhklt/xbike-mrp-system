@@ -31,7 +31,7 @@ from app.modules.nhan_vien.service import NhanVienService
 from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
 from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
-from app.modules.phieu_xuat.service import PhieuXuatSanXuatService
+from app.modules.phieu_xuat.service import PhieuXuatService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
 from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
@@ -178,12 +178,26 @@ def get_yeu_cau_san_xuat_service(
         get_mat_hang_availability(db),
         NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
         BomPlanningReader(SqlAlchemyBomRepository(db)),
-        PhieuXuatSanXuatService(SqlAlchemyPhieuXuatRepository(db), audit),
+        PhieuXuatService(
+            SqlAlchemyPhieuXuatRepository(db), audit, transaction, SqlAlchemyInventoryRepository(db)
+        ),
     )
 
 
 def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
     return InventoryService(SqlAlchemyInventoryRepository(db))
+
+
+def get_phieu_xuat_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> PhieuXuatService:
+    return PhieuXuatService(
+        SqlAlchemyPhieuXuatRepository(db),
+        audit,
+        SqlAlchemyTransaction(db),
+        SqlAlchemyInventoryRepository(db),
+    )
 
 
 def get_reporting_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReportingService:

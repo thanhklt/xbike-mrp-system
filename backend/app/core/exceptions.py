@@ -51,6 +51,8 @@ ERROR_STATUS = {
     "ke_hoach_da_thay_doi": 409,
     "phu_thuoc_khong_hop_le": 409,
     "dang_duoc_tham_chieu": 409,
+    "vuot_nhu_cau": 409,
+    "khong_du_ton_kho": 409,
 }
 
 
@@ -68,6 +70,7 @@ def _uses_contract_envelope(request: Request) -> bool:
             "bom",
             "yeu_cau_san_xuat",
             "phieu_nhap",
+            "phieu_xuat",
         )
     )
 
@@ -119,7 +122,9 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "CONFLICT": "trang_thai_khong_hop_le",
                 "NOT_FOUND": "khong_tim_thay",
             }.get(exc.code, exc.code)
-            return _contract_error(request, status, code, exc.message, [])
+            return _contract_error(
+                request, status, code, exc.message, getattr(exc, "public_details", [])
+            )
         return JSONResponse(
             status_code=ERROR_STATUS.get(exc.code, 500),
             content={

@@ -2,7 +2,9 @@
 
 Module sở hữu ORM `MatHang` ánh xạ bảng `"MatHang"`. Có sáu endpoint thực tế; đường dẫn danh mục cũng thuộc router này. Q/N được đọc, admin nhận 403, chỉ Q (`quan_ly`) được ghi.
 
-GET trả cả bản ghi hoạt động và bị khóa; `is_active=false` không làm mất khả năng đọc. GET mặt hàng không truy vấn bảng MatHang; auth vẫn đọc DB để kiểm tra danh tính hiện hành. Giá là chuỗi decimal hai chữ số hoặc null; số dư và thời điểm tồn chỉ đọc. Snapshot gồm DTO bất biến, không giữ ORM/session.
+GET trả cả bản ghi hoạt động và bị khóa; `is_active=false` không làm mất khả năng đọc. GET mặt hàng không truy vấn bảng MatHang; auth vẫn đọc DB để kiểm tra danh tính hiện hành. Giá là JSON integer VND không âm, bắt buộc có trong POST và không cho PATCH null. BIGINT hỗ trợ đến 9223372036854775807 VND; không nhận float, bool hoặc chuỗi thay số. Số dư và thời điểm tồn chỉ đọc. Snapshot gồm DTO bất biến, không giữ ORM/session.
+
+Phụ thuộc phiếu xuất v3: `MatHang.don_gia` trong bootstrap SQL/ORM là BIGINT NOT NULL. Khi Q duyệt phiếu xuất, backend đọc giá từ DB dưới khóa FOR UPDATE, không dùng snapshot cache làm giá ghi sổ. Giá đã chốt trên phiếu không đổi khi sửa giá danh mục sau đó. Đây là thay đổi bootstrap cho DB mới/trống, không phải cập nhật database đang chạy.
 
 ## GET /api/v1/danh_muc_mat_hang/
 

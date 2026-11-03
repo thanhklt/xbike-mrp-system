@@ -38,6 +38,17 @@ class ConflictException(AppException):
     default_message = "Resource conflict"
 
 
+class InsufficientStock(ConflictException):
+    code = "khong_du_ton_kho"
+    default_message = "Insufficient stock to approve the issue"
+
+    def __init__(self, item_id: int, required: int, available: int):
+        super().__init__()
+        self.public_details = [
+            {"mat_hang_id": item_id, "so_luong_can": required, "so_luong_hien_co": available}
+        ]
+
+
 class DuplicateCodeException(ConflictException):
     code = "ma_bi_trung"
     default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"

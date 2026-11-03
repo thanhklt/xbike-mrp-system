@@ -24,3 +24,15 @@ class InventoryWriter(Protocol):
     async def receive_receipt(
         self, lines: list[StockReceiptLine], actor_id: int, posted_at: datetime
     ) -> list[int]: ...
+
+
+class StockIssueLine(NamedTuple):
+    chi_tiet_phieu_xuat_id: int
+    mat_hang_id: int
+    so_luong: int
+
+
+class InventoryIssueWriter(Protocol):
+    async def issue_stock(
+        self, lines: list[StockIssueLine], kind: str, actor_id: int, posted_at: datetime
+    ) -> list[int]: ...

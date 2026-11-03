@@ -4,7 +4,6 @@ import hashlib
 import json
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager
-from decimal import Decimal
 from math import ceil
 from typing import Any
 
@@ -58,8 +57,8 @@ class MatHangReader:
         is_active: bool | None = None,
         don_vi_tinh: str | None = None,
         mau_sac: str | None = None,
-        don_gia_min: Decimal | None = None,
-        don_gia_max: Decimal | None = None,
+        don_gia_min: int | None = None,
+        don_gia_max: int | None = None,
         page: int = 1,
         page_size: int = 20,
         sort: str = "id",
