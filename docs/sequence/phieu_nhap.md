@@ -5,7 +5,9 @@ Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yT
 
 ## Mở sơ đồ từng endpoint
 
-Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`, A = `quan_tri_vien`, N = `nhan_vien`.
+Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`.
+
+Ba route cũ GET `/api/v1/receiving`, GET `/api/v1/receiving/{grn_id}` và POST `/api/v1/receiving` đã được gỡ theo yêu cầu của dev. Các URL này trả 404; client cần chuyển sang `/api/v1/phieu_nhap` với payload, quyền và response hiện tại.
 
 | Endpoint | Quyền | Ảnh sequence |
 |---|---|---|
@@ -15,9 +17,6 @@ Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để m�
 | PATCH `/api/v1/phieu_nhap/{id}` | Q | [Sửa phiếu nháp](assets/phieu_nhap/04-sua-nhap.png) |
 | DELETE `/api/v1/phieu_nhap/{id}` | Q | [Xóa phiếu nháp](assets/phieu_nhap/05-xoa-nhap.png) |
 | POST `/api/v1/phieu_nhap/{id}/hoan_tat` | Q | [Hoàn tất và ghi sổ kho](assets/phieu_nhap/06-hoan-tat.png) |
-| GET `/api/v1/receiving` | A/Q/N | [Danh sách qua route cũ](assets/phieu_nhap/07-receiving-danh-sach.png) |
-| GET `/api/v1/receiving/{grn_id}` | A/Q/N | [Chi tiết qua route cũ](assets/phieu_nhap/08-receiving-chi-tiet.png) |
-| POST `/api/v1/receiving` | A/Q/N | [Tạo nháp qua route cũ](assets/phieu_nhap/09-receiving-tao-nhap.png) |
 
 Các bước xác thực và validation trong sơ đồ được nhóm để dễ đọc; FastAPI có thể xử lý dependency/validation xen kẽ trước khi vào handler. Transaction dùng chung session đã được mở khi xác thực. Mũi tên lỗi gửi về Client biểu diễn HTTP response sau exception handler, không phải repository tự tạo HTTP response.
 
@@ -42,7 +41,6 @@ AuditRepository chỉ `session.add(AuditTrailLog)`, chưa gửi INSERT ngay tạ
 - POST khóa nhà cung cấp bằng FOR KEY SHARE và mặt hàng bằng FOR UPDATE theo ID tăng dần trước khi kiểm tra; giữ khóa đến commit/rollback. Chỉ nhận mặt hàng active là NVL hoặc linh kiện. PATCH cũng khóa mặt hàng trước khi kiểm tra/thay dòng; tránh nâng khóa SHARE sang UPDATE khi hoàn tất.
 - Tạo phiếu, mọi dòng và audit `tao` cùng transaction. Audit lỗi thì rollback tất cả. Audit lưu snapshot PhieuNhapRead và người thực hiện từ JWT.
 - Luồng ghi audit: `PhieuNhapService → AuditService.append → SqlAlchemyAuditRepository.append`. `get_receiving_service` nhận AuditService từ dependency get_audit_service, dùng chung get_db/session. AuditService/repository không mở transaction hoặc commit riêng; lỗi được truyền về transaction phiếu nhập.
-- `/receiving` là các route cũ vẫn được giữ để tương thích, có quyền/payload/envelope khác; không xem chúng là contract v2.
 
 ## GET /api/v1/phieu_nhap
 
@@ -457,139 +455,4 @@ sequenceDiagram
             end
         end
     end
-```
-
-## GET /api/v1/receiving
-
-Route cũ: mọi tài khoản A/Q/N hợp lệ được đọc, dùng PageParams (`page`, `page_size`, `search`, `sort_by`, `sort_order`) và PaginatedResponse cũ, trường dòng là `items`. Không có ETag.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client cũ
-    participant R as Legacy router
-    participant D as Auth dependencies
-    participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant DB as PostgreSQL
-    C->>R: GET /api/v1/receiving
-    R->>D: Kiểm tra JWT và tài khoản
-    D->>DB: Đọc account hiện tại
-    alt JWT sai hoặc tài khoản không hoạt động
-        D-->>C: 401 hoặc 403 qua exception handler
-    else Hợp lệ
-        R->>R: Validate PageParams
-        alt Phân trang sai
-            R-->>C: 422
-        else Hợp lệ
-            R->>S: list_entries
-            S->>P: list_entries
-            P->>DB: COUNT và SELECT phân trang kèm items
-            P-->>S: RecordPage
-            S-->>R: PaginatedResponse
-            R-->>C: 200 theo envelope cũ
-        end
-    end
-    Note over R,DB: Không ghi kho/audit, lỗi chưa phân loại trả 500
-```
-
-## GET /api/v1/receiving/{grn_id}
-
-Route cũ trả GoodsReceiptNoteResponse trực tiếp, không có meta/ETag. Giữ validation path integer cũ.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client cũ
-    participant R as Legacy router
-    participant D as Auth dependencies
-    participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant DB as PostgreSQL
-    C->>R: GET /api/v1/receiving/grn_id
-    R->>D: Kiểm tra JWT và tài khoản
-    D->>DB: Đọc account hiện tại
-    alt Không xác thực hoặc account bị khóa
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate grn_id là integer
-        alt Sai kiểu
-            R-->>C: 422
-        else Hợp lệ
-            R->>S: get_entry
-            S->>P: get_by_id
-            P->>DB: SELECT phiếu và items
-            alt Không tồn tại
-                S-->>C: 404
-            else Tồn tại
-                S-->>R: GoodsReceiptNoteResponse
-                R-->>C: 200, không ETag
-            end
-        end
-    end
-    Note over R,DB: Không ghi kho/audit, lỗi chưa phân loại trả 500
-```
-
-## POST /api/v1/receiving
-
-Route cũ vẫn cho A/Q/N, giữ mã do client cung cấp, `items` và response trực tiếp. Do ràng buộc v3.1, bắt buộc NCC/ngày nhập, ít nhất một dòng và giá không NULL; kiểm tra mặt hàng active NVL/linh kiện như API mới. Người tạo luôn lấy từ JWT; giá trị tổng client gửi được tính lại. IDENTITY cấp ID, chung khóa mã với API mới; tiền response là chuỗi Decimal.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client cũ
-    participant R as Legacy router
-    participant D as Auth dependencies
-    participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    participant T as SqlAlchemyTransaction
-    participant DB as PostgreSQL
-    C->>R: POST /api/v1/receiving + body cũ
-    R->>D: Kiểm tra JWT và vai trò A/Q/N
-    D->>DB: Đọc account hiện tại
-    alt Không xác thực hoặc account bị khóa
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate GoodsReceiptNoteCreate
-        alt Input không hợp lệ
-            R-->>C: 422
-        else Hợp lệ
-            R->>S: create_entry
-            S->>T: Vào transaction
-            S->>P: lock_supplier và lock_parts theo ID
-            P->>DB: NCC FOR KEY SHARE, mặt hàng FOR UPDATE
-            alt Thiếu NCC/mặt hàng hoặc mặt hàng không hợp lệ
-                S-->>C: 404 hoặc 409, rollback transaction
-            else Tham chiếu hợp lệ
-                S->>S: Lấy nhan_vien_id từ JWT, tính lại tổng bằng Decimal
-                S->>P: add
-                P->>DB: Advisory lock mã tháng, database cấp IDENTITY phiếu/dòng
-                P->>DB: INSERT phiếu và items
-                P-->>S: CreatedRecord và snapshot
-                S->>A: append audit tao
-                A->>AR: append(entry)
-                break AuditService hoặc repository phát sinh lỗi trong append
-                    AR-->>A: Truyền lỗi nếu phát sinh ở repository
-                    A-->>S: Truyền exception về PhieuNhapService
-                    S->>T: __aexit__ với exception
-                    T->>DB: ROLLBACK toàn bộ transaction
-                    S-->>C: 500 an toàn qua exception handler
-                end
-                AR->>AR: session.add AuditTrailLog trong session chung
-                AR-->>A: Đã thêm vào session
-                A-->>S: Kết thúc append, không commit riêng
-                S->>T: Commit
-                alt Lỗi flush hoặc commit
-                    T->>DB: ROLLBACK
-                    T-->>C: 409 hoặc 500
-                else Thành công
-                    T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
-                    R-->>C: 201 GoodsReceiptNoteResponse trực tiếp
-                end
-            end
-        end
-    end
-    Note over R,DB: Không ghi tồn kho/ledger, không Location hay ETag trên route cũ
 ```

@@ -560,28 +560,21 @@ async def test_multi_item_total_overflow(receipt_context):
     assert response.status_code == 422
 
 
-async def test_legacy_receiving_route_shares_allocator_and_preserves_shape(receipt_context):
-    client, _, headers = receipt_context
-    legacy = await client.post(
-        "/api/v1/receiving",
-        headers=headers,
-        json={
-            "ma_phieu_nhap": "PN-202610-000555",
-            "ncc_id": 1,
-            "ngay_nhap": "2026-11-03",
-            "items": [{"mat_hang_id": 1, "so_luong": 1, "don_gia_thuc": 0}],
-        },
-    )
-    assert legacy.status_code == 201
-    assert "items" in legacy.json()
-    assert legacy.json()["nhan_vien_id"] == 2
-    canonical = await client.post(BASE, headers=headers, json=BODY)
-    assert canonical.status_code == 201
-    assert canonical.json()["data"]["id"] == legacy.json()["id"] + 1
-    assert canonical.json()["data"]["chi_tiet"][0]["id"] == legacy.json()["items"][0]["id"] + 1
-    assert (
-        await client.get(f"/api/v1/receiving/{legacy.json()['id']}", headers=headers)
-    ).status_code == 200
+@pytest.mark.parametrize(
+    "method,path",
+    [("GET", "/api/v1/receiving"), ("GET", "/api/v1/receiving/1"), ("POST", "/api/v1/receiving")],
+)
+async def test_removed_receiving_routes_return_not_found(async_client, method, path):
+    response = await async_client.request(method, path, json={} if method == "POST" else None)
+    assert response.status_code == 404, response.text
+
+
+def test_openapi_only_exposes_current_receipt_endpoints():
+    paths = app.openapi()["paths"]
+    assert not any(path.startswith("/api/v1/receiving") for path in paths)
+    assert set(paths[BASE]) == {"get", "post"}
+    assert set(paths[BASE + "/{id}"]) == {"get", "patch", "delete"}
+    assert set(paths[BASE + "/{id}/hoan_tat"]) == {"post"}
 
 
 @pytest.mark.parametrize("target", ["supplier_delete", "part_deactivate"])

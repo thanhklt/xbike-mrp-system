@@ -180,22 +180,18 @@ async def test_patch_date_note_and_required_fields(receipt_context):
     assert cleared.json()["data"]["chi_tiet"] == created.json()["data"]["chi_tiet"]
 
 
-async def test_legacy_create_recalculates_money_and_uses_authenticated_creator(receipt_context):
+async def test_create_calculates_decimal_totals_and_uses_authenticated_creator(receipt_context):
     client, _, headers = receipt_context
     response = await client.post(
-        "/api/v1/receiving",
+        BASE,
         headers=headers,
         json={
-            "ma_phieu_nhap": "PN-202611-000555",
             "ncc_id": 1,
             "ngay_nhap": "2026-11-03",
-            "nhan_vien_id": 1,
-            "tong_tien": "999.99",
-            "items": [
-                {"mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": "0.10", "tong_gia": "999.99"}
-            ],
+            "chi_tiet": [{"mat_hang_id": 1, "so_luong": 3, "don_gia_thuc": "0.10"}],
         },
     )
     assert response.status_code == 201, response.text
-    assert response.json()["nhan_vien_id"] == 2
-    assert response.json()["tong_tien"] == response.json()["items"][0]["tong_gia"] == "0.30"
+    record = response.json()["data"]
+    assert record["nhan_vien_id"] == 2
+    assert record["tong_tien"] == record["chi_tiet"][0]["tong_gia"] == "0.30"

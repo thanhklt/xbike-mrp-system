@@ -45,3 +45,9 @@ Ruff và formatter đạt trên các file Python thay đổi; mypy đạt trên 
 Dev tiếp tục đổi implementation thành `SqlAlchemyPhieuNhapRepository`. Đã tái hiện lỗi import ứng dụng do dependency còn import tên cũ, rồi cập nhật dependency, ba file test có factory/subclass repository và nhãn trong cả 9 sequence. Giữ nguyên thay đổi tên lớp của dev; không đổi nghiệp vụ, schema hoặc interface `ReceivingRepository` trong ports. Luồng ghi audit vẫn là `PhieuNhapService → AuditService → SqlAlchemyAuditRepository`.
 
 Ứng dụng import thành công trở lại, OpenAPI giữ đủ 9 endpoint phiếu nhập/receiving. Đã render lại 9 ảnh PNG với tên repository mới và kiểm chữ ký PNG, checksum, đường dẫn ảnh. Regression sau đổi tên: **346 passed, 1 failed, 0 skipped**, 56.56 giây. Lỗi còn lại vẫn là test auth legacy gọi `/api/v1/auth/login` không tồn tại (404). Ruff, kiểm tra định dạng và git diff --check đạt. Không chạy migration, commit hoặc push.
+
+## Gỡ route receiving cũ theo yêu cầu của dev
+
+Đã gỡ GET `/api/v1/receiving`, GET `/api/v1/receiving/{grn_id}` và POST `/api/v1/receiving`, cùng các hàm service/repository, phương thức port và response schema chỉ phục vụ ba route này. Giữ schema tạo nội bộ và cơ chế lưu phiếu mà API mới đang dùng. OpenAPI hiện chỉ còn sáu endpoint `/api/v1/phieu_nhap`; route cũ trả 404. Client cần chuyển sang API mới, dùng `chi_tiet`, để server sinh mã phiếu và đăng nhập bằng vai trò `quan_ly`.
+
+Tài liệu sequence và ba ảnh PNG của route cũ đã được gỡ; sáu sơ đồ còn lại render Mermaid thành công. Kiểm thử trên PostgreSQL tạm riêng: **190 passed, 0 failed, 0 skipped** trong 39.08 giây, gồm API phiếu nhập, hoàn tất, v3.1 và audit service. Có kiểm thử riêng xác nhận ba route cũ trả 404 và OpenAPI giữ đủ sáu endpoint mới. Không chạy lại toàn bộ test suite trong tác vụ này.

@@ -5,13 +5,11 @@ from typing import NamedTuple, Protocol
 
 from app.modules.phieu_nhap.schemas import (
     GoodsReceiptNoteCreate,
-    GoodsReceiptNoteResponse,
     PhieuNhapListQuery,
     PhieuNhapRead,
     ReceiptItemCreate,
 )
-from app.shared.pagination import PageParams
-from app.shared.records import CreatedRecord, RecordPage
+from app.shared.records import RecordPage
 
 
 class ReceiptPart(NamedTuple):
@@ -52,11 +50,3 @@ class ReceivingRepository(Protocol):
     async def add_draft(
         self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
     ) -> PhieuNhapRead: ...
-
-    async def list_entries(self, params: PageParams) -> RecordPage[GoodsReceiptNoteResponse]: ...
-
-    async def get_by_id(self, record_id: int) -> GoodsReceiptNoteResponse | None: ...
-
-    async def add(
-        self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
-    ) -> CreatedRecord[GoodsReceiptNoteResponse]: ...

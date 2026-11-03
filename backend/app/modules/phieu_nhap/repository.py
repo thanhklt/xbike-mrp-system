@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, selectinload
 
 from app.core.errors import ConflictException
-from app.core.persistence import flush_created_record, select_by_id, select_page
 from app.modules.catalog.models import Part
 from app.modules.inventory.models import StockMovement
 from app.modules.nha_cung_cap.models import Supplier
@@ -17,13 +16,11 @@ from app.modules.phieu_nhap.models import GoodsReceiptNote, ReceiptItem
 from app.modules.phieu_nhap.ports import ReceiptPart, ReceiptPosting
 from app.modules.phieu_nhap.schemas import (
     GoodsReceiptNoteCreate,
-    GoodsReceiptNoteResponse,
     PhieuNhapListQuery,
     PhieuNhapRead,
     ReceiptItemCreate,
 )
-from app.shared.pagination import PageParams
-from app.shared.records import CreatedRecord, RecordPage
+from app.shared.records import RecordPage
 
 
 class SqlAlchemyPhieuNhapRepository:
@@ -249,19 +246,3 @@ class SqlAlchemyPhieuNhapRepository:
         self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
     ) -> PhieuNhapRead:
         return PhieuNhapRead.model_validate(await self._insert(payload, created_at=created_at))
-
-    async def list_entries(self, params: PageParams) -> RecordPage[GoodsReceiptNoteResponse]:
-        return await select_page(self.session, GoodsReceiptNote, GoodsReceiptNoteResponse, params)
-
-    async def get_by_id(self, record_id: int) -> GoodsReceiptNoteResponse | None:
-        return await select_by_id(
-            self.session, GoodsReceiptNote, GoodsReceiptNoteResponse, record_id
-        )
-
-    async def add(
-        self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
-    ) -> CreatedRecord[GoodsReceiptNoteResponse]:
-        record = await self._insert(payload, created_at=created_at)
-        return await flush_created_record(
-            self.session, record, GoodsReceiptNoteResponse, children=record.items
-        )

@@ -11,14 +11,10 @@ from app.core.request_context import (
     reject_repeated_query,
 )
 from app.dependencies import (
-    get_current_user_payload,
-    get_pagination_params,
     get_receiving_service,
     require_roles,
 )
 from app.modules.phieu_nhap.schemas import (
-    GoodsReceiptNoteCreate,
-    GoodsReceiptNoteResponse,
     PhieuNhapActionResponse,
     PhieuNhapCompleteInput,
     PhieuNhapCreate,
@@ -29,36 +25,6 @@ from app.modules.phieu_nhap.schemas import (
     PhieuNhapPatch,
 )
 from app.modules.phieu_nhap.service import PhieuNhapService
-from app.shared.pagination import PageParams, PaginatedResponse
-
-legacy_router = APIRouter(
-    prefix="/receiving", tags=["Receiving"], dependencies=[Depends(get_current_user_payload)]
-)
-
-
-@legacy_router.get("", response_model=PaginatedResponse[GoodsReceiptNoteResponse])
-async def list_entries(
-    params: Annotated[PageParams, Depends(get_pagination_params)],
-    service: Annotated[PhieuNhapService, Depends(get_receiving_service)],
-):
-    return await service.list_entries(params)
-
-
-@legacy_router.get("/{grn_id}", response_model=GoodsReceiptNoteResponse)
-async def get_entry(
-    grn_id: int, service: Annotated[PhieuNhapService, Depends(get_receiving_service)]
-):
-    return await service.get_entry(grn_id)
-
-
-@legacy_router.post("", response_model=GoodsReceiptNoteResponse, status_code=201)
-async def create_entry(
-    payload: GoodsReceiptNoteCreate,
-    service: Annotated[PhieuNhapService, Depends(get_receiving_service)],
-    actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly", "nhan_vien"]))],
-):
-    return await service.create_entry(payload, actor)
-
 
 receipt_actor = require_roles(["quan_ly"])
 contract_router = APIRouter(
@@ -187,4 +153,3 @@ async def complete_receipt(
 
 router = APIRouter()
 router.include_router(contract_router)
-router.include_router(legacy_router)

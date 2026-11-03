@@ -1,7 +1,6 @@
 """Receipt lifecycle with atomic stock posting and audit."""
 
 from datetime import datetime, timezone
-from decimal import Decimal
 from hashlib import sha256
 
 from pydantic import ValidationError
@@ -21,7 +20,6 @@ from app.modules.phieu_nhap.ports import ReceivingRepository
 from app.modules.phieu_nhap.schemas import (
     INT_MAX,
     GoodsReceiptNoteCreate,
-    GoodsReceiptNoteResponse,
     PhieuNhapActionRead,
     PhieuNhapActionResponse,
     PhieuNhapCreate,
@@ -33,7 +31,6 @@ from app.modules.phieu_nhap.schemas import (
     ReceiptItemCreate,
 )
 from app.modules.users.schemas import ListResponseMeta, ResponseMeta
-from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
 
 
 class PhieuNhapService:
@@ -295,42 +292,3 @@ class PhieuNhapService:
                 )
             )
         return self.detail_response(record, request_id)
-
-    async def list_entries(self, params: PageParams) -> PaginatedResponse[GoodsReceiptNoteResponse]:
-        result = await self.repository.list_entries(params)
-        return create_paginated_response(result.items, result.total, params.page, params.page_size)
-
-    async def get_entry(self, record_id: int) -> GoodsReceiptNoteResponse:
-        record = await self.repository.get_by_id(record_id)
-        if record is None:
-            raise NotFoundException(message=f"phieu_nhap {record_id} not found")
-        return record
-
-    async def create_entry(
-        self, payload: GoodsReceiptNoteCreate, actor: dict
-    ) -> GoodsReceiptNoteResponse:
-        async with self.transaction:
-            if not await self.repository.lock_supplier(payload.ncc_id):
-                raise NotFoundException(message="Supplier not found")
-            await self._validate_parts([item.mat_hang_id for item in payload.items])
-            items = [
-                item.model_copy(update={"tong_gia": item.so_luong * item.don_gia_thuc})
-                for item in payload.items
-            ]
-            payload = payload.model_copy(
-                update={
-                    "nhan_vien_id": int(actor["sub"]),
-                    "items": items,
-                    "tong_tien": sum((item.tong_gia for item in items), Decimal(0)),
-                }
-            )
-            created = await self.repository.add(payload, created_at=datetime.now(timezone.utc))
-            await self.audit.append(
-                CreationAudit(
-                    nhan_vien_id=int(actor["sub"]),
-                    loai_doi_tuong="phieu_nhap",
-                    doi_tuong_id=created.record.id,
-                    du_lieu_sau=created.snapshot,
-                )
-            )
-        return created.record
