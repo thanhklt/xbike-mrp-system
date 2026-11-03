@@ -1,5 +1,8 @@
 -- xBike MRP data model v3.1 — dữ liệu demo cố định, không phải dữ liệu vận hành.
 -- Tương thích init.sql v3.1: số dư tồn nằm trong public."MatHang".
+-- Theo docs/api_contract_v3.md: mọi số tiền là integer VND; mọi mặt hàng có don_gia;
+-- phiếu xuất do quản lý lập, giá xuất lấy từ MatHang.don_gia lúc duyệt.
+-- Giá là dữ liệu minh họa, không phải giá thật.
 -- Yêu cầu: init.sql đã chạy thành công và các bảng chưa có dữ liệu.
 -- Không chạy lại trên DB đã seed; không xóa/ghi đè dữ liệu có sẵn.
 -- 3 tài khoản demo dùng mật khẩu DemoXbike2026! (bcrypt cost 12).
@@ -25,24 +28,25 @@ INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_
   (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '2026-10-01', 'hoat_dong'),
   (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '2026-10-01', 'hoat_dong');
 
-INSERT INTO public."MatHang" (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, is_active) VALUES
-  (1, 'MH-000001', 'Xe Mountain Pro', 'XE-MOUNTAIN-PRO', 'thanh_pham', 'chiec', true),
-  (2, 'MH-000002', 'Xe City Ride', 'XE-CITY-RIDE', 'thanh_pham', 'chiec', true),
-  (3, 'MH-000003', 'Xe Speed Sport', 'XE-SPEED-SPORT', 'thanh_pham', 'chiec', true),
-  (4, 'MH-000004', 'Xe Kids Fun', 'XE-KIDS-FUN', 'thanh_pham', 'chiec', true),
-  (5, 'MH-000005', 'Cụm bánh xe', 'CUM-BANH-XE', 'ban_thanh_pham', 'chiec', true),
-  (6, 'MH-000006', 'Khung xe', 'KHUNG-XE', 'linh_kien', 'chiec', true),
-  (7, 'MH-000007', 'Phuộc xe', 'PHUOC-XE', 'linh_kien', 'chiec', true),
-  (8, 'MH-000008', 'Lốp xe', 'LOP-XE', 'linh_kien', 'chiec', true),
-  (9, 'MH-000009', 'Xích xe', 'XICH-XE', 'linh_kien', 'chiec', true),
-  (10, 'MH-000010', 'Bàn đạp', 'BAN-DAP', 'linh_kien', 'chiec', true),
-  (11, 'MH-000011', 'Dây phanh', 'DAY-PHANH', 'linh_kien', 'chiec', true),
-  (12, 'MH-000012', 'Yên xe', 'YEN-XE', 'linh_kien', 'chiec', true),
-  (13, 'MH-000013', 'Đĩa xích', 'DIA-XICH', 'linh_kien', 'chiec', true),
-  (14, 'MH-000014', 'Bộ ốc vít', 'BO-OC-VIT', 'linh_kien', 'bo', true),
-  (15, 'MH-000015', 'Vành bánh xe', 'VANH-BANH-XE', 'linh_kien', 'chiec', true),
-  (16, 'MH-000016', 'Moay-ơ', 'MOAY-O', 'linh_kien', 'chiec', true),
-  (17, 'MH-000017', 'Nan hoa', 'NAN-HOA', 'linh_kien', 'chiec', true);
+-- don_gia: giá danh mục (VND), dùng để tính tiền phiếu xuất.
+INSERT INTO public."MatHang" (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, don_gia, is_active) VALUES
+  (1, 'MH-000001', 'Xe Mountain Pro', 'XE-MOUNTAIN-PRO', 'thanh_pham', 'chiec', 12500000, true),
+  (2, 'MH-000002', 'Xe City Ride', 'XE-CITY-RIDE', 'thanh_pham', 'chiec', 8900000, true),
+  (3, 'MH-000003', 'Xe Speed Sport', 'XE-SPEED-SPORT', 'thanh_pham', 'chiec', 15800000, true),
+  (4, 'MH-000004', 'Xe Kids Fun', 'XE-KIDS-FUN', 'thanh_pham', 'chiec', 3200000, true),
+  (5, 'MH-000005', 'Cụm bánh xe', 'CUM-BANH-XE', 'ban_thanh_pham', 'chiec', 650000, true),
+  (6, 'MH-000006', 'Khung xe', 'KHUNG-XE', 'linh_kien', 'chiec', 1800000, true),
+  (7, 'MH-000007', 'Phuộc xe', 'PHUOC-XE', 'linh_kien', 'chiec', 950000, true),
+  (8, 'MH-000008', 'Lốp xe', 'LOP-XE', 'linh_kien', 'chiec', 180000, true),
+  (9, 'MH-000009', 'Xích xe', 'XICH-XE', 'linh_kien', 'chiec', 220000, true),
+  (10, 'MH-000010', 'Bàn đạp', 'BAN-DAP', 'linh_kien', 'chiec', 120000, true),
+  (11, 'MH-000011', 'Dây phanh', 'DAY-PHANH', 'linh_kien', 'chiec', 45000, true),
+  (12, 'MH-000012', 'Yên xe', 'YEN-XE', 'linh_kien', 'chiec', 250000, true),
+  (13, 'MH-000013', 'Đĩa xích', 'DIA-XICH', 'linh_kien', 'chiec', 320000, true),
+  (14, 'MH-000014', 'Bộ ốc vít', 'BO-OC-VIT', 'linh_kien', 'bo', 60000, true),
+  (15, 'MH-000015', 'Vành bánh xe', 'VANH-BANH-XE', 'linh_kien', 'chiec', 280000, true),
+  (16, 'MH-000016', 'Moay-ơ', 'MOAY-O', 'linh_kien', 'chiec', 210000, true),
+  (17, 'MH-000017', 'Nan hoa', 'NAN-HOA', 'linh_kien', 'chiec', 3000, true);
 
 INSERT INTO public."NhaCungCap" (id, ma_ncc, ten_ncc, dia_chi, tinh) VALUES
   (1, 'NCC-000001', 'Nhà cung cấp linh kiện xe đạp Minh Phát', 'Địa chỉ minh họa', 'Thành phố Hồ Chí Minh');
@@ -102,25 +106,26 @@ INSERT INTO public."ChiTietBom" (id, bom_id, mat_hang_id, so_luong) VALUES
   (43, 5, 17, 36);
 
 -- Phiếu nhập hoàn tất có 12 dòng NVL/linh kiện. Phiếu thứ hai còn nháp, không cộng kho.
+-- don_gia_thuc là giá mua thực tế do quản lý khai báo; tong_gia = so_luong * don_gia_thuc.
 
-INSERT INTO public."PhieuNhap" (id, ma_phieu_nhap, nhan_vien_id, ncc_id, ngay_nhap, ghi_chu, trang_thai, created_at) VALUES
-  (1, 'PN-202610-000001', 2, 1, '2026-10-22', 'Lô linh kiện demo cho sản xuất 10 xe; số nan hoa sẽ được điều chỉnh.', 'nhap', '2026-10-22 08:30:00+07'),
-  (2, 'PN-202610-000002', 2, 1, '2026-10-23', 'Phiếu nháp bổ sung khung xe; chưa xác nhận, chưa tăng tồn.', 'nhap', '2026-10-22 08:35:00+07');
+INSERT INTO public."PhieuNhap" (id, ma_phieu_nhap, nhan_vien_id, ncc_id, ngay_nhap, ghi_chu, tong_tien, trang_thai, created_at) VALUES
+  (1, 'PN-202610-000001', 2, 1, '2026-10-22', 'Lô linh kiện demo cho sản xuất 10 xe; số nan hoa sẽ được điều chỉnh.', 53620000, 'nhap', '2026-10-22 08:30:00+07'),
+  (2, 'PN-202610-000002', 2, 1, '2026-10-23', 'Phiếu nháp bổ sung khung xe; chưa xác nhận, chưa tăng tồn.', 175000000, 'nhap', '2026-10-22 08:35:00+07');
 
-INSERT INTO public."ChiTietPhieuNhap" (id, phieu_nhap_id, mat_hang_id, so_luong) VALUES
-  (1, 1, 6, 10),
-  (2, 1, 7, 10),
-  (3, 1, 8, 20),
-  (4, 1, 9, 10),
-  (5, 1, 10, 20),
-  (6, 1, 11, 20),
-  (7, 1, 12, 10),
-  (8, 1, 13, 10),
-  (9, 1, 14, 10),
-  (10, 1, 15, 20),
-  (11, 1, 16, 20),
-  (12, 1, 17, 1000),
-  (13, 2, 6, 100);
+INSERT INTO public."ChiTietPhieuNhap" (id, phieu_nhap_id, mat_hang_id, so_luong, don_gia_thuc, tong_gia) VALUES
+  (1, 1, 6, 10, 1750000, 17500000),
+  (2, 1, 7, 10, 920000, 9200000),
+  (3, 1, 8, 20, 170000, 3400000),
+  (4, 1, 9, 10, 210000, 2100000),
+  (5, 1, 10, 20, 115000, 2300000),
+  (6, 1, 11, 20, 42000, 840000),
+  (7, 1, 12, 10, 240000, 2400000),
+  (8, 1, 13, 10, 310000, 3100000),
+  (9, 1, 14, 10, 58000, 580000),
+  (10, 1, 15, 20, 270000, 5400000),
+  (11, 1, 16, 20, 200000, 4000000),
+  (12, 1, 17, 1000, 2800, 2800000),
+  (13, 2, 6, 100, 1750000, 175000000);
 
 UPDATE public."PhieuNhap" SET trang_thai='hoan_thanh' WHERE id=1;
 
@@ -203,16 +208,28 @@ INSERT INTO public."ChiTietLenhSanXuat" (id, lenh_san_xuat_id, mat_hang_id, so_l
   (26, 4, 17, 7200);
 
 -- Xuất đủ vật tư cho lệnh 20 cụm: 20 vành, 20 moay-ơ, 720 nan hoa. Chỉ trừ một lần.
+-- Quản lý lập và duyệt phiếu. Giá chốt lúc duyệt bằng MatHang.don_gia:
+-- 20*280000 + 20*210000 + 720*3000 = 11960000.
 
 INSERT INTO public."PhieuXuat" (id, ma_phieu_xuat, nhan_vien_id, loai_phieu, lenh_san_xuat_id, trang_thai, created_at) VALUES
-  (1, 'PX-202610-000001', 3, 'xuat_vat_tu', 2, 'nhap', '2026-10-22 09:40:00+07');
+  (1, 'PX-202610-000001', 2, 'xuat_vat_tu', 2, 'nhap', '2026-10-22 09:40:00+07');
 
 INSERT INTO public."ChiTietPhieuXuat" (id, phieu_xuat_id, mat_hang_id, so_luong) VALUES
   (1, 1, 15, 20),
   (2, 1, 16, 20),
   (3, 1, 17, 720);
 
-UPDATE public."PhieuXuat" SET trang_thai='da_duyet' WHERE id=1;
+-- Mô phỏng bước duyệt: chốt giá từng dòng rồi chuyển da_duyet (sau đó dòng và phiếu bất biến).
+UPDATE public."ChiTietPhieuXuat" AS c
+SET don_gia_thuc = m.don_gia,
+    tong_gia = c.so_luong * m.don_gia
+FROM public."MatHang" AS m
+WHERE m.id = c.mat_hang_id AND c.phieu_xuat_id = 1;
+
+UPDATE public."PhieuXuat"
+SET trang_thai = 'da_duyet',
+    tong_tien = (SELECT sum(tong_gia) FROM public."ChiTietPhieuXuat" WHERE phieu_xuat_id = 1)
+WHERE id = 1;
 
 INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_xuat_id, nhan_vien_id, posted_at) VALUES
   (15, 15, 'xuat_vat_tu', -20, 1, 2, '2026-10-22 10:00:00+07'),
@@ -261,7 +278,7 @@ INSERT INTO public."LichSuThaoTac" (id, nhan_vien_id, loai_doi_tuong, doi_tuong_
   (9, 2, 'lenh_san_xuat', 2, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:27:00+07'),
   (10, 2, 'lenh_san_xuat', 3, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:31:00+07'),
   (11, 2, 'lenh_san_xuat', 4, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nhan_vien_id": 3}', 'Quản lý chốt BOM, nhu cầu và giao việc.', '2026-10-22 09:32:00+07'),
-  (12, 2, 'phieu_xuat', 1, 'duyet', '{"trang_thai": "cho_duyet"}', '{"trang_thai": "da_duyet", "cap_vat_tu_cho_lenh": 2}', 'Đủ vật tư cho 20 cụm bánh.', '2026-10-22 10:00:00+07'),
+  (12, 2, 'phieu_xuat', 1, 'duyet', '{"trang_thai": "cho_duyet", "tong_tien": null}', '{"trang_thai": "da_duyet", "cap_vat_tu_cho_lenh": 2, "tong_tien": 11960000}', 'Đủ vật tư cho 20 cụm bánh; chốt giá theo đơn giá mặt hàng.', '2026-10-22 10:00:00+07'),
   (13, 3, 'lenh_san_xuat', 2, 'bat_dau', '{"trang_thai": "da_gui"}', '{"trang_thai": "dang_thuc_hien"}', 'Vật tư đã cấp đủ.', '2026-10-22 10:01:00+07'),
   (14, 3, 'yeu_cau_san_xuat', 1, 'bat_dau', '{"trang_thai": "da_gui"}', '{"trang_thai": "dang_thuc_hien"}', 'Bắt đầu thực hiện lệnh con.', '2026-10-22 10:01:00+07'),
   (15, 3, 'chung_tu_hoan_thanh_san_xuat', 1, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "cho_duyet", "so_luong": 20}', 'Chờ quản lý duyệt; chưa cộng kho.', '2026-10-22 10:30:00+07'),
@@ -297,5 +314,26 @@ BEGIN
       SELECT mat_hang_id,sum(so_luong_bien_dong) qty FROM public."GiaoDichKho" GROUP BY mat_hang_id
     ) g ON g.mat_hang_id=t.id WHERE t.so_luong_ton<>COALESCE(g.qty,0)
   ) THEN RAISE EXCEPTION 'Số dư không khớp sổ kho'; END IF;
+  IF EXISTS (SELECT 1 FROM public."MatHang" WHERE don_gia IS NULL OR don_gia <> trunc(don_gia)) THEN
+    RAISE EXCEPTION 'Mọi mặt hàng phải có don_gia là số nguyên VND'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."ChiTietPhieuNhap"
+    WHERE don_gia_thuc IS NULL OR tong_gia IS DISTINCT FROM so_luong * don_gia_thuc
+  ) OR EXISTS (
+    SELECT 1 FROM public."PhieuNhap" p
+    WHERE p.tong_tien IS DISTINCT FROM (SELECT sum(c.tong_gia) FROM public."ChiTietPhieuNhap" c WHERE c.phieu_nhap_id = p.id)
+  ) THEN RAISE EXCEPTION 'Tiền phiếu nhập không khớp tổng dòng'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."ChiTietPhieuXuat" c
+    JOIN public."PhieuXuat" p ON p.id = c.phieu_xuat_id
+    JOIN public."MatHang" m ON m.id = c.mat_hang_id
+    WHERE p.trang_thai = 'da_duyet'
+      AND (c.don_gia_thuc IS DISTINCT FROM m.don_gia OR c.tong_gia IS DISTINCT FROM c.so_luong * c.don_gia_thuc)
+  ) OR (SELECT tong_tien FROM public."PhieuXuat" WHERE id = 1) <> 11960000 THEN
+    RAISE EXCEPTION 'Giá phiếu xuất đã duyệt phải lấy từ MatHang.don_gia; tổng phải là 11960000'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."PhieuXuat" p JOIN public."NhanVien" n ON n.id = p.nhan_vien_id
+    JOIN public."VaiTro" v ON v.id = n.vai_tro_id WHERE v.ma_vai_tro <> 'quan_ly'
+  ) THEN RAISE EXCEPTION 'Phiếu xuất chỉ do quản lý lập'; END IF;
 END $$;
 COMMIT;
