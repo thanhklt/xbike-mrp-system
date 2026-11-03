@@ -26,8 +26,8 @@ from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRep
 from app.modules.material_issuing.service import MaterialIssuingService
 from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
 from app.modules.nha_cung_cap.service import SupplierService
-from app.modules.phieu_nhap.repository import SqlAlchemyReceivingRepository
-from app.modules.phieu_nhap.service import ReceivingService
+from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
+from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.production.repository import SqlAlchemyProductionRepository
 from app.modules.production.service import ProductionService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
@@ -111,10 +111,13 @@ def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
     )
 
 
-def get_receiving_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReceivingService:
-    return ReceivingService(
-        SqlAlchemyReceivingRepository(db),
-        SqlAlchemyAuditRepository(db),
+def get_receiving_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> PhieuNhapService:
+    return PhieuNhapService(
+        SqlAlchemyPhieuNhapRepository(db),
+        audit,
         SqlAlchemyTransaction(db),
         SqlAlchemyInventoryRepository(db),
     )

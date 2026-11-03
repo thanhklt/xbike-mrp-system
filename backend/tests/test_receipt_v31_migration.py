@@ -8,10 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.sqlalchemy_transaction import SqlAlchemyTransaction
 from app.modules.audit.repository import SqlAlchemyAuditRepository
+from app.modules.audit.service import AuditService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
-from app.modules.phieu_nhap.repository import SqlAlchemyReceivingRepository
+from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
 from app.modules.phieu_nhap.schemas import PhieuNhapCreate
-from app.modules.phieu_nhap.service import ReceivingService
+from app.modules.phieu_nhap.service import PhieuNhapService
 from tests.test_auth_migrations import migrate
 from tests.test_auth_migrations import migration_connection as migration_connection
 
@@ -124,9 +125,9 @@ async def test_bootstrap_is_compatible_and_downgrade_refuses_data_loss(migration
     async with AsyncSession(
         bind=db, expire_on_commit=False, join_transaction_mode="create_savepoint"
     ) as session:
-        service = ReceivingService(
-            SqlAlchemyReceivingRepository(session),
-            SqlAlchemyAuditRepository(session),
+        service = PhieuNhapService(
+            SqlAlchemyPhieuNhapRepository(session),
+            AuditService(SqlAlchemyAuditRepository(session)),
             SqlAlchemyTransaction(session),
             SqlAlchemyInventoryRepository(session),
         )

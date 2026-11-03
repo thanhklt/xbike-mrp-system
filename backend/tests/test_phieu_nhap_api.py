@@ -16,13 +16,14 @@ from app.dependencies import get_receiving_service
 from app.main import app
 from app.modules.audit.models import AuditTrailLog
 from app.modules.audit.repository import SqlAlchemyAuditRepository
+from app.modules.audit.service import AuditService
 from app.modules.catalog.models import Part
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.nha_cung_cap.models import Supplier
 from app.modules.phieu_nhap.models import GoodsReceiptNote, ReceiptItem
-from app.modules.phieu_nhap.repository import SqlAlchemyReceivingRepository
+from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
 from app.modules.phieu_nhap.schemas import GoodsReceiptNoteCreate, ReceiptItemCreate
-from app.modules.phieu_nhap.service import ReceivingService
+from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.users.models import User
 from tests.test_auth_api import auth_context as auth_context
 from tests.test_auth_api import login
@@ -351,9 +352,9 @@ async def test_audit_failure_rolls_back_parent_and_all_items(receipt_context):
             raise RuntimeError("private injected failure")
 
     def failing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
-            SqlAlchemyReceivingRepository(db),
-            FailingAudit(db),
+        return PhieuNhapService(
+            SqlAlchemyPhieuNhapRepository(db),
+            AuditService(FailingAudit(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )
@@ -410,15 +411,15 @@ async def test_concurrent_creates_have_unique_codes_ids_and_atomic_audits(
     client, sessions, headers = concurrent_receipt_context
     barrier = asyncio.Barrier(6)
 
-    class RacingRepository(SqlAlchemyReceivingRepository):
+    class RacingRepository(SqlAlchemyPhieuNhapRepository):
         async def lock_parts(self, ids):
             await asyncio.wait_for(barrier.wait(), 5)
             return await super().lock_parts(ids)
 
     def racing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
+        return PhieuNhapService(
             RacingRepository(db),
-            SqlAlchemyAuditRepository(db),
+            AuditService(SqlAlchemyAuditRepository(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )
@@ -468,7 +469,7 @@ async def test_monthly_code_uses_vietnam_time_and_audit_history(receipt_context,
             )
         )
         await db.commit()
-        repository = SqlAlchemyReceivingRepository(db)
+        repository = SqlAlchemyPhieuNhapRepository(db)
         record = await repository.add_draft(
             GoodsReceiptNoteCreate(
                 ma_phieu_nhap="",
@@ -590,7 +591,7 @@ async def test_references_changed_before_create_are_rechecked_under_lock(
     client, sessions, headers = concurrent_receipt_context
     request_pid = asyncio.get_running_loop().create_future()
 
-    class ObservedRepository(SqlAlchemyReceivingRepository):
+    class ObservedRepository(SqlAlchemyPhieuNhapRepository):
         async def lock_supplier(self, record_id):
             if target == "supplier_delete":
                 request_pid.set_result(await self.session.scalar(select(func.pg_backend_pid())))
@@ -602,9 +603,9 @@ async def test_references_changed_before_create_are_rechecked_under_lock(
             return await super().lock_parts(ids)
 
     def observed_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
+        return PhieuNhapService(
             ObservedRepository(db),
-            SqlAlchemyAuditRepository(db),
+            AuditService(SqlAlchemyAuditRepository(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )

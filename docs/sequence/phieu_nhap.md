@@ -21,6 +21,10 @@ Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để m�
 
 Các bước xác thực và validation trong sơ đồ được nhóm để dễ đọc; FastAPI có thể xử lý dependency/validation xen kẽ trước khi vào handler. Transaction dùng chung session đã được mở khi xác thực. Mũi tên lỗi gửi về Client biểu diễn HTTP response sau exception handler, không phải repository tự tạo HTTP response.
 
+Trong các sơ đồ ghi, fragment `break` là nhánh dừng xử lý nếu AuditService hoặc repository phát sinh lỗi trước commit. Lỗi truyền ngược về PhieuNhapService và transaction rollback; không tiếp tục sang nhánh commit thành công. Lỗi ghi phiếu/chi tiết/tồn/ledger ở các bước trước cũng thoát transaction ngay, không chạy các bước phía sau.
+
+AuditRepository chỉ `session.add(AuditTrailLog)`, chưa gửi INSERT ngay tại append. Khi `SqlAlchemyTransaction` gọi `session.commit()`, SQLAlchemy flush dữ liệu đang chờ (gồm audit) rồi COMMIT. Lỗi flush/commit được xử lý riêng bằng rollback. Các lời gọi được đánh số để dễ theo dõi trên ảnh PNG.
+
 ## Quy ước đang triển khai
 
 - Sáu endpoint `/phieu_nhap` chỉ dành cho Q (`quan_ly`). JWT, phiên bản mật khẩu và trạng thái tài khoản được kiểm tra ở mỗi request. A không mặc định có quyền Q.
@@ -37,6 +41,7 @@ Các bước xác thực và validation trong sơ đồ được nhóm để d�
 - Tiền dùng Decimal/numeric(18,2), giá >= 0, tối đa 9999999999999999.99 và hai chữ số thập phân; request nhận chuỗi hoặc integer, từ chối float/bool. Response tiền là chuỗi hai chữ số. Số lượng/ID vẫn integer nghiêm ngặt trong dải INTEGER. Tổng do server tính.
 - POST khóa nhà cung cấp bằng FOR KEY SHARE và mặt hàng bằng FOR UPDATE theo ID tăng dần trước khi kiểm tra; giữ khóa đến commit/rollback. Chỉ nhận mặt hàng active là NVL hoặc linh kiện. PATCH cũng khóa mặt hàng trước khi kiểm tra/thay dòng; tránh nâng khóa SHARE sang UPDATE khi hoàn tất.
 - Tạo phiếu, mọi dòng và audit `tao` cùng transaction. Audit lỗi thì rollback tất cả. Audit lưu snapshot PhieuNhapRead và người thực hiện từ JWT.
+- Luồng ghi audit: `PhieuNhapService → AuditService.append → SqlAlchemyAuditRepository.append`. `get_receiving_service` nhận AuditService từ dependency get_audit_service, dùng chung get_db/session. AuditService/repository không mở transaction hoặc commit riêng; lỗi được truyền về transaction phiếu nhập.
 - `/receiving` là các route cũ vẫn được giữ để tương thích, có quyền/payload/envelope khác; không xem chúng là contract v2.
 
 ## GET /api/v1/phieu_nhap
@@ -47,11 +52,12 @@ Ngày lọc theo Asia/Ho_Chi_Minh, lấy cả hai ngày bằng khoảng UTC nử
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/phieu_nhap + JWT + query
     R->>D: Xác thực và require_roles Q
@@ -86,11 +92,12 @@ ID nguyên dương; không nhận query. ID vượt INTEGER PostgreSQL trả 404
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/phieu_nhap/id + JWT
     R->>D: Kiểm tra JWT và quyền Q
@@ -125,12 +132,14 @@ Body: `ncc_id`, `ngay_nhap` (YYYY-MM-DD) và `chi_tiet` bắt buộc; `ghi_chu` 
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
-    participant A as AuditRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
+    participant A as AuditService
+    participant AR as SqlAlchemyAuditRepository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
     C->>R: POST /api/v1/phieu_nhap + JWT + JSON
@@ -156,7 +165,7 @@ sequenceDiagram
                 S->>S: Lấy người tạo từ JWT, tính tiền, đặt nhap và UTC
                 S->>P: add_draft
                 P->>DB: Advisory lock mã tháng, đọc mã trong bảng cùng audit
-                alt Hết dải ID hoặc mã tháng
+                alt Hết dải mã tháng
                     P-->>S: Conflict
                     S->>T: Rollback
                     S-->>C: 409
@@ -164,13 +173,23 @@ sequenceDiagram
                     P->>DB: INSERT phiếu và mọi dòng chi tiết bằng IDENTITY
                     P-->>S: PhieuNhapRead
                     S->>A: append audit tao với snapshot sau tạo
-                    A->>DB: Đưa audit vào cùng session
+                    A->>AR: append(entry)
+                    break AuditService hoặc repository phát sinh lỗi trong append
+                        AR-->>A: Truyền lỗi nếu phát sinh ở repository
+                        A-->>S: Truyền exception về PhieuNhapService
+                        S->>T: __aexit__ với exception
+                        T->>DB: ROLLBACK toàn bộ transaction
+                        S-->>C: 500 an toàn qua exception handler
+                    end
+                    AR->>AR: session.add AuditTrailLog trong session chung
+                    AR-->>A: Đã thêm vào session
+                    A-->>S: Kết thúc append, không commit riêng
                     S->>T: Commit phiếu, chi tiết và audit
-                    alt Lỗi ghi dữ liệu hoặc audit
+                    alt Lỗi flush hoặc commit
                         T->>DB: ROLLBACK toàn bộ
                         T-->>C: 409 constraint hoặc 500 lỗi nội bộ
                     else Thành công
-                        T->>DB: COMMIT
+                        T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
                         S-->>R: data + meta + ETag
                         R-->>C: 201, Location và ETag
                     end
@@ -187,12 +206,14 @@ Body nhận `ncc_id`, `ngay_nhap`, `ghi_chu` và `chi_tiet` tùy chọn. Bỏ tr
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
-    participant A as AuditRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
+    participant A as AuditService
+    participant AR as SqlAlchemyAuditRepository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
     C->>R: PATCH /api/v1/phieu_nhap/id + JWT + If-Match + JSON
@@ -227,19 +248,31 @@ sequenceDiagram
                         S-->>C: 404 hoặc 409
                     else Tham chiếu hợp lệ
                         S->>S: Tính tiền và xác định thay đổi
-                        opt Dữ liệu thực sự thay đổi
+                        alt Không có thay đổi dữ liệu
+                            S->>S: Giữ resource, ID chi tiết và ETag, không ghi audit
+                        else Có thay đổi dữ liệu
                             S->>P: patch_draft
                             P->>DB: Khi thay chi tiết, DELETE và INSERT dòng với IDENTITY
                             P->>DB: UPDATE phiếu và đọc lại dữ liệu
                             S->>A: append sua với snapshot trước và sau
-                            A->>DB: Ghi audit cùng session
+                            A->>AR: append(entry)
+                            break AuditService hoặc repository phát sinh lỗi trong append
+                                AR-->>A: Truyền lỗi nếu phát sinh ở repository
+                                A-->>S: Truyền exception về PhieuNhapService
+                                S->>T: __aexit__ với exception
+                                T->>DB: ROLLBACK toàn bộ transaction
+                                S-->>C: 500 an toàn qua exception handler
+                            end
+                            AR->>AR: session.add AuditTrailLog trong session chung
+                            AR-->>A: Đã thêm vào session
+                            A-->>S: Kết thúc append, không commit riêng
                         end
                         S->>T: Commit
-                        alt Lỗi ghi hoặc audit
+                        alt Lỗi flush hoặc commit
                             T->>DB: ROLLBACK mọi thay đổi
                             T-->>C: 409 constraint hoặc 500 an toàn
                         else Thành công
-                            T->>DB: COMMIT
+                            T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
                             S-->>R: PhieuNhapDetailResponse và ETag
                             R-->>C: 200 và ETag hiện tại
                         end
@@ -257,12 +290,14 @@ Không nhận query. Xóa chi tiết rồi phiếu nháp trong cùng transaction
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
-    participant A as AuditRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
+    participant A as AuditService
+    participant AR as SqlAlchemyAuditRepository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
     C->>R: DELETE /api/v1/phieu_nhap/id + JWT + If-Match
@@ -293,13 +328,23 @@ sequenceDiagram
                     S->>P: delete_draft
                     P->>DB: DELETE chi tiết rồi phiếu
                     S->>A: append xoa_nhap với snapshot trước xóa
-                    A->>DB: Ghi audit cùng session
+                    A->>AR: append(entry)
+                    break AuditService hoặc repository phát sinh lỗi trong append
+                        AR-->>A: Truyền lỗi nếu phát sinh ở repository
+                        A-->>S: Truyền exception về PhieuNhapService
+                        S->>T: __aexit__ với exception
+                        T->>DB: ROLLBACK toàn bộ transaction
+                        S-->>C: 500 an toàn qua exception handler
+                    end
+                    AR->>AR: session.add AuditTrailLog trong session chung
+                    AR-->>A: Đã thêm vào session
+                    A-->>S: Kết thúc append, không commit riêng
                     S->>T: Commit
-                    alt Lỗi FK, ghi dữ liệu hoặc audit
+                    alt Lỗi flush hoặc commit
                         T->>DB: ROLLBACK cả xóa và audit
                         T-->>C: 409 hoặc 500 an toàn
                     else Thành công
-                        T->>DB: COMMIT
+                        T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
                         R-->>C: 204 không body
                     end
                 end
@@ -317,13 +362,15 @@ Retry phải còn quyền Q và có If-Match. Nếu phiếu hoàn thành, đối
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client
     participant R as Router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
-    participant I as InventoryRepository
-    participant A as AuditRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
+    participant I as SqlAlchemyInventoryRepository
+    participant A as AuditService
+    participant AR as SqlAlchemyAuditRepository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
     C->>R: POST /api/v1/phieu_nhap/id/hoan_tat + JWT + If-Match + {}
@@ -352,8 +399,11 @@ sequenceDiagram
                         S->>T: Rollback
                         S-->>C: 409
                     else Đã ghi sổ đúng
-                        S->>T: Kết thúc transaction không ghi thêm
-                        S-->>C: 200 resource hiện tại, ID ledger cũ, da_ghi_so_truoc_do=true, ETag
+                        Note over S,DB: Không so sánh ETag cũ, không cộng tồn hay thêm audit/ledger
+                        S->>T: Kết thúc transaction chỉ đọc
+                        T->>DB: COMMIT và nhả khóa, không có dữ liệu ghi mới
+                        S-->>R: Resource hiện tại, ID ledger cũ và ETag
+                        R-->>C: 200, da_ghi_so_truoc_do=true
                     end
                 else Phiếu nháp
                     S->>S: So sánh ETag, kiểm tra chưa có ledger và dữ liệu tiền/dòng
@@ -380,13 +430,23 @@ sequenceDiagram
                                 S->>P: mark_completed
                                 P->>DB: UPDATE hoan_thanh và đọc lại phiếu
                                 S->>A: append hoan_tat với snapshot trước và sau
-                                A->>DB: Ghi audit cùng session
+                                A->>AR: append(entry)
+                                break AuditService hoặc repository phát sinh lỗi trong append
+                                    AR-->>A: Truyền lỗi nếu phát sinh ở repository
+                                    A-->>S: Truyền exception về PhieuNhapService
+                                    S->>T: __aexit__ với exception
+                                    T->>DB: ROLLBACK toàn bộ transaction
+                                    S-->>C: 500 an toàn qua exception handler
+                                end
+                                AR->>AR: session.add AuditTrailLog trong session chung
+                                AR-->>A: Đã thêm vào session
+                                A-->>S: Kết thúc append, không commit riêng
                                 S->>T: Commit
-                                alt Lỗi ở bất kỳ bước ghi hoặc commit
+                                alt Lỗi flush hoặc commit cuối transaction
                                     T->>DB: ROLLBACK tồn, ledger, trạng thái và audit
                                     T-->>C: 409 constraint hoặc 500 an toàn
                                 else Thành công
-                                    T->>DB: COMMIT
+                                    T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
                                     S-->>R: PhieuNhapActionResponse và ETag mới
                                     R-->>C: 200, da_ghi_so_truoc_do=false
                                 end
@@ -405,11 +465,12 @@ Route cũ: mọi tài khoản A/Q/N hợp lệ được đọc, dùng PageParams
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client cũ
     participant R as Legacy router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/receiving
     R->>D: Kiểm tra JWT và tài khoản
@@ -438,11 +499,12 @@ Route cũ trả GoodsReceiptNoteResponse trực tiếp, không có meta/ETag. Gi
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client cũ
     participant R as Legacy router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/receiving/grn_id
     R->>D: Kiểm tra JWT và tài khoản
@@ -474,12 +536,14 @@ Route cũ vẫn cho A/Q/N, giữ mã do client cung cấp, `items` và response 
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor C as Client cũ
     participant R as Legacy router
     participant D as Auth dependencies
-    participant S as ReceivingService
-    participant P as ReceivingRepository
-    participant A as AuditRepository
+    participant S as PhieuNhapService
+    participant P as SqlAlchemyPhieuNhapRepository
+    participant A as AuditService
+    participant AR as SqlAlchemyAuditRepository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
     C->>R: POST /api/v1/receiving + body cũ
@@ -505,13 +569,23 @@ sequenceDiagram
                 P->>DB: INSERT phiếu và items
                 P-->>S: CreatedRecord và snapshot
                 S->>A: append audit tao
-                A->>DB: Đưa audit vào cùng session
+                A->>AR: append(entry)
+                break AuditService hoặc repository phát sinh lỗi trong append
+                    AR-->>A: Truyền lỗi nếu phát sinh ở repository
+                    A-->>S: Truyền exception về PhieuNhapService
+                    S->>T: __aexit__ với exception
+                    T->>DB: ROLLBACK toàn bộ transaction
+                    S-->>C: 500 an toàn qua exception handler
+                end
+                AR->>AR: session.add AuditTrailLog trong session chung
+                AR-->>A: Đã thêm vào session
+                A-->>S: Kết thúc append, không commit riêng
                 S->>T: Commit
-                alt Trùng mã, constraint, hết dải hoặc lỗi nội bộ
+                alt Lỗi flush hoặc commit
                     T->>DB: ROLLBACK
                     T-->>C: 409 hoặc 500
                 else Thành công
-                    T->>DB: COMMIT
+                    T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
                     R-->>C: 201 GoodsReceiptNoteResponse trực tiếp
                 end
             end

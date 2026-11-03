@@ -16,12 +16,13 @@ from app.dependencies import get_receiving_service
 from app.main import app
 from app.modules.audit.models import AuditTrailLog
 from app.modules.audit.repository import SqlAlchemyAuditRepository
+from app.modules.audit.service import AuditService
 from app.modules.catalog.models import Part
 from app.modules.inventory.models import StockLevel, StockMovement
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.phieu_nhap.models import GoodsReceiptNote, ReceiptItem
-from app.modules.phieu_nhap.repository import SqlAlchemyReceivingRepository
-from app.modules.phieu_nhap.service import ReceivingService
+from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
+from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.users.models import User
 from tests.test_auth_api import auth_context as auth_context
 from tests.test_auth_api import login
@@ -319,7 +320,7 @@ async def test_completion_failure_rolls_back_every_write(action_context, phase):
                 raise RuntimeError("private ledger failure")
             return result
 
-    class FailingRepository(SqlAlchemyReceivingRepository):
+    class FailingRepository(SqlAlchemyPhieuNhapRepository):
         async def mark_completed(self, record_id):
             result = await super().mark_completed(record_id)
             if phase == "status":
@@ -334,8 +335,11 @@ async def test_completion_failure_rolls_back_every_write(action_context, phase):
                 raise RuntimeError("private audit failure")
 
     def failing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
-            FailingRepository(db), FailingAudit(db), SqlAlchemyTransaction(db), FailingInventory(db)
+        return PhieuNhapService(
+            FailingRepository(db),
+            AuditService(FailingAudit(db)),
+            SqlAlchemyTransaction(db),
+            FailingInventory(db),
         )
 
     async with sessions() as db:
@@ -391,15 +395,15 @@ async def test_concurrent_actions_use_locked_version(concurrent_receipt_context,
     etag = created.headers["etag"]
     barrier = asyncio.Barrier(2)
 
-    class RacingRepository(SqlAlchemyReceivingRepository):
+    class RacingRepository(SqlAlchemyPhieuNhapRepository):
         async def lock_receipt(self, record_id):
             await asyncio.wait_for(barrier.wait(), 5)
             return await super().lock_receipt(record_id)
 
     def racing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
+        return PhieuNhapService(
             RacingRepository(db),
-            SqlAlchemyAuditRepository(db),
+            AuditService(SqlAlchemyAuditRepository(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )
@@ -443,15 +447,15 @@ async def test_distinct_receipts_concurrently_add_to_same_stock(concurrent_recei
     receipts = [await client.post(BASE, headers=headers, json=BODY) for _ in range(6)]
     barrier = asyncio.Barrier(6)
 
-    class RacingRepository(SqlAlchemyReceivingRepository):
+    class RacingRepository(SqlAlchemyPhieuNhapRepository):
         async def lock_receipt(self, record_id):
             await asyncio.wait_for(barrier.wait(), 5)
             return await super().lock_receipt(record_id)
 
     def racing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
+        return PhieuNhapService(
             RacingRepository(db),
-            SqlAlchemyAuditRepository(db),
+            AuditService(SqlAlchemyAuditRepository(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )
@@ -492,15 +496,15 @@ async def test_get_parent_and_items_are_one_consistent_version(
     read_children = asyncio.Event()
     write_pid = asyncio.get_running_loop().create_future()
 
-    class ObservedRepository(SqlAlchemyReceivingRepository):
+    class ObservedRepository(SqlAlchemyPhieuNhapRepository):
         async def lock_receipt(self, record_id):
             write_pid.set_result(await self.session.scalar(select(func.pg_backend_pid())))
             return await super().lock_receipt(record_id)
 
     def observed_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
+        return PhieuNhapService(
             ObservedRepository(db),
-            SqlAlchemyAuditRepository(db),
+            AuditService(SqlAlchemyAuditRepository(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )
@@ -561,9 +565,9 @@ async def test_draft_mutation_audit_failure_rolls_back(action_context, method):
             raise RuntimeError("private audit failure")
 
     def failing_service(db: Annotated[AsyncSession, Depends(get_db)]):
-        return ReceivingService(
-            SqlAlchemyReceivingRepository(db),
-            FailingAudit(db),
+        return PhieuNhapService(
+            SqlAlchemyPhieuNhapRepository(db),
+            AuditService(FailingAudit(db)),
             SqlAlchemyTransaction(db),
             SqlAlchemyInventoryRepository(db),
         )

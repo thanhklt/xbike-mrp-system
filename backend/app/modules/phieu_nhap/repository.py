@@ -26,7 +26,7 @@ from app.shared.pagination import PageParams
 from app.shared.records import CreatedRecord, RecordPage
 
 
-class SqlAlchemyReceivingRepository:
+class SqlAlchemyPhieuNhapRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 

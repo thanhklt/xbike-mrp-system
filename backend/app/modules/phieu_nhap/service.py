@@ -8,8 +8,8 @@ from pydantic import ValidationError
 
 from app.core.errors import ConflictException, NotFoundException
 from app.core.transactions import Transaction
-from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
+from app.modules.audit.service import AuditService
 from app.modules.inventory.ports import InventoryWriter, StockReceiptLine
 from app.modules.phieu_nhap.errors import (
     ReceiptDependencyInvalid,
@@ -36,11 +36,11 @@ from app.modules.users.schemas import ListResponseMeta, ResponseMeta
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
 
 
-class ReceivingService:
+class PhieuNhapService:
     def __init__(
         self,
         repository: ReceivingRepository,
-        audit: AuditWriter,
+        audit: AuditService,
         transaction: Transaction,
         inventory: InventoryWriter,
     ):

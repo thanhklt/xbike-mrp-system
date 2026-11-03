@@ -1,4 +1,4 @@
-"""Separate read and append contracts for the audit trail."""
+"""Audit persistence contract and write-only contract for audit clients."""
 
 from typing import Protocol
 
@@ -7,9 +7,9 @@ from app.shared.pagination import PageParams
 from app.shared.records import RecordPage
 
 
-class AuditRepository(Protocol):
-    async def list_entries(self, params: PageParams) -> RecordPage[AuditLogResponse]: ...
-
-
 class AuditWriter(Protocol):
     async def append(self, entry: CreationAudit) -> None: ...
+
+
+class AuditRepository(AuditWriter, Protocol):
+    async def list_entries(self, params: PageParams) -> RecordPage[AuditLogResponse]: ...
