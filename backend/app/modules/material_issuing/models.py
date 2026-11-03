@@ -48,13 +48,13 @@ class IssueNote(Base):
     yeu_cau_san_xuat_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
-            "yeu_cau_san_xuat.id", name="fk_phieu_xuat_yeu_cau_san_xuat_id", ondelete="RESTRICT"
+            "YeuCauSanXuat.id", name="fk_phieu_xuat_yeu_cau_san_xuat_id", ondelete="RESTRICT"
         ),
         nullable=True,
     )
     lenh_san_xuat_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("lenh_san_xuat.id", name="fk_phieu_xuat_lenh_san_xuat_id", ondelete="RESTRICT"),
+        ForeignKey("LenhSanXuat.id", name="fk_phieu_xuat_lenh_san_xuat_id", ondelete="RESTRICT"),
         nullable=True,
     )
     tong_tien: Mapped[int | None] = mapped_column(Integer, nullable=True)

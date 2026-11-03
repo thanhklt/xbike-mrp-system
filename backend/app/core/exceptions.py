@@ -46,6 +46,11 @@ ERROR_STATUS = {
     "bom_co_chu_trinh": 409,
     "thieu_bom": 409,
     "du_lieu_khong_hop_le": 422,
+    "trang_thai_khong_hop_le": 409,
+    "nguoi_duoc_giao_khong_hop_le": 409,
+    "ke_hoach_da_thay_doi": 409,
+    "phu_thuoc_khong_hop_le": 409,
+    "dang_duoc_tham_chieu": 409,
 }
 
 
@@ -61,6 +66,7 @@ def _uses_contract_envelope(request: Request) -> bool:
             "danh_muc_mat_hang",
             "nha_cung_cap",
             "bom",
+            "yeu_cau_san_xuat",
         )
     )
 

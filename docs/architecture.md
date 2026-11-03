@@ -57,7 +57,8 @@ The manufacturing lifecycle executes in distinct, auditable phases:
 | **`inventory`** | Real-time stock levels across bins, lots, and movement ledger. | `StockLevel`, `Warehouse`, `BinLocation`, `StockMovement` |
 | **`receiving`** | Inbound logistics, goods receipt notes (GRN), lot tracking. | `GoodsReceiptNote`, `ReceiptItem` |
 | **`material_issuing`** | Staging and issuance of required components for active work orders. | `MaterialIssueRequest`, `PickList`, `IssueItem` |
-| **`production`** | Production scheduling, routing, work stations, assembly steps. | `WorkOrder`, `ProductionRun`, `WorkStation` |
+| **`san_xuat`** | Production requests, deterministic planning, saved order trees and atomic cancellation. Nine request endpoints; order/completion endpoints remain future work. | `YeuCauSanXuat`, `LenhSanXuat`, `ChiTietLenhSanXuat`, `ChungTuHoanThanhSx` |
+| **`phieu_xuat`** | Internal issue totals and cancellation of unposted documents; caller owns the transaction. No endpoints yet. | `PhieuXuat`, `ChiTietPhieuXuat`, `PhieuXuatSanXuatService` |
 | **`finished_goods_issuing`** | Shipping / transferring completed bicycles to distribution. | `DispatchOrder`, `DispatchItem` |
 | **`reporting`** | MRP calculation engines, inventory valuation, scrap & lead-time analytics. | `MRPRunRecord`, `MaterialShortageReport` |
 | **`audit`** | Append/read history through its public service; SQL trigger rejects changes to persisted history. | `LichSuThaoTac`, `AuditService` |
@@ -65,6 +66,32 @@ The manufacturing lifecycle executes in distinct, auditable phases:
 ---
 
 ## 3. Database & Transactional Integrity
+
+### Production requests (03/11/2026)
+
+`san_xuat` serves the nine `/yeu_cau_san_xuat` endpoints from contract v3 §8. Its service
+uses persistence/employee/BOM/issue ports and the public `MatHangStockReader`; composition
+binds every adapter to the same session. `NhanVienService` validates the assignee, the
+item availability service reads stock directly from DB, and `BomPlanningReader` exposes
+the current graph and the shared BOM advisory lock. No stock cache drives planning.
+
+Preview consumes semi-finished stock across BFS branches without reserving it. Submission
+locks the request, validates If-Match, assignee and a ten-minute signed preview token,
+then saves parent-first orders and direct-demand snapshots. Material shortages produce
+`cho_bo_sung_vat_tu`; sufficient materials produce `da_gui`. Existing finished stock can
+satisfy the request without orders. Orders start as drafts with no assigned executor.
+
+Cancellation locks related documents, rejects posted dependencies and cancels children
+before parents. Draft issues/completions are deleted; pending ones become rejected with
+the reason in audit. Domain writes and audit commit together; none of these operations
+changes stock or ledger. Employee reads use FOR SHARE; item locks are ordered by ID;
+submission holds the same advisory transaction lock as BOM mutation.
+
+The six production/issue ORM tables match bootstrap, while other warehouse mappings remain
+legacy. Four `/production/work-orders` routes are removed. Frontend migration, order and
+completion APIs, issue APIs, and receipt-triggered material rechecks are separate tasks.
+See [sequences](sequence/san_xuat.md) and D-SX-01–19. Rollback must restore the related
+router/composition/model/FK changes together; it must preserve already-created documents.
 
 ### Auth, employee and audit boundary (30/10/2026)
 

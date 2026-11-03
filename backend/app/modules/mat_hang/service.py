@@ -102,14 +102,24 @@ class MatHangAvailabilityService:
         self.repository = repository
 
     async def require_active_items(self, item_ids: Iterable[int]) -> None:
+        await self.read_items(item_ids, lock=True)
+
+    async def read_items(self, item_ids: Iterable[int], *, lock: bool) -> list[MatHangRead]:
         requested = set(item_ids)
         if not requested:
-            return
-        records = await self.repository.lock_items(requested)
+            return []
+        if any(item_id > 2**31 - 1 for item_id in requested):
+            raise NotFoundException(message="Mặt hàng không tồn tại")
+        records = (
+            await self.repository.lock_items(requested)
+            if lock
+            else await self.repository.read_items(requested)
+        )
         if requested - {item.id for item in records}:
             raise NotFoundException(message="Một hoặc nhiều mặt hàng không tồn tại")
         if any(not item.is_active for item in records):
             raise InactiveMatHang()
+        return records
 
 
 class MatHangService:
