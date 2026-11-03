@@ -14,7 +14,7 @@ from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
-from app.modules.bom.service import BomService
+from app.modules.bom.service import BomPlanningReader, BomService
 from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGoodsIssuingRepository
 from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
@@ -28,12 +28,14 @@ from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
 from app.modules.nha_cung_cap.service import SupplierService
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
 from app.modules.nhan_vien.service import NhanVienService
-from app.modules.production.repository import SqlAlchemyProductionRepository
-from app.modules.production.service import ProductionService
+from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
+from app.modules.phieu_xuat.service import PhieuXuatSanXuatService
 from app.modules.receiving.repository import SqlAlchemyReceivingRepository
 from app.modules.receiving.service import ReceivingService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
+from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
+from app.modules.san_xuat.service import YeuCauSanXuatService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -161,12 +163,19 @@ def get_finished_goods_issuing_service(
     )
 
 
-def get_production_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ProductionService:
-    return ProductionService(
-        SqlAlchemyProductionRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
+def get_yeu_cau_san_xuat_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> YeuCauSanXuatService:
+    audit = AuditService(SqlAlchemyAuditRepository(db))
+    transaction = SqlAlchemyTransaction(db)
+    return YeuCauSanXuatService(
+        SqlAlchemyYeuCauSanXuatRepository(db),
+        audit,
+        transaction,
         get_mat_hang_availability(db),
+        NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
+        BomPlanningReader(SqlAlchemyBomRepository(db)),
+        PhieuXuatSanXuatService(SqlAlchemyPhieuXuatRepository(db), audit),
     )
 
 

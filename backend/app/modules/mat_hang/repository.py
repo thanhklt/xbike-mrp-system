@@ -84,6 +84,15 @@ class SqlAlchemyMatHangRepository:
         await self.session.flush()
         return MatHangRead.model_validate(record)
 
+    async def read_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:
+        records = await self.session.scalars(
+            select(MatHang)
+            .where(MatHang.id.in_(sorted(set(item_ids))))
+            .order_by(MatHang.id)
+            .execution_options(populate_existing=True)
+        )
+        return [MatHangRead.model_validate(record) for record in records]
+
     async def lock_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:
         records = await self.session.scalars(
             select(MatHang)

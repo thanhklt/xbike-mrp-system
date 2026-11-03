@@ -1,9 +1,80 @@
 import os
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
+
+
+@pytest.fixture
+def production_request_factory():
+    from app.modules.san_xuat.schemas import YeuCauRead
+
+    def make_request(**changes):
+        values = dict(
+            id=101,
+            ma_yeu_cau_san_xuat="YCSX-202611-000101",
+            mat_hang_id=1,
+            so_luong=10,
+            nhan_vien_id=2,
+            nhan_vien_duoc_giao_id=3,
+            trang_thai="nhap",
+            created_at=datetime(2026, 11, 3, tzinfo=timezone.utc),
+            completed_at=None,
+            so_luong_con_phai_xuat=10,
+        )
+        return YeuCauRead(**(values | changes))
+
+    return make_request
+
+
+@pytest.fixture
+def production_harness(production_request_factory, item_factory):
+    from app.modules.san_xuat.service import YeuCauSanXuatService
+
+    harness = SimpleNamespace(
+        current=production_request_factory(),
+        orders=[],
+        repository=AsyncMock(),
+        audit=AsyncMock(),
+        transaction=AsyncMock(),
+        items=AsyncMock(),
+        employees=AsyncMock(),
+        boms=AsyncMock(),
+        issues=AsyncMock(),
+    )
+    harness.repository.get_by_id.side_effect = lambda resource_id: harness.current
+    harness.repository.get_for_update.side_effect = lambda resource_id: harness.current
+    harness.repository.has_dependencies.return_value = False
+    harness.repository.lenh_cua_yeu_cau.side_effect = lambda *args, **kwargs: harness.orders
+    harness.repository.add_lenh_tree.side_effect = lambda *args: harness.orders
+    harness.repository.chung_tu_hoan_thanh_cua_lenh.return_value = []
+    harness.issues.tong_da_xuat_thanh_pham.return_value = {}
+    harness.issues.co_phieu_da_ghi_so.return_value = False
+    harness.boms.active_graph.return_value = {}
+    harness.items.read_items.return_value = [
+        item_factory(1, loai_mat_hang="thanh_pham", so_luong_ton=20)
+    ]
+
+    async def update_request(resource_id, changes):
+        harness.current = harness.current.model_copy(update=changes)
+        return harness.current
+
+    harness.repository.update.side_effect = update_request
+    harness.repository.add.side_effect = lambda *args: harness.current
+    harness.service = YeuCauSanXuatService(
+        harness.repository,
+        harness.audit,
+        harness.transaction,
+        harness.items,
+        harness.employees,
+        harness.boms,
+        harness.issues,
+    )
+    return harness
 
 
 @pytest.fixture

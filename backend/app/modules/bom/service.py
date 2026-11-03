@@ -64,6 +64,19 @@ def _tree_node(
     )
 
 
+class BomPlanningReader:
+    """Read the current graph, serializing plan submission with BOM mutations."""
+
+    def __init__(self, repository: BomRepository):
+        self.repository = repository
+
+    async def lock_graph(self) -> None:
+        await self.repository.lock_bom_graph()
+
+    async def active_graph(self) -> dict[int, ActiveBom]:
+        return await self.repository.load_active_graph()
+
+
 class BomService:
     def __init__(
         self,

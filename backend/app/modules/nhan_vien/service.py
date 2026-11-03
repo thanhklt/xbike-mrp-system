@@ -9,6 +9,7 @@ from app.core.errors import (
     ConflictException,
     ForbiddenException,
     InactiveAccountException,
+    InvalidAssignee,
     InvalidCredentialsException,
     NotFoundException,
     PreconditionFailedException,
@@ -91,6 +92,17 @@ class NhanVienService:
         self.repository = repository
         self.audit = audit
         self.transaction = transaction
+
+    async def kiem_tra_nguoi_duoc_giao(self, employee_id: int, *, lock: bool) -> None:
+        employee = (
+            await self.repository.get_for_share(employee_id)
+            if lock
+            else await self.repository.get_by_id(employee_id)
+        )
+        if employee is None:
+            raise NotFoundException(message="Nhân viên không tồn tại")
+        if employee.trang_thai != "hoat_dong" or employee.ma_vai_tro != "nhan_vien":
+            raise InvalidAssignee()
 
     async def authenticate_employee(
         self, identifier: str, password: str, *, allow_email: bool = False

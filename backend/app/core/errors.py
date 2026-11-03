@@ -53,6 +53,31 @@ class MissingBomException(ConflictException):
     default_message = "Bán thành phẩm chưa có BOM hiện hành"
 
 
+class InvalidWorkflowState(ConflictException):
+    code = "trang_thai_khong_hop_le"
+    default_message = "Trạng thái không cho phép thao tác này"
+
+
+class InvalidAssignee(ConflictException):
+    code = "nguoi_duoc_giao_khong_hop_le"
+    default_message = "Người phụ trách phải là nhân viên đang hoạt động"
+
+
+class ChangedProductionPlan(ConflictException):
+    code = "ke_hoach_da_thay_doi"
+    default_message = "Kế hoạch đã thay đổi hoặc hết hạn; hãy tính lại kế hoạch"
+
+
+class PostedProductionDependency(ConflictException):
+    code = "phu_thuoc_khong_hop_le"
+    default_message = "Yêu cầu đã có chứng từ ghi sổ"
+
+
+class ReferencedResource(ConflictException):
+    code = "dang_duoc_tham_chieu"
+    default_message = "Đối tượng đang được tham chiếu"
+
+
 class InvalidInputException(AppException):
     code = "du_lieu_khong_hop_le"
     default_message = "Dữ liệu không hợp lệ"

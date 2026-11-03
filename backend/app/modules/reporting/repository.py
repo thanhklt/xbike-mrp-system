@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.mat_hang.models import MatHang
 from app.modules.material_issuing.models import IssueNote
-from app.modules.production.models import WorkOrder
+from app.modules.san_xuat.models import LenhSanXuat
 
 
 class SqlAlchemyReportingRepository:
@@ -18,8 +18,8 @@ class SqlAlchemyReportingRepository:
         return (
             await self.session.scalar(
                 select(func.count())
-                .select_from(WorkOrder)
-                .where(WorkOrder.trang_thai.in_(["da_gui", "dang_thuc_hien"]))
+                .select_from(LenhSanXuat)
+                .where(LenhSanXuat.trang_thai.in_(["da_gui", "dang_thuc_hien"]))
             )
             or 0
         )

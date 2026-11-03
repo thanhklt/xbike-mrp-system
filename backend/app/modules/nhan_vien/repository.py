@@ -68,6 +68,17 @@ class SqlAlchemyNhanVienRepository:
         user = await self.session.scalar(select(NhanVien).where(NhanVien.id == employee_id))
         return employee_record(user) if user is not None else None
 
+    async def get_for_share(self, employee_id: int) -> EmployeeRecord | None:
+        if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
+            return None
+        user = await self.session.scalar(
+            select(NhanVien)
+            .where(NhanVien.id == employee_id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
+        return employee_record(user) if user is not None else None
+
     async def find_by_username(self, identifier: str) -> EmployeeCredentials | None:
         user = await self.session.scalar(
             select(NhanVien).where(NhanVien.ten_dang_nhap == identifier)
