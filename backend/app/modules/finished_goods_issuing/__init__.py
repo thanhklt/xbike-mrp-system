@@ -1,1 +1,0 @@
-"""Finished goods issuing domain."""
