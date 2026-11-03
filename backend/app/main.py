@@ -12,6 +12,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
 from app.modules.finished_goods_issuing.router import router as finished_goods_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.lenh_san_xuat.router import router as lenh_san_xuat_router
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
 from app.modules.mat_hang.synchronizer import create_synchronizer
@@ -109,3 +110,5 @@ app.include_router(production_router, prefix=api_v1_prefix)
 app.include_router(finished_goods_router, prefix=api_v1_prefix)
 app.include_router(reporting_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)
+
+app.include_router(lenh_san_xuat_router, prefix=api_v1_prefix)

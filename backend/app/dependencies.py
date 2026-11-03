@@ -19,6 +19,8 @@ from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGood
 from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
+from app.modules.lenh_san_xuat.repository import SqlAlchemyLenhSanXuatRepository
+from app.modules.lenh_san_xuat.service import LenhSanXuatService
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
@@ -175,3 +177,11 @@ def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Inven
 
 def get_reporting_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReportingService:
     return ReportingService(SqlAlchemyReportingRepository(db))
+
+
+def get_lenh_san_xuat_service(db: Annotated[AsyncSession, Depends(get_db)]) -> LenhSanXuatService:
+    return LenhSanXuatService(
+        SqlAlchemyLenhSanXuatRepository(db),
+        SqlAlchemyAuditRepository(db),
+        SqlAlchemyTransaction(db),
+    )
