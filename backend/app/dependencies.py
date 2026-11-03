@@ -36,6 +36,8 @@ from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
 from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
 from app.modules.san_xuat.service import YeuCauSanXuatService
+from app.modules.ticket_dieu_chinh.repository import SqlAlchemyTicketDieuChinhRepository
+from app.modules.ticket_dieu_chinh.service import TicketDieuChinhService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -188,3 +190,12 @@ def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Inven
 
 def get_reporting_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReportingService:
     return ReportingService(SqlAlchemyReportingRepository(db))
+
+
+def get_ticket_dieu_chinh_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> TicketDieuChinhService:
+    return TicketDieuChinhService(
+        SqlAlchemyTicketDieuChinhRepository(db), audit, SqlAlchemyTransaction(db)
+    )

@@ -10,3 +10,4 @@ from app.modules.nhan_vien import models as nhan_vien_models  # noqa: F401
 from app.modules.phieu_nhap import models as phieu_nhap_models  # noqa: F401
 from app.modules.phieu_xuat import models as phieu_xuat_models  # noqa: F401
 from app.modules.san_xuat import models as san_xuat_models  # noqa: F401
+from app.modules.ticket_dieu_chinh import models as ticket_dieu_chinh_models  # noqa: F401
