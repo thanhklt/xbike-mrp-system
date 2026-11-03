@@ -67,6 +67,7 @@ def _uses_contract_envelope(request: Request) -> bool:
             "nha_cung_cap",
             "bom",
             "yeu_cau_san_xuat",
+            "phieu_nhap",
         )
     )
 

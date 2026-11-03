@@ -28,10 +28,10 @@ from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
 from app.modules.nha_cung_cap.service import SupplierService
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
 from app.modules.nhan_vien.service import NhanVienService
+from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
+from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatSanXuatService
-from app.modules.receiving.repository import SqlAlchemyReceivingRepository
-from app.modules.receiving.service import ReceivingService
 from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
 from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
@@ -132,12 +132,15 @@ def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
     )
 
 
-def get_receiving_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReceivingService:
-    return ReceivingService(
-        SqlAlchemyReceivingRepository(db),
-        SqlAlchemyAuditRepository(db),
+def get_receiving_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> PhieuNhapService:
+    return PhieuNhapService(
+        SqlAlchemyPhieuNhapRepository(db),
+        audit,
         SqlAlchemyTransaction(db),
-        get_mat_hang_availability(db),
+        SqlAlchemyInventoryRepository(db),
     )
 
 

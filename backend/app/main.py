@@ -19,7 +19,7 @@ from app.modules.material_issuing.router import router as material_issuing_route
 from app.modules.nha_cung_cap.router import router as nha_cung_cap_router
 from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
-from app.modules.receiving.router import router as receiving_router
+from app.modules.phieu_nhap.router import router as phieu_nhap_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.san_xuat.router import router as san_xuat_router
 
@@ -71,6 +71,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/", tags=["Root"])
+async def notify():
+    return "Run successfully"
 
 # Root Health check endpoints
 @app.get("/health", tags=["Health"])
@@ -103,7 +106,7 @@ app.include_router(nha_cung_cap_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
-app.include_router(receiving_router, prefix=api_v1_prefix)
+app.include_router(phieu_nhap_router, prefix=api_v1_prefix)
 app.include_router(material_issuing_router, prefix=api_v1_prefix)
 app.include_router(san_xuat_router, prefix=api_v1_prefix)
 app.include_router(finished_goods_router, prefix=api_v1_prefix)

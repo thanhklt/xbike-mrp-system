@@ -186,7 +186,7 @@ class StockMovement(Base):
     chi_tiet_phieu_nhap_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey(
-            "chi_tiet_phieu_nhap.id",
+            "ChiTietPhieuNhap.id",
             name="fk_giao_dich_kho_chi_tiet_phieu_nhap_id",
             ondelete="RESTRICT",
         ),
