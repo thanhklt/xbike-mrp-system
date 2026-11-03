@@ -138,7 +138,7 @@ INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien
   (11, 16, 'nhap_vat_tu', 20, 11, 2, '2026-10-22 09:00:00+07'),
   (12, 17, 'nhap_vat_tu', 1000, 12, 2, '2026-10-22 09:00:00+07');
 
--- Quản lý tự xác nhận điều chỉnh nan hoa: 1000 -> 980 (-20), rồi 980 -> 985 (+5).
+-- Quản lý duyệt điều chỉnh nan hoa: 1000 -> 980 (-20), rồi 980 -> 985 (+5).
 
 INSERT INTO public."PhieuDieuChinhKho" (id, ma_phieu, phieu_nhap_id, nhan_vien_id, ly_do, trang_thai, created_at) VALUES
   (1, 'DCK-202610-000001', 1, 2, 'Đối chiếu số nan hoa thực nhập với chứng từ nhà cung cấp.', 'nhap', '2026-10-22 09:10:00+07');
@@ -146,7 +146,7 @@ INSERT INTO public."PhieuDieuChinhKho" (id, ma_phieu, phieu_nhap_id, nhan_vien_i
 INSERT INTO public."ChiTietPhieuDieuChinhKho" (id, phieu_dieu_chinh_kho_id, mat_hang_id, giao_dich_goc_id, so_luong_hieu_luc_truoc, so_luong_dung, so_luong_bien_dong) VALUES
   (1, 1, 17, 12, 1000, 980, -20);
 
-UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_xac_nhan',confirmed_at='2026-10-22 09:10:30+07' WHERE id=1;
+UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_duyet',confirmed_at='2026-10-22 09:10:30+07' WHERE id=1;
 
 INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_dieu_chinh_id, nhan_vien_id, posted_at) VALUES
   (13, 17, 'dieu_chinh_ton_kho', -20, 1, 2, '2026-10-22 09:10:30+07');
@@ -157,7 +157,7 @@ INSERT INTO public."PhieuDieuChinhKho" (id, ma_phieu, phieu_nhap_id, nhan_vien_i
 INSERT INTO public."ChiTietPhieuDieuChinhKho" (id, phieu_dieu_chinh_kho_id, mat_hang_id, giao_dich_goc_id, so_luong_hieu_luc_truoc, so_luong_dung, so_luong_bien_dong) VALUES
   (2, 2, 17, 12, 980, 985, 5);
 
-UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_xac_nhan',confirmed_at='2026-10-22 09:20:30+07' WHERE id=2;
+UPDATE public."PhieuDieuChinhKho" SET trang_thai='da_duyet',confirmed_at='2026-10-22 09:20:30+07' WHERE id=2;
 
 INSERT INTO public."GiaoDichKho" (id, mat_hang_id, loai_giao_dich, so_luong_bien_dong, chi_tiet_phieu_dieu_chinh_id, nhan_vien_id, posted_at) VALUES
   (14, 17, 'dieu_chinh_ton_kho', 5, 2, 2, '2026-10-22 09:20:30+07');
@@ -252,8 +252,8 @@ WHERE m.id=totals.id;
 INSERT INTO public."LichSuThaoTac" (id, nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, du_lieu_truoc, du_lieu_sau, ly_do, created_at) VALUES
   (1, 2, 'phieu_nhap', 1, 'hoan_tat', '{"trang_thai": "nhap"}', '{"trang_thai": "hoan_thanh", "so_dong": 12}', 'Quản lý tự xác nhận nhập.', '2026-10-22 09:00:00+07'),
   (2, 2, 'phieu_nhap', 2, 'tao', NULL, '{"trang_thai": "nhap"}', 'Phiếu nháp không ghi kho.', '2026-10-22 08:35:00+07'),
-  (3, 2, 'phieu_dieu_chinh_kho', 1, 'xac_nhan', '{"trang_thai": "nhap", "so_luong_hieu_luc": 1000}', '{"trang_thai": "da_xac_nhan", "so_luong_dung": 980, "chenh_lech": -20}', 'Xác nhận trực tiếp, không duyệt độc lập.', '2026-10-22 09:10:30+07'),
-  (4, 2, 'phieu_dieu_chinh_kho', 2, 'xac_nhan', '{"trang_thai": "nhap", "so_luong_hieu_luc": 980}', '{"trang_thai": "da_xac_nhan", "so_luong_dung": 985, "chenh_lech": 5}', 'Xác nhận trực tiếp, không duyệt độc lập.', '2026-10-22 09:20:30+07'),
+  (3, 2, 'phieu_dieu_chinh_kho', 1, 'duyet', '{"trang_thai": "nhap", "so_luong_hieu_luc": 1000}', '{"trang_thai": "da_duyet", "so_luong_dung": 980, "chenh_lech": -20}', 'Duyệt phiếu điều chỉnh.', '2026-10-22 09:10:30+07'),
+  (4, 2, 'phieu_dieu_chinh_kho', 2, 'duyet', '{"trang_thai": "nhap", "so_luong_hieu_luc": 980}', '{"trang_thai": "da_duyet", "so_luong_dung": 985, "chenh_lech": 5}', 'Duyệt phiếu điều chỉnh.', '2026-10-22 09:20:30+07'),
   (5, 2, 'yeu_cau_san_xuat', 1, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nguoi_phu_trach": 3}', 'Giao nhân viên phụ trách.', '2026-10-22 09:25:00+07'),
   (6, 2, 'yeu_cau_san_xuat', 2, 'gui', '{"trang_thai": "nhap"}', '{"trang_thai": "da_gui", "nguoi_phu_trach": 3}', 'Giao nhân viên phụ trách.', '2026-10-22 09:30:00+07'),
   (7, 2, 'yeu_cau_san_xuat', 2, 'sua', '{"trang_thai": "da_gui"}', '{"trang_thai": "cho_bo_sung_vat_tu"}', 'Thiếu vật tư; giữ yêu cầu và lệnh hiện có.', '2026-10-22 09:33:00+07'),

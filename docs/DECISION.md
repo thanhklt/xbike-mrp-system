@@ -118,3 +118,8 @@ Enum `thao_tac` trong init.sql không có `kich_hoat` hay `xoa`, nên dùng các
 - Kiểm tra bằng `EXISTS`, không lọc theo trạng thái lệnh sản xuất. Chỉ cần có lệnh gắn với đúng version BOM đó là được xem là đã sử dụng.
 - Đây là trường tính toán của response, không phải cột lưu trong bảng `"Bom"` và không phụ thuộc `is_active` của BOM.
 - Nguồn đối chiếu: dev xác nhận ngày 02/11/2026 và truy vấn `_used` trong `backend/app/modules/bom/repository.py`.
+
+
+## Điều chỉnh kho — 03/11/2026
+
+Dev chốt giữ API-073–081, module dieu_chinh_kho, chỉ quan_ly. Payload nhận phieu_nhap_id, ly_do và chi_tiet(giao_dich_goc_id,so_luong_dung). Ticket độc lập theo v3.1, không FK tới phiếu điều chỉnh; phiếu loi bất biến. /tu_choi chỉ cho_duyet, /ve_nhap chỉ tu_choi. Bootstrap dùng nhap/cho_duyet/da_duyet/tu_choi/loi; confirmed_at chỉ có khi da_duyet. Không migration hoặc cập nhật database hiện hữu. Xem docs/sequence/dieu_chinh_kho.md về transaction và phục hồi ticket.

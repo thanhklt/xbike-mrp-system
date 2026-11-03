@@ -215,9 +215,9 @@ CREATE TABLE "PhieuDieuChinhKho" (
   "trang_thai" varchar NOT NULL DEFAULT 'nhap',
   "created_at" timestamptz NOT NULL DEFAULT (now()),
   "confirmed_at" timestamptz,
-  CONSTRAINT "ck_phieu_dieu_chinh_kho_trang_thai" CHECK (trang_thai IN ('nhap', 'da_xac_nhan', 'loi')),
+  CONSTRAINT "ck_phieu_dieu_chinh_kho_trang_thai" CHECK (trang_thai IN ('nhap', 'cho_duyet', 'da_duyet', 'tu_choi', 'loi')),
   CONSTRAINT "ck_dieu_chinh_ly_do" CHECK (btrim(ly_do) <> ''),
-  CONSTRAINT "ck_dieu_chinh_xac_nhan" CHECK ((trang_thai = 'da_xac_nhan' AND confirmed_at IS NOT NULL AND confirmed_at >= created_at) OR (trang_thai <> 'da_xac_nhan' AND confirmed_at IS NULL)),
+  CONSTRAINT "ck_dieu_chinh_xac_nhan" CHECK ((trang_thai = 'da_duyet' AND confirmed_at IS NOT NULL AND confirmed_at >= created_at) OR (trang_thai <> 'da_duyet' AND confirmed_at IS NULL)),
   CONSTRAINT "ck_phieu_dieu_chinh_kho_ma" CHECK (ma_phieu ~ '^DCK-[0-9]{4}(0[1-9]|1[0-2])-[0-9]{6}$' AND right(ma_phieu, 6) <> '000000')
 );
 
@@ -465,12 +465,13 @@ COMMENT ON COLUMN "ChungTuHoanThanhSx"."trang_thai" IS 'Miền giá trị: nhap 
 COMMENT ON COLUMN "ChungTuHoanThanhSx"."finish_time" IS 'Thời điểm sản xuất hoàn thành do nhân viên khai báo; không phải thời điểm cộng kho.';
 
 COMMENT ON TABLE "PhieuDieuChinhKho" IS 'Chỉ sửa số lượng phiếu nhập NVL/linh kiện đã hoan_thanh; mỗi phiếu sửa một phiếu nhập.
-Quản lý tự xác nhận: nhap -> da_xac_nhan; không có cho_duyet/duyệt độc lập.
+Quản lý tạo nháp, gửi và duyệt: nhap -> cho_duyet -> da_duyet.
+Từ chối: cho_duyet -> tu_choi; về nháp: tu_choi -> nhap. Phiếu loi bất biến.
 Mọi dòng cùng hợp lệ mới ghi sổ toàn phiếu, cập nhật tồn và audit cùng transaction.
 Nếu không hợp lệ: rollback toàn bộ thay đổi kho; lưu ticket bằng transaction riêng.
 Có thể lưu bản thử thất bại ở loi; không sửa/retry bản loi, tạo phiếu mới độc lập.
 Ticket không có FK tới phiếu điều chỉnh, không tự đóng khi phiếu mới thành công.
-da_xac_nhan: bất biến. Lặp xác nhận trả kết quả cũ; không ghi sổ hoặc tạo ticket lại.
+da_duyet: bất biến. Lặp duyệt trả kết quả cũ; không ghi sổ hoặc tạo ticket lại.
 confirmed_at chỉ có khi xác nhận thành công; audit lưu người và thời điểm thao tác.
 Khóa phiếu nhập nguồn, phiếu điều chỉnh và tồn theo thứ tự thống nhất trước khi
 tính lại lượng hiệu lực, kiểm tra tồn, xác nhận và ghi sổ; không dùng số liệu preview cũ.
@@ -480,7 +481,7 @@ không báo đã tạo ticket nếu chưa lưu thành công.
 
 COMMENT ON COLUMN "PhieuDieuChinhKho"."ma_phieu" IS 'Định dạng: DCK-YYYYMM-NNNNNN; sinh một lần, không tái sử dụng.';
 
-COMMENT ON COLUMN "PhieuDieuChinhKho"."trang_thai" IS 'nhap / da_xac_nhan / loi';
+COMMENT ON COLUMN "PhieuDieuChinhKho"."trang_thai" IS 'nhap / cho_duyet / da_duyet / tu_choi / loi';
 
 COMMENT ON TABLE "ChiTietPhieuDieuChinhKho" IS 'Giao dịch gốc bắt buộc là nhap_vat_tu của phiếu nhập ở header, cùng mặt hàng.
 Không điều chỉnh kiểm kê, xuất kho hoặc hoàn thành sản xuất.
@@ -519,7 +520,7 @@ nhap_vat_tu / nhap_san_pham_san_xuat: dương.
 xuat_vat_tu / xuat_thanh_pham: âm.
 dieu_chinh_ton_kho: có thể dương hoặc âm, nguồn là dòng điều chỉnh.
 UNIQUE FK nguồn ngăn ghi sổ cùng một dòng/đợt hai lần.
-Chỉ ghi khi nhập hoan_thanh, xuất/hoàn thành da_duyet hoặc điều chỉnh da_xac_nhan.
+Chỉ ghi khi nhập hoan_thanh, xuất/hoàn thành da_duyet hoặc điều chỉnh da_duyet.
 Ghi giao dịch, cập nhật tồn, trạng thái và audit cùng transaction.
 Không sửa/xóa giao dịch đã ghi sổ.
 Lượng hiệu lực của giao dịch nguồn = lượng gốc + tổng điều chỉnh đã ghi sổ trỏ nguồn.
@@ -669,7 +670,7 @@ BEGIN
     SELECT c.mat_hang_id,c.so_luong_bien_dong,p.trang_thai INTO v_mat_hang,v_luong,v_trang_thai
     FROM "ChiTietPhieuDieuChinhKho" c JOIN "PhieuDieuChinhKho" p ON p.id=c.phieu_dieu_chinh_kho_id
     WHERE c.id=NEW.chi_tiet_phieu_dieu_chinh_id;
-    IF v_trang_thai IS DISTINCT FROM 'da_xac_nhan' THEN
+    IF v_trang_thai IS DISTINCT FROM 'da_duyet' THEN
       RAISE EXCEPTION 'Phiếu điều chỉnh chưa xác nhận'; END IF;
   ELSE RAISE EXCEPTION 'Giao dịch thiếu chứng từ nguồn';
   END CASE;
@@ -744,7 +745,7 @@ FOR EACH ROW EXECUTE FUNCTION bao_ve_chung_tu('da_duyet');
 CREATE TRIGGER trg_hoan_thanh_bat_bien BEFORE UPDATE OR DELETE ON "ChungTuHoanThanhSx"
 FOR EACH ROW EXECUTE FUNCTION bao_ve_chung_tu('da_duyet');
 CREATE TRIGGER trg_dieu_chinh_bat_bien BEFORE UPDATE OR DELETE ON "PhieuDieuChinhKho"
-FOR EACH ROW EXECUTE FUNCTION bao_ve_chung_tu('da_xac_nhan,loi');
+FOR EACH ROW EXECUTE FUNCTION bao_ve_chung_tu('da_duyet,loi');
 
 -- Chặn thêm, sửa hoặc chuyển dòng ra/vào một chứng từ đã chốt.
 CREATE FUNCTION bao_ve_dong_chung_tu() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -765,7 +766,7 @@ FOR EACH ROW EXECUTE FUNCTION bao_ve_dong_chung_tu('PhieuNhap','phieu_nhap_id','
 CREATE TRIGGER trg_dong_xuat_bat_bien BEFORE INSERT OR UPDATE OR DELETE ON "ChiTietPhieuXuat"
 FOR EACH ROW EXECUTE FUNCTION bao_ve_dong_chung_tu('PhieuXuat','phieu_xuat_id','da_duyet');
 CREATE TRIGGER trg_dong_dieu_chinh_bat_bien BEFORE INSERT OR UPDATE OR DELETE ON "ChiTietPhieuDieuChinhKho"
-FOR EACH ROW EXECUTE FUNCTION bao_ve_dong_chung_tu('PhieuDieuChinhKho','phieu_dieu_chinh_kho_id','da_xac_nhan,loi');
+FOR EACH ROW EXECUTE FUNCTION bao_ve_dong_chung_tu('PhieuDieuChinhKho','phieu_dieu_chinh_kho_id','da_duyet,loi');
 
 CREATE FUNCTION bao_ve_bom_da_dung() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE v_old int; v_new int;
