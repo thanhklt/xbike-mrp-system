@@ -306,3 +306,28 @@ Giới hạn/hoàn tác: không migration hoặc cập nhật schema DB đang ch
 code, hoàn tác cùng router, composition, ORM/FK, reporting và tài liệu; không xóa dữ liệu
 sản xuất đã tạo để ép code cũ chạy. Frontend chuyển route và các endpoint lệnh/hoàn
 thành/phiếu xuất thuộc tác vụ sau. Các module legacy còn lệch schema được giữ nguyên.
+
+## Module điều chỉnh kho (chốt ngày 04/11/2026)
+
+Nguồn: `docs/api_contract_v3.md` v3.0.0 §2.2, §2.5, §12, §14 (đã đối chiếu bản
+trong thư mục Google Drive project); `infra/postgres/init.sql`, bảng
+`PhieuDieuChinhKho`, `ChiTietPhieuDieuChinhKho`, `TicketLoiDieuChinh`,
+`ChiTietTicketLoiDieuChinh`, cùng trigger kiểm tra nguồn và bảo vệ chứng từ.
+Kế hoạch: `.handoff/plan-dieu-chinh-kho.md`.
+
+| Mã | Quyết định |
+|---|---|
+| D-DCK-01 | Một module `dieu_chinh_kho` gồm phiếu và ticket, đổi tên từ `ticket_dieu_chinh`. Ticket chỉ sinh từ xác nhận thất bại và cần chung transaction ghi nhận lỗi. Giữ nguyên bốn endpoint ticket. |
+| D-DCK-02 | Theo v3 và bootstrap hiện tại: `nhap → da_xac_nhan` hoặc `loi`; chỉ action `xac_nhan`. Không lấy luồng gửi/duyệt/từ chối/về nháp hay SQL của branch `feature/dieu-chinh-kho`. Không sửa `init.sql`/`seed.sql`, không migration. |
+| D-DCK-03 | Chỉ xác nhận thất bại do thiếu tồn mới rollback kho rồi dùng transaction riêng chuyển phiếu sang `loi`, tạo một ticket mới chụp mọi dòng (kể cả hợp lệ), ghi audit `ghi_nhan_loi` cho phiếu và ticket. Tạo/sửa phiếu không sinh ticket. Nguồn sai, lượng tính lại bằng 0, trạng thái, ETag, tràn INT32, lệch ledger và lỗi DB không tạo ticket. |
+| D-DCK-04 | Không kiểm tra `MatHang.is_active`: điều chỉnh sửa số liệu phiếu nhập đã hoàn thành. Không áp dụng ngoại lệ này cho nghiệp vụ mới khác. |
+| D-DCK-05 | GET danh sách/chi tiết phiếu dùng `REPEATABLE READ READ ONLY`, không khóa. Rollback transaction đọc auth trước, rồi chạy `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY` làm câu đầu transaction resource. Danh sách đọc mọi dòng của cả trang bằng một truy vấn. Bốn endpoint ticket giữ cách đọc hiện tại. |
+| D-DCK-06 | Lỗi DB không tạo ticket bù, không lưu sự cố bền vững hay hàng đợi file (QĐ-0311 thay comment SQL). Chỉ trả `ticket_da_luu=true` sau khi transaction 2 đã commit. Nếu transaction 2 lỗi thì rollback cả trạng thái `loi`, ticket và audit. |
+| D-DCK-07 | Replay `xac_nhan` khi đã `da_xac_nhan` trả resource và ledger cũ với `da_ghi_so_truoc_do=true` trước kiểm tra If-Match; không ghi audit/giao dịch mới. Nếu trạng thái thay đổi giữa hai transaction thì kiểm tra lại; đã xác nhận trả replay, không còn nháp trả 409, PATCH xen giữa đổi ETag trả 412. |
+| D-DCK-08 | Mã DCK/TKDC có phần số bằng ID, cấp `nextval` trước INSERT, tháng Asia/Ho_Chi_Minh; quá sáu chữ số trả 409. Đồng bộ D-SX-05, không tái sử dụng mã đã cấp. |
+| D-DCK-09 | Khóa nguồn PhieuNhap trước, phiếu điều chỉnh sau, rồi MatHang theo ID tăng dần. Tạo/PATCH/DELETE giữ `FOR SHARE` trên nguồn; xác nhận giữ `FOR UPDATE`. Không advisory lock toàn cục. InventoryWriter sở hữu ghi tồn/ledger trong transaction do service điều chỉnh quản lý. |
+
+Giới hạn/hoàn tác: chỉ thay code và tài liệu, chưa cập nhật database ứng dụng.
+Hoàn tác phải đồng bộ module, import/wiring, InventoryWriter, envelope và tài liệu;
+giữ nguyên các chứng từ, ticket và ledger đã ghi. Không sửa/xóa dữ liệu nghiệp vụ
+để chạy code cũ. ORM ledger legacy và endpoint chi tiết giao dịch kho thuộc tác vụ sau.

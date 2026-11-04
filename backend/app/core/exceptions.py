@@ -51,6 +51,7 @@ ERROR_STATUS = {
     "ke_hoach_da_thay_doi": 409,
     "phu_thuoc_khong_hop_le": 409,
     "dang_duoc_tham_chieu": 409,
+    "dieu_chinh_khong_hop_le": 409,
 }
 
 
@@ -69,12 +70,13 @@ def _uses_contract_envelope(request: Request) -> bool:
             "yeu_cau_san_xuat",
             "phieu_nhap",
             "ticket_loi_dieu_chinh",
+            "phieu_dieu_chinh_kho",
         )
     )
 
 
 def _contract_error(
-    request: Request, status: int, code: str, message: str, details: list
+    request: Request, status: int, code: str, message: str, details: list, extra: dict | None = None
 ) -> JSONResponse:
     headers = {"Cache-Control": "no-store", "Pragma": "no-cache"}
     if status == 401:
@@ -83,7 +85,7 @@ def _contract_error(
         status_code=status,
         headers=headers,
         content={
-            "error": {"code": code, "message": message, "details": details},
+            "error": {"code": code, "message": message, "details": details, **(extra or {})},
             "meta": {"request_id": get_request_id(request)},
         },
     )
@@ -120,7 +122,14 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "CONFLICT": "trang_thai_khong_hop_le",
                 "NOT_FOUND": "khong_tim_thay",
             }.get(exc.code, exc.code)
-            return _contract_error(request, status, code, exc.message, [])
+            return _contract_error(
+                request,
+                status,
+                code,
+                exc.message,
+                getattr(exc, "public_details", []),
+                getattr(exc, "public_extra", {}),
+            )
         return JSONResponse(
             status_code=ERROR_STATUS.get(exc.code, 500),
             content={

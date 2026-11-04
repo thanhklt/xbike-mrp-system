@@ -15,6 +15,11 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomPlanningReader, BomService
+from app.modules.dieu_chinh_kho.repository import (
+    SqlAlchemyPhieuDieuChinhRepository,
+    SqlAlchemyTicketDieuChinhRepository,
+)
+from app.modules.dieu_chinh_kho.service import PhieuDieuChinhKhoService, TicketDieuChinhService
 from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGoodsIssuingRepository
 from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
@@ -36,8 +41,6 @@ from app.modules.reporting.repository import SqlAlchemyReportingRepository
 from app.modules.reporting.service import ReportingService
 from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
 from app.modules.san_xuat.service import YeuCauSanXuatService
-from app.modules.ticket_dieu_chinh.repository import SqlAlchemyTicketDieuChinhRepository
-from app.modules.ticket_dieu_chinh.service import TicketDieuChinhService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -198,4 +201,17 @@ def get_ticket_dieu_chinh_service(
 ) -> TicketDieuChinhService:
     return TicketDieuChinhService(
         SqlAlchemyTicketDieuChinhRepository(db), audit, SqlAlchemyTransaction(db)
+    )
+
+
+def get_phieu_dieu_chinh_kho_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> PhieuDieuChinhKhoService:
+    return PhieuDieuChinhKhoService(
+        SqlAlchemyPhieuDieuChinhRepository(db),
+        SqlAlchemyTicketDieuChinhRepository(db),
+        SqlAlchemyInventoryRepository(db),
+        audit,
+        SqlAlchemyTransaction(db),
     )
