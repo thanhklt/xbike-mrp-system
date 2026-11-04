@@ -306,3 +306,46 @@ Giới hạn/hoàn tác: không migration hoặc cập nhật schema DB đang ch
 code, hoàn tác cùng router, composition, ORM/FK, reporting và tài liệu; không xóa dữ liệu
 sản xuất đã tạo để ép code cũ chạy. Frontend chuyển route và các endpoint lệnh/hoàn
 thành/phiếu xuất thuộc tác vụ sau. Các module legacy còn lệch schema được giữ nguyên.
+
+## Module phiếu xuất (chốt ngày 04/11/2026)
+
+Nguồn đã đối chiếu:
+
+- `docs/api_contract_v3.md` v3.0.0 §2.2, §2.5, §10, §14; đối chiếu bản `api_contract_v3.md` trên Drive của project.
+- `infra/postgres/init.sql`: bảng `"PhieuXuat"`, `"ChiTietPhieuXuat"`, trigger `trg_xuat_bat_bien` và bảo vệ dòng chứng từ đã chốt.
+
+Kế hoạch triển khai: `.handoff/plan-phieu-xuat.md`.
+
+### D-PX-01. Gọi lại duyệt không kiểm tra If-Match
+
+- Người còn quyền Q gọi lại `/phieu_xuat/{id}/duyet` trên phiếu `da_duyet` nhận resource hiện tại, `da_ghi_so_truoc_do=true` và các ID giao dịch kho đã có.
+- Sau phân quyền và khóa đối tượng, bỏ qua If-Match hoàn toàn: thiếu, rỗng, wildcard, weak hoặc cũ đều được. Không ghi thêm giao dịch kho, trừ tồn hoặc audit.
+- Phiếu chưa duyệt vẫn cần strong If-Match: thiếu/rỗng trả 428; sai định dạng, wildcard, weak hoặc cũ trả 412. Các action khác giữ nguyên.
+- **Lý do:** contract §2.2 đặt kiểm tra đã ghi sổ lặp trước kiểm tra ETag.
+
+### D-PX-02. Mặt hàng ngừng hoạt động trên phiếu chưa duyệt
+
+- “Chứng từ cũ” tại §2.5 được hiểu là chứng từ đã xác nhận `da_duyet`; chúng vẫn đọc được và không bị tự hủy.
+- Phiếu `nhap`/`cho_duyet`/`tu_choi` còn mặt hàng ngừng hoạt động không gửi hay duyệt được (409 `mat_hang_ngung_hoat_dong` khi kiểm tra mặt hàng); chỉ xóa theo điều kiện trạng thái hiện có. PATCH thay dòng đó bằng mặt hàng hợp lệ vẫn được phép khi phiếu ở `nhap`.
+- Các giới hạn workflow vẫn áp dụng: chỉ xóa/sửa nháp; phiếu `cho_duyet` cần từ chối và về nháp trước khi sửa hoặc xóa. Không bổ sung đường xóa ở trạng thái khác.
+- Code hiện tại giữ nguyên, chỉ ghi nhận cách hiểu đã chốt.
+
+### D-PX-03. Mã lỗi mặt hàng ngoài nhu cầu hoặc sai loại
+
+- Giữ 409 `phu_thuoc_khong_hop_le` khi mặt hàng ngoài nhu cầu nguồn hoặc sai loại.
+- Dev xác nhận không cần thay mã lỗi này; không sửa code.
+
+### D-PX-04. Không audit riêng cho yêu cầu khi duyệt xuất thành phẩm
+
+- Audit `phieu_xuat` trong transaction duyệt đã đủ; không thêm audit riêng cho `YeuCauSanXuat` khi cập nhật tiến độ xuất thành phẩm.
+- Code ghi audit hiện tại giữ nguyên.
+
+### D-PX-05. Đọc phiếu xuất không khóa
+
+- GET danh sách và chi tiết chạy trong transaction `REPEATABLE READ READ ONLY`, không dùng `FOR SHARE` trên phiếu hoặc chi tiết. COUNT, trang, dòng chi tiết và kiểm tra người được giao cùng snapshot, bảo đảm biểu diễn và ETag nhất quán.
+- Danh sách lấy dòng chi tiết của cả trang bằng một truy vấn, sắp theo ID phiếu rồi ID dòng; loại bỏ N+1 và giữ nguyên thứ tự dòng trong resource.
+- **Lý do:** tránh đọc chờ ghi, ghi chờ đọc và chi phí ghi thông tin khóa xuống đĩa của `FOR SHARE`.
+- **Đánh đổi:** rollback transaction chỉ đọc do auth đã autobegin trước khi mở snapshot đọc. Payload nhân viên đã xác minh là dữ liệu độc lập với ORM. Session đóng kết thúc transaction đọc, không commit.
+- Dùng execution options của SQLAlchemy với asyncpg: `isolation_level="REPEATABLE READ"`, `postgresql_readonly=True`; không cần fallback SQL.
+- Phạm vi chỉ module `phieu_xuat`. Đường ghi và các lời gọi nội bộ giữ nguyên khóa hiện có; `phieu_nhap` còn pattern đọc `FOR SHARE`, xử lý ở tác vụ riêng.
+- Hoàn tác bằng cách khôi phục đồng bộ service, port và repository trước thay đổi này; không có migration hoặc dữ liệu cần sửa. Không thay đổi schema/database ứng dụng.

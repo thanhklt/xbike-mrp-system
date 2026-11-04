@@ -23,16 +23,34 @@ class SqlAlchemyPhieuXuatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def _resource(self, record: PhieuXuat) -> PhieuXuatRead:
-        lines = (
-            await self.session.scalars(
-                select(ChiTietPhieuXuat)
-                .where(ChiTietPhieuXuat.phieu_xuat_id == record.id)
-                .order_by(ChiTietPhieuXuat.id)
-                .with_for_update(read=True)
-                .execution_options(populate_existing=True)
-            )
-        ).all()
+    async def begin_read_snapshot(self) -> None:
+        # Auth only reads in this request; release its transaction before setting isolation.
+        if self.session.in_transaction():
+            await self.session.rollback()
+        await self.session.connection(
+            execution_options={"isolation_level": "REPEATABLE READ", "postgresql_readonly": True}
+        )
+
+    async def _lines(
+        self, issue_ids: list[int], *, lock: bool
+    ) -> dict[int, list[ChiTietPhieuXuat]]:
+        grouped: dict[int, list[ChiTietPhieuXuat]] = {issue_id: [] for issue_id in issue_ids}
+        if not issue_ids:
+            return grouped
+        query = (
+            select(ChiTietPhieuXuat)
+            .where(ChiTietPhieuXuat.phieu_xuat_id.in_(issue_ids))
+            .order_by(ChiTietPhieuXuat.phieu_xuat_id, ChiTietPhieuXuat.id)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            query = query.with_for_update(read=True)
+        for line in (await self.session.scalars(query)).all():
+            grouped[line.phieu_xuat_id].append(line)
+        return grouped
+
+    @staticmethod
+    def _build(record: PhieuXuat, lines: list[ChiTietPhieuXuat]) -> PhieuXuatRead:
         return PhieuXuatRead.model_validate(
             {
                 **{
@@ -42,6 +60,10 @@ class SqlAlchemyPhieuXuatRepository:
                 "chi_tiet": lines,
             }
         )
+
+    async def _resource(self, record: PhieuXuat, *, lock: bool = True) -> PhieuXuatRead:
+        lines = await self._lines([record.id], lock=lock)
+        return self._build(record, lines[record.id])
 
     @staticmethod
     def _scope(employee_id: int):
@@ -98,22 +120,22 @@ class SqlAlchemyPhieuXuatRepository:
         order = column.desc() if params.sort.startswith("-") else column.asc()
         records = (
             await self.session.scalars(
-                query.order_by(order, PhieuXuat.id)
-                .offset(offset)
-                .limit(params.page_size)
-                .with_for_update(read=True)
+                query.order_by(order, PhieuXuat.id).offset(offset).limit(params.page_size)
             )
         ).all()
-        return RecordPage([await self._resource(record) for record in records], total)
+        lines = await self._lines([record.id for record in records], lock=False)
+        return RecordPage([self._build(record, lines[record.id]) for record in records], total)
 
-    async def get_issue(self, issue_id: int) -> PhieuXuatRead | None:
-        record = await self.session.scalar(
+    async def get_issue(self, issue_id: int, *, lock: bool = True) -> PhieuXuatRead | None:
+        query = (
             select(PhieuXuat)
             .where(PhieuXuat.id == issue_id)
-            .with_for_update(read=True)
             .execution_options(populate_existing=True)
         )
-        return await self._resource(record) if record is not None else None
+        if lock:
+            query = query.with_for_update(read=True)
+        record = await self.session.scalar(query)
+        return await self._resource(record, lock=lock) if record is not None else None
 
     async def lock_source(
         self, kind: str, order_id: int | None, request_id: int | None

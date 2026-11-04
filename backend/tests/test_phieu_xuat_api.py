@@ -177,6 +177,176 @@ async def submit(context, created):
     return response
 
 
+async def approve(context, created):
+    client, _, headers, _ = context
+    submitted = await submit(context, created)
+    response = await client.post(
+        created.headers["location"] + "/duyet",
+        headers={**headers(), "If-Match": submitted.headers["etag"]},
+        json={},
+    )
+    assert response.status_code == 200, response.text
+    return response
+
+
+@pytest.mark.parametrize("if_match", [None, "", "*", 'W/"x"', '"stale"'])
+async def test_approve_replay_ignores_if_match(context, if_match):
+    client, sessions, headers, _ = context
+    created = await create(context)
+    approved = await approve(context, created)
+    path = created.headers["location"]
+    audit_query = text(
+        "SELECT count(*) FROM \"LichSuThaoTac\" WHERE loai_doi_tuong='phieu_xuat' AND doi_tuong_id=:id"
+    )
+    stock_query = text('SELECT so_luong_ton FROM "MatHang" WHERE id=8')
+    async with sessions() as db:
+        audit_count = await db.scalar(audit_query, {"id": created.json()["data"]["id"]})
+        stock = await db.scalar(stock_query)
+    auth = headers(4)
+    if if_match is not None:
+        auth["If-Match"] = if_match
+
+    replay = await client.post(path + "/duyet", headers=auth, json={})
+
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["data"]["da_ghi_so_truoc_do"] is True
+    assert (
+        replay.json()["data"]["giao_dich_kho_ids"] == approved.json()["data"]["giao_dich_kho_ids"]
+    )
+    detail = await client.get(path, headers=headers())
+    assert detail.status_code == 200, detail.text
+    assert replay.headers["etag"] == detail.headers["etag"] == approved.headers["etag"]
+    async with sessions() as db:
+        assert await db.scalar(stock_query) == stock
+        assert await db.scalar(audit_query, {"id": created.json()["data"]["id"]}) == audit_count
+
+
+@pytest.mark.parametrize("if_match,status", [(None, 428), ("*", 412)])
+async def test_first_approval_still_requires_if_match(context, if_match, status):
+    client, _, headers, _ = context
+    created = await create(context)
+    await submit(context, created)
+    auth = headers()
+    if if_match is not None:
+        auth["If-Match"] = if_match
+
+    response = await client.post(created.headers["location"] + "/duyet", headers=auth, json={})
+
+    assert response.status_code == status, response.text
+    detail = await client.get(created.headers["location"], headers=headers())
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"]["trang_thai"] == "cho_duyet"
+
+
+@pytest.mark.parametrize("employee", [3, 1])
+async def test_approve_replay_still_checks_role(context, employee):
+    client, _, headers, _ = context
+    created = await create(context)
+    await approve(context, created)
+
+    replay = await client.post(
+        created.headers["location"] + "/duyet", headers=headers(employee), json={}
+    )
+
+    assert replay.status_code == 403, replay.text
+
+
+async def test_reads_do_not_wait_for_write_locks(context):
+    client, sessions, headers, _ = context
+    created = await create(context)
+    issue_id = created.json()["data"]["id"]
+    async with sessions() as locked:
+        try:
+            await locked.execute(
+                text('SELECT id FROM "PhieuXuat" WHERE id=:id FOR UPDATE'), {"id": issue_id}
+            )
+            await locked.execute(
+                text('SELECT id FROM "ChiTietPhieuXuat" WHERE phieu_xuat_id=:id FOR UPDATE'),
+                {"id": issue_id},
+            )
+
+            detail = await asyncio.wait_for(
+                client.get(created.headers["location"], headers=headers(3)), 3
+            )
+            listing = await asyncio.wait_for(client.get(BASE, headers=headers(3)), 3)
+
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["data"]["id"] == issue_id
+            assert listing.status_code == 200, listing.text
+            assert issue_id in {record["id"] for record in listing.json()["data"]}
+        finally:
+            await locked.rollback()
+
+
+async def test_list_loads_lines_in_one_query(context):
+    client, _, headers, engine = context
+    created = [await create(context) for _ in range(3)]
+    statements = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _executemany):
+        if '"ChiTietPhieuXuat"' in statement:
+            statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", capture)
+    try:
+        listing = await client.get(BASE, headers=headers(), params={"page_size": 100})
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", capture)
+
+    assert listing.status_code == 200, listing.text
+    records = {record["id"]: record for record in listing.json()["data"]}
+    for response in created:
+        record = response.json()["data"]
+        assert records[record["id"]] == record
+    assert len(statements) == 1, statements
+
+
+@pytest.mark.parametrize("employee", [2, 3])
+async def test_detail_etag_matches_write_etag(context, employee):
+    client, _, headers, _ = context
+    created = await create(context)
+
+    detail = await client.get(created.headers["location"], headers=headers(employee))
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"] == created.json()["data"]
+    assert detail.headers["etag"] == created.headers["etag"]
+
+
+async def test_detail_keeps_snapshot_during_concurrent_patch(context, monkeypatch):
+    client, _, headers, _ = context
+    created = await create(context)
+    path = created.headers["location"]
+    original_lines = SqlAlchemyPhieuXuatRepository._lines
+
+    async def patch_before_lines(repository, issue_ids, *, lock):
+        if not lock:
+            assert (
+                await repository.session.scalar(text("SHOW transaction_isolation"))
+                == "repeatable read"
+            )
+            assert await repository.session.scalar(text("SHOW transaction_read_only")) == "on"
+            changed = await client.patch(
+                path,
+                headers={**headers(), "If-Match": created.headers["etag"]},
+                json={"chi_tiet": [{"mat_hang_id": 8, "so_luong": 4}]},
+            )
+            assert changed.status_code == 200, changed.text
+        return await original_lines(repository, issue_ids, lock=lock)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SqlAlchemyPhieuXuatRepository, "_lines", patch_before_lines)
+        detail = await client.get(path, headers=headers(3))
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"] == created.json()["data"]
+    assert detail.headers["etag"] == created.headers["etag"]
+    current = await client.get(path, headers=headers(3))
+    assert current.status_code == 200, current.text
+    assert current.json()["data"]["chi_tiet"][0]["so_luong"] == 4
+    assert current.headers["etag"] != detail.headers["etag"]
+
+
 def test_openapi_nine_endpoints_and_no_legacy_routes():
     paths = app.openapi()["paths"]
     assert sum(len(value) for path, value in paths.items() if path.startswith(BASE)) == 9

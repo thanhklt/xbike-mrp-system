@@ -14,6 +14,8 @@
 | POST `/api/v1/phieu_xuat/{id}/tu_choi` | [08 — Từ chối](assets/phieu_xuat/08-tu-choi.png) |
 | POST `/api/v1/phieu_xuat/{id}/ve_nhap` | [09 — Về nháp](assets/phieu_xuat/09-ve-nhap.png) |
 
+Ảnh PNG của GET danh sách, GET chi tiết và duyệt chưa được tái tạo sau cập nhật ngày 04/11/2026. Dùng các sơ đồ Mermaid bên dưới để đối chiếu luồng hiện tại.
+
 Đối chiếu `docs/api_contract_v3.md` §2, §3, §10, §14 và code hiện tại. Nguồn schema là `infra/postgres/init.sql`, bảng PascalCase. Đơn giá mặt hàng và ba cột tiền phiếu xuất dùng BIGINT theo quyết định của dev; API trả JSON integer VND, không trả chuỗi Decimal. Không chạy migration hoặc cập nhật database đang có dữ liệu.
 
 Q được đọc và ghi mọi phiếu, kể cả tự duyệt phiếu mình lập. N chỉ đọc phiếu thuộc lệnh/yêu cầu hiện được giao, không kiểm tra N là người lập. A bị từ chối. Vai trò, tài khoản và phiên bản mật khẩu được kiểm tra từ DB mỗi request. Người lập và người ghi audit/ledger lấy từ JWT đã xác minh.
@@ -24,9 +26,9 @@ Response thành công `{data,meta}`, lỗi `{error:{code,message,details},meta:{
 
 POST chỉ nhận loại, đúng một FK nguồn và chi_tiet gồm mặt hàng/số lượng. Không nhận đơn giá, tổng, người lập, mã phiếu hoặc trạng thái. Nháp/chờ duyệt/từ chối giữ giá và tổng null. PATCH chỉ nhận chi_tiet, bỏ qua giữ nguyên, null/array rỗng bị từ chối, gửi array thì thay toàn bộ dòng. PATCH không đổi dữ liệu không ghi thêm audit.
 
-Giao dịch ghi dùng chung AsyncSession với auth, audit và inventory. Để đồng bộ với hủy yêu cầu sản xuất, thứ tự khóa là yêu cầu → lệnh (nếu có) → phiếu → chi tiết → mặt hàng tăng dần ID. lock_context đọc FK bất biến trước, khóa nguồn, rồi đọc lại phiếu FOR UPDATE và kiểm tra ETag dưới khóa. GET giữ FOR SHARE trên phiếu/chi tiết đến khi đọc xong, không ghi dữ liệu. COUNT và trang là hai truy vấn nên tổng có thể đổi giữa hai truy vấn khi có tạo/xóa đồng thời.
+Giao dịch ghi dùng chung AsyncSession với auth, audit và inventory. Để đồng bộ với hủy yêu cầu sản xuất, thứ tự khóa là yêu cầu → lệnh (nếu có) → phiếu → chi tiết → mặt hàng tăng dần ID. lock_context đọc FK bất biến trước, khóa nguồn, rồi đọc lại phiếu FOR UPDATE và kiểm tra ETag dưới khóa khi cần. GET rollback transaction chỉ đọc của auth, bắt đầu transaction REPEATABLE READ READ ONLY và không khóa dòng. COUNT, trang, chi tiết và kiểm tra người được giao cùng một snapshot nên tổng khớp trang và ETag nhất quán. Danh sách lấy chi tiết của cả trang bằng một truy vấn, không N+1. Session đóng sẽ kết thúc transaction đọc, không commit.
 
-Thay đổi phiếu cần If-Match: thiếu/rỗng 428, weak/wildcard/sai định dạng/cũ 412. Riêng duyệt đã thành công nhận strong ETag cũ, trả resource hiện tại với da_ghi_so_truoc_do=true và các ID ledger đã có; vẫn phải còn quyền, có header hợp lệ. Không ghi kho/audit lần hai. Phiếu da_duyet bất biến.
+Thay đổi phiếu cần If-Match: thiếu/rỗng 428, weak/wildcard/sai định dạng/cũ 412. Riêng duyệt lại phiếu da_duyet bỏ qua If-Match hoàn toàn theo contract §2.2 (thiếu, rỗng, wildcard, weak hoặc cũ đều được), sau khi kiểm tra quyền và khóa đối tượng. Trả resource hiện tại với da_ghi_so_truoc_do=true và các ID ledger đã có; vẫn phải còn quyền. Không ghi kho/audit lần hai. Phiếu da_duyet bất biến.
 
 Mã PX-YYYYMM-NNNNNN do PostgreSQL xác định tháng Asia/Ho_Chi_Minh; advisory transaction lock (20261022,3) bảo vệ cấp mã. Xét cả mã hiện có và snapshot audit để không tái sử dụng mã đã xóa. ID do IDENTITY cấp, có thể khuyết khi rollback.
 
@@ -63,9 +65,16 @@ sequenceDiagram
         R-->>C: 422 du_lieu_khong_hop_le
     end
     R->>S: list_issues(query, actor, request_id)
+    S->>P: begin_read_snapshot()
+    P->>DB: ROLLBACK auth read transaction if active
+    P->>DB: Begin REPEATABLE READ READ ONLY transaction
     S->>P: list_issues with assignment scope for N, all for Q
-    P->>DB: Apply EXISTS current assignment, filters, COUNT, sort and pagination
-    P->>DB: Read headers and sorted lines under FOR SHARE
+    P->>DB: COUNT with EXISTS current assignment and filters
+    P->>DB: Read page headers with sort and pagination, no row locks
+    opt Page contains records
+        P->>DB: Read all page lines in one query, sorted by issue ID then line ID
+    end
+    Note over P,DB: COUNT, page and lines share one read-only snapshot
     DB-->>P: Records and total, empty results allowed
     P-->>S: RecordPage PhieuXuatRead
     S-->>R: data + pagination meta + request_id
@@ -103,14 +112,17 @@ sequenceDiagram
         R-->>C: 422 du_lieu_khong_hop_le
     end
     R->>S: get_issue(id, actor, request_id)
-    S->>P: get_issue
-    P->>DB: FOR SHARE issue then sorted lines
+    S->>P: begin_read_snapshot()
+    P->>DB: ROLLBACK auth read transaction if active
+    P->>DB: Begin REPEATABLE READ READ ONLY transaction
+    S->>P: get_issue(id, lock=false)
+    P->>DB: Read issue then sorted lines without row locks
     break Issue missing or ID outside INTEGER
         S-->>C: 404 khong_tim_thay
     end
     opt Actor N
         S->>P: assigned_to(record, employee_id)
-        P->>DB: EXISTS order/request current assignee
+        P->>DB: EXISTS order/request current assignee in the same snapshot
         break Assignment belongs to another employee
             S-->>C: 403 khong_co_quyen
         end
@@ -531,12 +543,12 @@ sequenceDiagram
     S->>T: __aenter__
     S->>P: lock_context, lock request then order then issue/lines
     P->>DB: FOR UPDATE context, missing resource returns 404
-    S->>S: Require header, missing 428, malformed/weak/wildcard 412
     alt Issue already da_duyet
         S->>P: postings(id)
         P->>DB: Read existing ledger IDs
-        Note over S,DB: Strong stale ETag allowed, no state/stock/ledger/audit writes
+        Note over S,DB: If-Match not checked, no state/stock/ledger/audit writes
     else First approval
+        S->>S: Require header, missing 428, malformed/weak/wildcard 412
         S->>S: Compare ETag 412, require cho_duyet 409
         S->>P: lock_parts(posting=true), approved_quantities
         P->>DB: MatHang FOR UPDATE in ascending ID, sum approved source quantities

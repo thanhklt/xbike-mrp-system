@@ -75,6 +75,7 @@ class PhieuXuatService:
         self, query: PhieuXuatQuery, actor: dict, request_id: str
     ) -> PhieuXuatListResponse:
         self._role(actor)
+        await self.repository.begin_read_snapshot()
         result = await self.repository.list_issues(
             query, None if "quan_ly" in actor["roles"] else int(actor["sub"])
         )
@@ -93,24 +94,29 @@ class PhieuXuatService:
         self, issue_id: int, actor: dict, request_id: str
     ) -> tuple[PhieuXuatResponse, str]:
         self._role(actor)
-        record = await self.repository.get_issue(issue_id) if issue_id <= INT_MAX else None
+        await self.repository.begin_read_snapshot()
+        record = (
+            await self.repository.get_issue(issue_id, lock=False) if issue_id <= INT_MAX else None
+        )
         if record is None:
             raise NotFoundException()
         await self._read_scope(record, actor)
         return self.response(record, request_id)
 
-    async def _context(
-        self, issue_id: int, actor: dict, if_match: str | None
-    ) -> tuple[PhieuXuatRead, IssueSource]:
+    async def _lock(self, issue_id: int, actor: dict) -> tuple[PhieuXuatRead, IssueSource]:
         self._role(actor, write=True)
         result = await self.repository.lock_context(issue_id) if issue_id <= INT_MAX else None
         if result is None:
             raise NotFoundException()
+        return result
+
+    @staticmethod
+    def _require_if_match(if_match: str | None) -> str:
         if not if_match or not if_match.strip():
             raise PreconditionRequiredException()
         if not re.fullmatch(r'"[^"\r\n]+"', if_match.strip()):
             raise PreconditionFailedException()
-        return result
+        return if_match.strip()
 
     def _version(self, record: PhieuXuatRead, if_match: str) -> None:
         if if_match.strip() != self.response(record, "")[1]:
@@ -195,7 +201,8 @@ class PhieuXuatService:
         request_id: str,
     ) -> tuple[PhieuXuatResponse, str]:
         async with self.transaction:
-            before, source = await self._context(issue_id, actor, if_match)
+            before, source = await self._lock(issue_id, actor)
+            if_match = self._require_if_match(if_match)
             self._version(before, if_match)
             if before.trang_thai != "nhap":
                 raise InvalidWorkflowState()
@@ -215,7 +222,8 @@ class PhieuXuatService:
 
     async def delete_issue(self, issue_id: int, actor: dict, if_match: str | None) -> None:
         async with self.transaction:
-            before, _ = await self._context(issue_id, actor, if_match)
+            before, _ = await self._lock(issue_id, actor)
+            if_match = self._require_if_match(if_match)
             self._version(before, if_match)
             if before.trang_thai != "nhap":
                 raise InvalidWorkflowState()
@@ -239,7 +247,8 @@ class PhieuXuatService:
             "ve_nhap": ("tu_choi", "nhap"),
         }
         async with self.transaction:
-            before, source = await self._context(issue_id, actor, if_match)
+            before, source = await self._lock(issue_id, actor)
+            if_match = self._require_if_match(if_match)
             self._version(before, if_match)
             old, new = states[operation]
             if before.trang_thai != old:
@@ -254,14 +263,16 @@ class PhieuXuatService:
         self, issue_id: int, actor: dict, if_match: str | None, request_id: str
     ) -> tuple[PhieuXuatActionResponse, str]:
         async with self.transaction:
-            before, source = await self._context(issue_id, actor, if_match)
+            before, source = await self._lock(issue_id, actor)
             repeated = before.trang_thai == "da_duyet"
             if repeated:
+                # Contract §2.2: replay of a posted issue precedes all If-Match checks.
                 ids = await self.repository.postings(issue_id)
                 if len(ids) != len(before.chi_tiet):
                     raise IssueDependencyInvalid(message="Approved issue has incomplete ledger")
                 after = before
             else:
+                if_match = self._require_if_match(if_match)
                 self._version(before, if_match)
                 if before.trang_thai != "cho_duyet":
                     raise InvalidWorkflowState()
