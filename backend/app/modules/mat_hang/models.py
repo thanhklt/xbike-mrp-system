@@ -1,9 +1,17 @@
 """MatHang mapping matching the authoritative bootstrap SQL."""
 
 from datetime import datetime
-from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Identity, Integer, Numeric, String, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Identity,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -33,7 +41,7 @@ class MatHang(Base):
     don_vi_tinh: Mapped[str] = mapped_column(String, nullable=False)
     mau_sac: Mapped[str | None] = mapped_column(String, nullable=True)
     mo_ta: Mapped[str | None] = mapped_column(String, nullable=True)
-    don_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    don_gia: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     so_luong_ton: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     ton_kho_updated_at: Mapped[datetime | None] = mapped_column(

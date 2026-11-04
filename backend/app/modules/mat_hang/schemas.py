@@ -1,7 +1,6 @@
 """HTTP and detached snapshot values for the MatHang SQL contract."""
 
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -12,10 +11,11 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic.json_schema import SkipJsonSchema
 
 ItemType = Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"]
 ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-Money = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
+Money = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
 SnakeCode = Annotated[str, StringConstraints(pattern=r"^[a-z]+(_[a-z]+)*$")]
 ItemCode = Annotated[str, StringConstraints(pattern=r"^MH-[0-9]{6}$")]
 
@@ -31,15 +31,10 @@ class MatHangRead(BaseModel):
     don_vi_tinh: str
     mau_sac: str | None
     mo_ta: str | None
-    don_gia: Money | None
+    don_gia: Money
     is_active: bool
     so_luong_ton: int = Field(ge=0)
     ton_kho_updated_at: datetime | None
-
-    @field_validator("don_gia")
-    @classmethod
-    def normalize_money(cls, value: Decimal | None) -> Decimal | None:
-        return value.quantize(Decimal("0.01")) if value is not None else None
 
     @field_validator("ton_kho_updated_at")
     @classmethod
@@ -57,7 +52,7 @@ class MatHangCreate(BaseModel):
     don_vi_tinh: SnakeCode
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
-    don_gia: Money | None = None
+    don_gia: Money
     is_active: bool = True
 
     @field_validator("ma_mat_hang")
@@ -78,7 +73,7 @@ class MatHangPatch(BaseModel):
     don_vi_tinh: SnakeCode | None = None
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
-    don_gia: Money | None = None
+    don_gia: Money | SkipJsonSchema[None] = None
     is_active: bool | None = None
 
     @model_validator(mode="before")
@@ -92,6 +87,7 @@ class MatHangPatch(BaseModel):
                 "loai_mat_hang",
                 "don_vi_tinh",
                 "is_active",
+                "don_gia",
             }
             for name in required & values.keys():
                 if values[name] is None:

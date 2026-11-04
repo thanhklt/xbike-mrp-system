@@ -40,7 +40,7 @@ CREATE TABLE "MatHang" (
   "don_vi_tinh" varchar NOT NULL,
   "mau_sac" varchar,
   "mo_ta" varchar,
-  "don_gia" numeric(18,2),
+  "don_gia" bigint NOT NULL,
   "is_active" bool NOT NULL DEFAULT true,
   "so_luong_ton" int NOT NULL DEFAULT 0,
   "ton_kho_updated_at" timestamptz,
@@ -127,7 +127,7 @@ CREATE TABLE "PhieuXuat" (
   "loai_phieu" varchar NOT NULL,
   "yeu_cau_san_xuat_id" int,
   "lenh_san_xuat_id" int,
-  "tong_tien" numeric(18,2),
+  "tong_tien" bigint,
   "trang_thai" varchar NOT NULL DEFAULT 'nhap',
   "created_at" timestamptz NOT NULL DEFAULT (now()),
   CONSTRAINT "ck_phieu_xuat_trang_thai" CHECK (trang_thai IN ('nhap', 'cho_duyet', 'da_duyet', 'tu_choi')),
@@ -142,8 +142,8 @@ CREATE TABLE "ChiTietPhieuXuat" (
   "phieu_xuat_id" int NOT NULL,
   "mat_hang_id" int NOT NULL,
   "so_luong" int NOT NULL,
-  "don_gia_thuc" numeric(18,2),
-  "tong_gia" numeric(18,2),
+  "don_gia_thuc" bigint,
+  "tong_gia" bigint,
   CONSTRAINT "ck_chi_tiet_phieu_xuat_so_luong" CHECK (so_luong > 0),
   CONSTRAINT "ck_chi_tiet_phieu_xuat_tien" CHECK (don_gia_thuc >= 0 AND tong_gia >= 0)
 );

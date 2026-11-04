@@ -5,7 +5,6 @@ import fnmatch
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from types import MappingProxyType
 
 from fastapi import HTTPException
@@ -66,8 +65,8 @@ def filter_items(
     is_active: bool | None = None,
     don_vi_tinh: str | None = None,
     mau_sac: str | None = None,
-    don_gia_min: Decimal | None = None,
-    don_gia_max: Decimal | None = None,
+    don_gia_min: int | None = None,
+    don_gia_max: int | None = None,
     sort: str = "id",
 ) -> list[MatHangRead]:
     field = sort.removeprefix("-")

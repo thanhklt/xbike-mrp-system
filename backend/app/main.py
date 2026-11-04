@@ -18,6 +18,7 @@ from app.modules.nha_cung_cap.router import router as nha_cung_cap_router
 from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
 from app.modules.phieu_nhap.router import router as phieu_nhap_router
+from app.modules.phieu_xuat.router import router as phieu_xuat_router
 from app.modules.san_xuat.router import hoan_thanh_router
 from app.modules.san_xuat.router import router as san_xuat_router
 
@@ -107,6 +108,7 @@ app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(phieu_nhap_router, prefix=api_v1_prefix)
+app.include_router(phieu_xuat_router, prefix=api_v1_prefix)
 app.include_router(san_xuat_router, prefix=api_v1_prefix)
 app.include_router(hoan_thanh_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)

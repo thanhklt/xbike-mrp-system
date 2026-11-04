@@ -5,10 +5,10 @@ from datetime import datetime, timezone
 from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictException
+from app.core.errors import ConflictException, InsufficientStock
 from app.core.persistence import select_page
 from app.modules.inventory.models import StockLevel, StockMovement
-from app.modules.inventory.ports import StockReceiptLine
+from app.modules.inventory.ports import StockIssueLine, StockReceiptLine
 from app.modules.inventory.schemas import StockLevelResponse, StockMovementResponse
 from app.modules.mat_hang.models import MatHang
 from app.shared.pagination import PageParams
@@ -18,6 +18,58 @@ from app.shared.records import RecordPage
 class SqlAlchemyInventoryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def issue_stock(
+        self, lines: list[StockIssueLine], kind: str, actor_id: int, posted_at: datetime
+    ) -> list[int]:
+        ids = sorted(line.mat_hang_id for line in lines)
+        stocks = {
+            item.id: item
+            for item in (
+                await self.session.scalars(
+                    select(MatHang)
+                    .where(MatHang.id.in_(ids))
+                    .order_by(MatHang.id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        }
+        balances = dict(
+            (
+                await self.session.execute(
+                    text(
+                        'SELECT mat_hang_id, sum(so_luong_bien_dong) FROM "GiaoDichKho" WHERE mat_hang_id IN :ids GROUP BY mat_hang_id'
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": ids},
+                )
+            ).all()
+        )
+        movements = []
+        for line in sorted(lines, key=lambda item: item.mat_hang_id):
+            stock = stocks.get(line.mat_hang_id)
+            if stock is None or stock.so_luong_ton != balances.get(line.mat_hang_id, 0):
+                raise ConflictException(message="Stock balance differs from ledger")
+            if stock.so_luong_ton < line.so_luong:
+                raise InsufficientStock(line.mat_hang_id, line.so_luong, stock.so_luong_ton)
+            stock.so_luong_ton -= line.so_luong
+            stock.ton_kho_updated_at = posted_at
+            movement_id = await self.session.scalar(
+                text("""INSERT INTO "GiaoDichKho"
+                (mat_hang_id,loai_giao_dich,so_luong_bien_dong,chi_tiet_phieu_xuat_id,nhan_vien_id,posted_at)
+                VALUES (:item,:kind,:quantity,:source,:actor,:time) RETURNING id"""),
+                {
+                    "item": line.mat_hang_id,
+                    "kind": kind,
+                    "quantity": -line.so_luong,
+                    "source": line.chi_tiet_phieu_xuat_id,
+                    "actor": actor_id,
+                    "time": posted_at,
+                },
+            )
+            movements.append(movement_id)
+        await self.session.flush()
+        return movements
 
     async def receive_receipt(
         self, lines: list[StockReceiptLine], actor_id: int, posted_at: datetime

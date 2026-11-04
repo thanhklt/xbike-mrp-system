@@ -1,16 +1,15 @@
 """Mappings for the agreed PostgreSQL bootstrap; no legacy inventory ownership."""
 
 from datetime import datetime
-from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Identity,
     Index,
     Integer,
-    Numeric,
     String,
     text,
 )
@@ -55,7 +54,7 @@ class PhieuXuat(Base):
     lenh_san_xuat_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("LenhSanXuat.id", deferrable=True, initially="IMMEDIATE"), nullable=True
     )
-    tong_tien: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    tong_tien: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'nhap'"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
@@ -82,5 +81,5 @@ class ChiTietPhieuXuat(Base):
         Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
-    don_gia_thuc: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
-    tong_gia: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    don_gia_thuc: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    tong_gia: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
