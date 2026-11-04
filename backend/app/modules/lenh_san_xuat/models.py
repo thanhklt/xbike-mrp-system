@@ -14,7 +14,7 @@ class LenhSanXuat(Base):
         CheckConstraint(
             "trang_thai IN ('nhap', 'da_gui', 'dang_thuc_hien', 'hoan_thanh', 'da_huy')",
             name="ck_lenh_san_xuat_trang_thai",
-        ),
+        ), 
         CheckConstraint("so_luong > 0", name="ck_lenh_san_xuat_so_luong"),
         CheckConstraint(
             "lenh_san_xuat_cha_id IS NULL OR lenh_san_xuat_cha_id <> id",
