@@ -10,6 +10,8 @@ from app.core.logging import logger, setup_logging
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
+from app.modules.dieu_chinh_kho.router import router as dieu_chinh_kho_router
+from app.modules.dieu_chinh_kho.router import ticket_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
@@ -112,3 +114,5 @@ app.include_router(phieu_xuat_router, prefix=api_v1_prefix)
 app.include_router(san_xuat_router, prefix=api_v1_prefix)
 app.include_router(hoan_thanh_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)
+app.include_router(ticket_router, prefix=api_v1_prefix)
+app.include_router(dieu_chinh_kho_router, prefix=api_v1_prefix)

@@ -1,4 +1,4 @@
-"""Inventory query and receipt posting contracts."""
+"""Inventory queries, receipt posting and warehouse adjustment contracts."""
 
 from datetime import datetime
 from typing import NamedTuple, Protocol
@@ -21,6 +21,12 @@ class StockReceiptLine(NamedTuple):
 
 
 class InventoryWriter(Protocol):
+    async def lock_balances(self, item_ids: list[int]) -> dict[int, int]: ...
+
+    async def adjust_stock(
+        self, lines: list["StockAdjustmentLine"], actor_id: int, posted_at: datetime
+    ) -> list[int]: ...
+
     async def receive_receipt(
         self, lines: list[StockReceiptLine], actor_id: int, posted_at: datetime
     ) -> list[int]: ...
@@ -36,3 +42,16 @@ class InventoryIssueWriter(Protocol):
     async def issue_stock(
         self, lines: list[StockIssueLine], kind: str, actor_id: int, posted_at: datetime
     ) -> list[int]: ...
+
+
+class StockAdjustmentLine(NamedTuple):
+    chi_tiet_phieu_dieu_chinh_id: int
+    mat_hang_id: int
+    so_luong_bien_dong: int
+
+
+class StockShortage(Exception):
+    def __init__(self, *, lines: list[dict], balances: dict[int, int]):
+        super().__init__("Không đủ tồn để điều chỉnh")
+        self.lines = lines
+        self.balances = balances

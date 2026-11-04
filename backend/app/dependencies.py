@@ -15,6 +15,11 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomPlanningReader, BomService
+from app.modules.dieu_chinh_kho.repository import (
+    SqlAlchemyPhieuDieuChinhRepository,
+    SqlAlchemyTicketDieuChinhRepository,
+)
+from app.modules.dieu_chinh_kho.service import PhieuDieuChinhKhoService, TicketDieuChinhService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
 from app.modules.mat_hang.cache import MatHangCache
@@ -181,4 +186,26 @@ def get_phieu_xuat_service(
         audit,
         SqlAlchemyTransaction(db),
         SqlAlchemyInventoryRepository(db),
+    )
+
+
+def get_ticket_dieu_chinh_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> TicketDieuChinhService:
+    return TicketDieuChinhService(
+        SqlAlchemyTicketDieuChinhRepository(db), audit, SqlAlchemyTransaction(db)
+    )
+
+
+def get_phieu_dieu_chinh_kho_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> PhieuDieuChinhKhoService:
+    return PhieuDieuChinhKhoService(
+        SqlAlchemyPhieuDieuChinhRepository(db),
+        SqlAlchemyTicketDieuChinhRepository(db),
+        SqlAlchemyInventoryRepository(db),
+        audit,
+        SqlAlchemyTransaction(db),
     )
