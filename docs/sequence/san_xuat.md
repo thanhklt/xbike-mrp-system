@@ -12,7 +12,7 @@ GET chi tiết, POST tạo, PATCH, gửi và hủy trả strong ETag từ toàn 
 gồm tổng lượng xuất và ID lệnh. PATCH/DELETE/gửi/hủy so `If-Match` dưới khóa yêu cầu:
 thiếu/blank 428 `thieu_if_match`; cũ/weak/`*` 412 `du_lieu_da_thay_doi`.
 Mọi ghi nghiệp vụ và audit dùng cùng session/transaction; lỗi rollback toàn bộ.
-Không endpoint nào ở đây ghi kho, giữ chỗ hoặc tạo ledger.
+Chín endpoint yêu cầu sản xuất dưới đây không ghi kho, giữ chỗ hoặc tạo ledger.
 
 ## GET /api/v1/yeu_cau_san_xuat
 
@@ -407,8 +407,509 @@ trước của chứng từ bị xóa được lưu audit. Service phiếu xuấ
 
 ## Phạm vi và kiểm chứng
 
-- Chưa có endpoint lệnh, hoàn thành hoặc phiếu xuất; `phieu_xuat` chỉ là collaborator nội bộ.
+- Chưa có endpoint lệnh hoặc phiếu xuất; `phieu_xuat` chỉ là collaborator nội bộ.
 - Gỡ bốn endpoint `/production/work-orders`; frontend cũ chưa chuyển đổi, sẽ nhận 404.
 - ORM sáu bảng theo bootstrap; không migration, không sửa database ứng dụng.
 - Kiểm chứng bằng unit/API và PostgreSQL riêng `_test` với rollback. Kết quả cụ thể
   được ghi trong `.handoff/plan-yeu-cau-san-xuat.md` khi bàn giao.
+
+## Chứng từ hoàn thành sản xuất — quy ước chung
+
+Chín endpoint API-061–069 dưới đây theo contract v3 §11 và
+`.handoff/plan-chung-tu-hoan-thanh-sx.md`. `HoanThanhRead` thêm `mat_hang_id` từ lệnh;
+giữ nguyên `ChungTuRead` dùng trong hủy yêu cầu. Q đọc toàn bộ, duyệt/từ chối;
+N tạo cho lệnh được giao và chỉ đọc/sửa/xóa/gửi/về nháp chứng từ của mình khi vẫn
+còn được giao lệnh. Admin 403. Đọc lịch sử không kiểm active mặt hàng.
+
+Trong các sơ đồ, AuthService/NhanVienService đọc lại tài khoản, vai trò và phiên bản
+mật khẩu từ DB: thiếu/sai/hết hạn JWT hoặc mật khẩu đã đổi trả 401; tài khoản bị khóa
+hoặc sai vai trò trả 403. Không tự giải mã JWT trong service sản xuất.
+Body/query lạ, query lặp, header If-Match lặp trả 422. Ngoài list cấm mọi query.
+ID path phải dương (422), vượt INT32 được service trả 404 trước khi bind SQL.
+Không có bản ghi trả 404; có nhưng ngoài owner/assignment trả 403.
+
+PATCH/DELETE và bốn action cần If-Match: thiếu/blank 428; cũ/weak/wildcard 412.
+Strong ETag từ JSON canonical `HoanThanhRead`, không gồm trường thêm của ActionRead.
+Riêng duyệt lặp đã ghi sổ đúng cần header và Q, nhưng chấp nhận ETag cũ.
+`gui`/`duyet` bắt buộc body `{}`; `tu_choi`/`ve_nhap` cần `ly_do` trim không rỗng.
+ID/số lượng đầu vào phải integer dương INT32; `finish_time` ISO có múi giờ, chuẩn hóa UTC.
+
+Mọi writer dùng chung AsyncSession/SqlAlchemyTransaction với AuditService.
+Repository không commit. Thứ tự khóa yêu cầu → lệnh → chứng từ → mặt hàng,
+giữ đến commit; tạo chưa có chứng từ nên chỉ khóa yêu cầu → lệnh trước mặt hàng.
+Tạo/sửa/gửi đọc mặt hàng FOR SHARE; duyệt FOR UPDATE. Lỗi ghi, flush, audit hoặc
+commit rollback toàn bộ; lỗi constraint trả 409, lỗi bất ngờ 500 qua envelope.
+Luồng mới dùng SQL tham số hóa tới `"GiaoDichKho"`, không dùng ORM inventory cũ.
+Chỉ duyệt cộng tồn; mọi thao tác còn lại không giữ chỗ và không ghi kho.
+
+## GET /api/v1/chung_tu_hoan_thanh_sx
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant D as PostgreSQL
+    C->>R: GET filters, page, page_size, sort
+    R->>A: JWT và tài khoản hiện hành, Q/N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth hoặc role sai
+        R-->>C: 401 / 403
+    else Được phép
+        R->>R: Validate query, enum, ngày, sort, query lặp
+        alt Query sai
+            R-->>C: 422
+        else Hợp lệ
+            R->>S: list_entries(params, actor)
+            S->>P: list_entries(params, N.id hoặc null cho Q)
+            P->>D: COUNT JOIN chứng từ-lệnh với filter và scope
+            opt Offset nhỏ hơn total
+                P->>D: SELECT cùng filter/scope, sort, offset, limit
+            end
+            S-->>C: 200 HoanThanhRead[] và meta phân trang
+        end
+    end
+```
+
+Phạm vi N lọc đồng thời chủ chứng từ và người đang được giao lệnh, trước COUNT/page.
+Filter `q` tìm mã bằng ILIKE escape; thêm `lenh_san_xuat_id`, `mat_hang_id`,
+`nhan_vien_id`, `trang_thai`, `tu_ngay`, `den_ngay`. Ngày theo `finish_time`,
+Asia/Ho_Chi_Minh, đổi thành khoảng UTC nửa mở gồm ngày cuối bằng PostgreSQL timezone.
+NULL không khớp filter ngày; không có filter vẫn đọc NULL. Sort mặc định `-id`,
+whitelist `id`, `finish_time`, `ma_phieu` và chiều ngược; NULLS LAST, ID phụ tăng dần.
+Q/N cùng projection. COUNT/SELECT là hai statement, có thể lệch total/page khi có
+tạo/xóa đồng thời. Không ETag danh sách, audit hay ledger.
+
+## GET /api/v1/chung_tu_hoan_thanh_sx/{id}
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant D as PostgreSQL
+    C->>R: GET id
+    R->>A: JWT và tài khoản hiện hành, Q/N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role sai hoặc path/query sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: get_entry(id, actor)
+        opt ID trong INT32
+            S->>P: get_by_id(id)
+            P->>D: SELECT JOIN chứng từ-lệnh, không lọc quyền
+        end
+        alt Không tồn tại hoặc vượt INT32
+            S-->>C: 404
+        else N không là chủ hoặc không còn được giao lệnh
+            S-->>C: 403
+        else Trong phạm vi
+            S-->>C: 200 HoanThanhRead và ETag
+        end
+    end
+```
+
+`finish_time=NULL` lịch sử vẫn đọc được; mặt hàng inactive vẫn đọc được.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: POST lệnh, lượng, finish_time
+    R->>A: JWT và tài khoản hiện hành, N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role sai hoặc body/query sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: create_entry(payload, actor)
+        S->>T: Bắt đầu transaction dùng chung
+        S->>P: lock_for_create(lệnh)
+        P->>D: Khóa yêu cầu rồi lệnh FOR UPDATE
+        alt Không có lệnh / không được giao / lệnh không đang thực hiện
+            S->>T: Rollback
+            S-->>C: 404 / 403 / 409
+        else Lệnh hợp lệ
+            S->>P: read_output(mặt hàng)
+            P->>D: SELECT MatHang FOR SHARE
+            S->>S: Kiểm tồn tại, active, loại đầu ra, thời gian và lượng
+            alt Thiếu mặt hàng / inactive, sai loại, quá lượng, thiếu started_at / thời gian trước bắt đầu
+                S->>T: Rollback
+                S-->>C: 404 / 409 / 422
+            else Hợp lệ
+                S->>P: add(payload, actor.id)
+                P->>D: nextval identity, sinh mã, INSERT nhap, flush
+                S->>U: append tao, snapshot trước null và sau chứng từ
+                U->>D: INSERT LichSuThaoTac
+                S->>T: Commit
+                alt Hết dải mã hoặc ghi/flush/audit/commit lỗi
+                    T->>D: Rollback toàn bộ
+                    R-->>C: 409 / 500
+                else Thành công
+                    S-->>C: 201 HoanThanhRead, Location và ETag
+                end
+            end
+        end
+    end
+```
+
+Mã `HTSX-YYYYMM-NNNNNN` dùng identity, tháng Asia/Ho_Chi_Minh; hậu tố không reset,
+không tái sử dụng ID, có thể có khoảng trống; vượt 999999 trả 409.
+Nháp có thể khai thời gian tương lai, nhưng không trước `started_at`.
+Mỗi đợt không vượt lượng lệnh; nhiều nháp cùng lệnh không giữ chỗ lượng hoặc tồn.
+
+## PATCH /api/v1/chung_tu_hoan_thanh_sx/{id}
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: PATCH lượng hoặc finish_time, If-Match
+    R->>A: JWT và tài khoản hiện hành, N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/body/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: patch_entry
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại / ngoài owner-assignment
+            S->>T: Rollback
+            S-->>C: 404 / 403
+        else Trong phạm vi
+            S->>S: So If-Match, kiểm nhap
+            S->>P: postings(id)
+            P->>D: SELECT ledger nguồn
+            alt Thiếu/cũ ETag hoặc sai state/có ledger
+                S->>T: Rollback
+                S-->>C: 428 / 412 / 409
+            else Nháp chưa ghi sổ
+                S->>S: Merge các field được phép
+                alt Giá trị không thay đổi
+                    S->>T: Commit không ghi
+                    S-->>C: 200, giữ ETag, không audit
+                else Có thay đổi
+                    S->>S: Kiểm lượng, finish_time so với started_at
+                    S->>P: read_output FOR SHARE, kiểm active và loại
+                    P->>D: SELECT MatHang
+                    alt Thời gian / lượng hoặc đầu ra sai
+                        S->>T: Rollback
+                        S-->>C: 422 / 404 / 409
+                    else Hợp lệ
+                        S->>P: update(changes), flush
+                        P->>D: UPDATE chứng từ
+                        S->>U: append sua với snapshot trước/sau
+                        U->>D: INSERT audit
+                        S->>T: Commit, lỗi ghi/flush/audit/commit rollback toàn bộ
+                        S-->>C: 200 và ETag mới, hoặc 409 / 500 nếu lỗi
+                    end
+                end
+            end
+        end
+    end
+```
+
+PATCH rỗng hoặc explicit null trả 422. Không yêu cầu lệnh đang thực hiện; không mở lại lệnh.
+
+## DELETE /api/v1/chung_tu_hoan_thanh_sx/{id}
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: DELETE id, If-Match
+    R->>A: JWT và tài khoản hiện hành, N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/path/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: delete_entry
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại / ngoài owner-assignment
+            S->>T: Rollback
+            S-->>C: 404 / 403
+        else Trong phạm vi
+            S->>S: If-Match, trạng thái nhap
+            S->>P: postings(id)
+            P->>D: SELECT ledger nguồn
+            alt Thiếu/cũ ETag hoặc sai state/có ledger
+                S->>T: Rollback
+                S-->>C: 428 / 412 / 409
+            else Nháp chưa ghi sổ
+                S->>P: delete(id)
+                P->>D: DELETE chứng từ
+                S->>U: append xoa_nhap, trước chứng từ, sau null
+                U->>D: INSERT audit
+                S->>T: Commit, lỗi ghi/flush/audit/commit rollback toàn bộ
+                S-->>C: 204 không body, hoặc 409 / 500 nếu lỗi
+            end
+        end
+    end
+```
+
+Không yêu cầu lệnh đang thực hiện; không xóa ledger hoặc hoàn tồn.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/gui
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: POST gui, body {}, If-Match
+    R->>A: JWT và tài khoản hiện hành, N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/body/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: gui
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại / ngoài owner-assignment
+            S->>T: Rollback
+            S-->>C: 404 / 403
+        else Trong phạm vi
+            S->>S: If-Match, nhap, lệnh dang_thuc_hien
+            S->>P: postings, read_output FOR SHARE
+            P->>D: Đọc ledger nguồn và MatHang
+            S->>S: Chưa ledger, active, loại đầu ra, lượng, started_at ≤ finish_time ≤ now
+            alt ETag, state, thời gian, lượng hoặc mặt hàng sai
+                S->>T: Rollback
+                S-->>C: 428 / 412 / 404 / 409 / 422
+            else Hợp lệ
+                S->>P: update cho_duyet, flush
+                P->>D: UPDATE chứng từ
+                S->>U: append gui với snapshot trước/sau
+                U->>D: INSERT audit
+                S->>T: Commit, lỗi ghi/flush/audit/commit rollback toàn bộ
+                S-->>C: 200 HoanThanhRead và ETag, hoặc 409 / 500 nếu lỗi
+            end
+        end
+    end
+```
+
+Thiếu `finish_time`/`started_at` trả 409; trước bắt đầu hoặc tương lai trả 422.
+Gửi không ghi kho, không kiểm giữ chỗ giữa các nháp.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/duyet
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: POST duyet, body {}, If-Match
+    R->>A: JWT và tài khoản hiện hành, Q
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/body/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: duyet
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại hoặc thiếu/blank If-Match
+            S->>T: Rollback
+            S-->>C: 404 / 428
+        else Có header
+            S->>P: postings(id)
+            P->>D: SELECT ledger nguồn
+            alt Chứng từ da_duyet
+                S->>S: Đúng 1 ledger, khớp nguồn, mặt hàng, loại và lượng dương
+                alt Thiếu hoặc sai ledger
+                    S->>T: Rollback
+                    S-->>C: 409, không tự sửa sổ
+                else Khớp
+                    S->>T: Commit không ghi
+                    S-->>C: 200 ActionRead, replay true, ledger cũ và ETag hiện tại
+                end
+            else Chưa duyệt
+                S->>S: So If-Match, cho_duyet, chưa ledger, lệnh đang thực hiện, thời gian
+                alt ETag/state/thời gian sai
+                    S->>T: Rollback
+                    S-->>C: 412 / 409 / 422
+                else Hợp lệ
+                    S->>P: lock_output(mặt hàng)
+                    P->>D: MatHang FOR UPDATE rồi SUM ledger mặt hàng
+                    S->>S: Active, loại đầu ra, balance bằng ledger, không tràn INT32
+                    S->>P: approved_quantity, material_quantities
+                    P->>D: SUM lượng chứng từ da_duyet của lệnh
+                    P->>D: Nhu cầu ChiTietLenhSanXuat, SUM ledger xuất vật tư đã duyệt
+                    S->>S: Tổng không vượt lượng lệnh, đủ vật tư trực tiếp cả lệnh
+                    alt Thiếu mặt hàng hoặc điều kiện đầu ra/vật tư/tổng sai
+                        S->>T: Rollback
+                        S-->>C: 404 / 409
+                    else Cho phép ghi sổ
+                        S->>P: update da_duyet và flush
+                        P->>D: UPDATE trạng thái trước INSERT ledger
+                        S->>P: post_output(actor Q, UTC now)
+                        P->>D: Cộng tồn, cập nhật ton_kho_updated_at
+                        P->>D: INSERT ledger nhap_san_pham_san_xuat dương
+                        opt Tổng đã duyệt bằng lượng lệnh
+                            S->>P: complete_order(now)
+                            P->>D: Đọc snapshot lệnh trước/sau, UPDATE hoan_thanh và completed_at
+                            S->>U: append lenh_san_xuat/hoan_tat trước/sau
+                            U->>D: INSERT audit lệnh
+                        end
+                        S->>U: append chứng từ/duyet trước/sau
+                        U->>D: INSERT audit chứng từ
+                        S->>T: Commit
+                        alt Ghi/flush/audit/commit lỗi
+                            T->>D: Rollback state, stock, ledger, lệnh, audit
+                            R-->>C: 409 constraint / 500
+                        else Thành công
+                            S-->>C: 200 ActionRead, replay false, ledger mới và ETag
+                        end
+                    end
+                end
+            end
+        end
+    end
+```
+
+Ledger và audit ghi ID Q; chủ chứng từ giữ nguyên N. Không trừ vật tư lần hai,
+không đọc BOM hiện hành. Dùng nhu cầu đã đóng băng và ledger phiếu `xuat_vat_tu`
+`da_duyet`; kiểm đủ toàn bộ nhu cầu cả lệnh. Quá lượng trả 409
+`vuot_so_luong_hoan_thanh`; thiếu vật tư trả 409 `chua_du_vat_tu_da_cap`.
+Khóa lệnh tuần tự hóa các đợt cùng lệnh; khóa output bảo vệ số dư giữa các lệnh.
+Retry đúng không thêm audit/ledger/tồn và không yêu cầu lệnh vẫn đang thực hiện.
+`completed_at` theo thời điểm duyệt cuối; `finish_time` vẫn là thời điểm N khai báo.
+Không tự hoàn thành yêu cầu: yêu cầu hoàn thành theo thành phẩm đã xuất.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/tu_choi
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: POST tu_choi, ly_do, If-Match
+    R->>A: JWT và tài khoản hiện hành, Q
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/body/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: tu_choi, kiểm lý do
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại
+            S->>T: Rollback
+            S-->>C: 404
+        else Tồn tại
+            S->>S: If-Match, cho_duyet
+            S->>P: postings(id)
+            P->>D: SELECT ledger nguồn
+            alt Thiếu/cũ ETag hoặc sai state/có ledger
+                S->>T: Rollback
+                S-->>C: 428 / 412 / 409
+            else Hợp lệ
+                S->>P: update tu_choi, flush
+                P->>D: UPDATE chứng từ
+                S->>U: append tu_choi, lý do và snapshot trước/sau
+                U->>D: INSERT audit
+                S->>T: Commit, lỗi ghi/flush/audit/commit rollback toàn bộ
+                S-->>C: 200 HoanThanhRead và ETag, hoặc 409 / 500 nếu lỗi
+            end
+        end
+    end
+```
+
+Không yêu cầu lệnh đang thực hiện, không ghi kho hoặc hoàn vật tư đã xuất.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/ve_nhap
+
+```mermaid
+sequenceDiagram
+    actor C as Client
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as ChungTuHoanThanhService
+    participant P as SqlAlchemyHoanThanhRepository
+    participant U as AuditService / repository
+    participant T as SqlAlchemyTransaction
+    participant D as PostgreSQL
+    C->>R: POST ve_nhap, ly_do, If-Match
+    R->>A: JWT và tài khoản hiện hành, N
+    A->>D: Đọc nhân viên và vai trò
+    alt Auth/role/body/query/header sai
+        R-->>C: 401 / 403 / 422
+    else Được phép
+        R->>S: ve_nhap, kiểm lý do
+        S->>T: Bắt đầu transaction
+        S->>P: lock_context(id)
+        P->>D: Khóa yêu cầu → lệnh → chứng từ
+        alt Không tồn tại / ngoài owner-assignment
+            S->>T: Rollback
+            S-->>C: 404 / 403
+        else Trong phạm vi
+            S->>S: If-Match, tu_choi
+            S->>P: postings(id)
+            P->>D: SELECT ledger nguồn
+            alt Thiếu/cũ ETag hoặc sai state/có ledger
+                S->>T: Rollback
+                S-->>C: 428 / 412 / 409
+            else Hợp lệ
+                S->>P: update nhap, flush
+                P->>D: UPDATE chứng từ
+                S->>U: append ve_nhap, lý do và snapshot trước/sau
+                U->>D: INSERT audit
+                S->>T: Commit, lỗi ghi/flush/audit/commit rollback toàn bộ
+                S-->>C: 200 HoanThanhRead và ETag, hoặc 409 / 500 nếu lỗi
+            end
+        end
+    end
+```
+
+Không ghi kho, không tự mở lại lệnh. Gửi lại vẫn phải đáp ứng điều kiện lệnh,
+mặt hàng, lượng và thời gian. Mã audit đối tượng là
+`chung_tu_hoan_thanh_san_xuat`, khác hậu tố `_sx` trên URL.
+
+### Giới hạn kiểm chứng của phần hoàn thành
+
+Các sơ đồ được đối chiếu router, schema, service, repository, dependency và bootstrap.
+Chưa render/kiểm cú pháp bằng Mermaid. Theo yêu cầu dev, không tiếp tục kiểm thử DB
+riêng; chưa xác nhận tính atomic và xử lý đồng thời bằng PostgreSQL thực tế.
+API giao/gửi/bắt đầu lệnh chưa có; các API mới cần lệnh đã được giao và đang thực hiện.

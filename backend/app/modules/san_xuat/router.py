@@ -5,11 +5,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 
-from app.core.request_context import get_request_id, reject_query
-from app.dependencies import get_yeu_cau_san_xuat_service, require_roles
+from app.core.request_context import get_if_match, get_request_id, reject_query
+from app.dependencies import (
+    get_chung_tu_hoan_thanh_service,
+    get_yeu_cau_san_xuat_service,
+    require_roles,
+)
 from app.modules.san_xuat.schemas import (
     GuiYeuCauInput,
     GuiYeuCauResponse,
+    HoanThanhActionResponse,
+    HoanThanhCreate,
+    HoanThanhEmptyInput,
+    HoanThanhListResponse,
+    HoanThanhPatch,
+    HoanThanhQuery,
+    HoanThanhResponse,
     KeHoachPreviewResponse,
     KeHoachResponse,
     LyDoInput,
@@ -21,7 +32,7 @@ from app.modules.san_xuat.schemas import (
     YeuCauListResponse,
     YeuCauPatch,
 )
-from app.modules.san_xuat.service import YeuCauSanXuatService
+from app.modules.san_xuat.service import ChungTuHoanThanhService, YeuCauSanXuatService
 
 read_actor = require_roles(["quan_ly", "nhan_vien"])
 write_actor = require_roles(["quan_ly"])
@@ -207,5 +218,190 @@ async def huy(
     if_match: IfMatch = None,
 ) -> YeuCauDetailResponse:
     result, etag = await service.huy(id, payload.ly_do, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+hoan_thanh_router = APIRouter(
+    prefix="/chung_tu_hoan_thanh_sx",
+    tags=["san_xuat"],
+    responses={
+        code: {"model": SanXuatErrorResponse} for code in (401, 403, 404, 409, 412, 422, 428, 500)
+    },
+)
+HTReadActor = Annotated[dict, Depends(read_actor)]
+HTNhanVien = Annotated[dict, Depends(require_roles(["nhan_vien"]))]
+HTQuanLy = Annotated[dict, Depends(write_actor)]
+HTService = Annotated[ChungTuHoanThanhService, Depends(get_chung_tu_hoan_thanh_service)]
+HTIfMatch = Annotated[str | None, Depends(get_if_match)]
+HTId = Annotated[int, Path(gt=0)]
+HT_ETAG = {"schema": {"type": "string"}, "description": "Strong ETag chứng từ hoàn thành"}
+
+
+@hoan_thanh_router.get(
+    "",
+    response_model=HoanThanhListResponse,
+    dependencies=[Depends(read_actor), Depends(reject_repeated_query)],
+)
+async def list_hoan_thanh(
+    params: Annotated[HoanThanhQuery, Query()],
+    actor: HTReadActor,
+    service: HTService,
+    request_id: RequestId,
+) -> HoanThanhListResponse:
+    return await service.list_entries(params, actor, request_id)
+
+
+@hoan_thanh_router.get(
+    "/{id}",
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(read_actor), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def get_hoan_thanh(
+    id: HTId,
+    actor: HTReadActor,
+    service: HTService,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.get_entry(id, actor, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@hoan_thanh_router.post(
+    "",
+    status_code=201,
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
+    responses={201: {"headers": {"ETag": HT_ETAG, "Location": {"schema": {"type": "string"}}}}},
+)
+async def create_hoan_thanh(
+    payload: HoanThanhCreate,
+    actor: HTNhanVien,
+    service: HTService,
+    request_id: RequestId,
+    request: Request,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.create_entry(payload, actor, request_id)
+    response.headers["ETag"] = etag
+    response.headers["Location"] = f"{request.url.path}/{result.data.id}"
+    return result
+
+
+@hoan_thanh_router.patch(
+    "/{id}",
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def patch_hoan_thanh(
+    id: HTId,
+    payload: HoanThanhPatch,
+    actor: HTNhanVien,
+    service: HTService,
+    if_match: HTIfMatch,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.patch_entry(id, payload, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@hoan_thanh_router.delete(
+    "/{id}",
+    status_code=204,
+    response_class=Response,
+    dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
+)
+async def delete_hoan_thanh(
+    id: HTId,
+    actor: HTNhanVien,
+    service: HTService,
+    if_match: HTIfMatch,
+) -> Response:
+    await service.delete_entry(id, actor, if_match)
+    return Response(status_code=204)
+
+
+@hoan_thanh_router.post(
+    "/{id}/gui",
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def gui_hoan_thanh(
+    id: HTId,
+    payload: HoanThanhEmptyInput,
+    actor: HTNhanVien,
+    service: HTService,
+    if_match: HTIfMatch,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.gui(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@hoan_thanh_router.post(
+    "/{id}/duyet",
+    response_model=HoanThanhActionResponse,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def duyet_hoan_thanh(
+    id: HTId,
+    payload: HoanThanhEmptyInput,
+    actor: HTQuanLy,
+    service: HTService,
+    if_match: HTIfMatch,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhActionResponse:
+    result, etag = await service.duyet(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@hoan_thanh_router.post(
+    "/{id}/tu_choi",
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def tu_choi_hoan_thanh(
+    id: HTId,
+    payload: LyDoInput,
+    actor: HTQuanLy,
+    service: HTService,
+    if_match: HTIfMatch,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.tu_choi(id, payload.ly_do, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@hoan_thanh_router.post(
+    "/{id}/ve_nhap",
+    response_model=HoanThanhResponse,
+    dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
+    responses={200: {"headers": {"ETag": HT_ETAG}}},
+)
+async def ve_nhap_hoan_thanh(
+    id: HTId,
+    payload: LyDoInput,
+    actor: HTNhanVien,
+    service: HTService,
+    if_match: HTIfMatch,
+    request_id: RequestId,
+    response: Response,
+) -> HoanThanhResponse:
+    result, etag = await service.ve_nhap(id, payload.ly_do, actor, if_match, request_id)
     response.headers["ETag"] = etag
     return result

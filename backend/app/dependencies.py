@@ -15,15 +15,11 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomPlanningReader, BomService
-from app.modules.finished_goods_issuing.repository import SqlAlchemyFinishedGoodsIssuingRepository
-from app.modules.finished_goods_issuing.service import FinishedGoodsIssuingService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
-from app.modules.material_issuing.repository import SqlAlchemyMaterialIssuingRepository
-from app.modules.material_issuing.service import MaterialIssuingService
 from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
 from app.modules.nha_cung_cap.service import SupplierService
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
@@ -32,10 +28,11 @@ from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
 from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatSanXuatService
-from app.modules.reporting.repository import SqlAlchemyReportingRepository
-from app.modules.reporting.service import ReportingService
-from app.modules.san_xuat.repository import SqlAlchemyYeuCauSanXuatRepository
-from app.modules.san_xuat.service import YeuCauSanXuatService
+from app.modules.san_xuat.repository import (
+    SqlAlchemyHoanThanhRepository,
+    SqlAlchemyYeuCauSanXuatRepository,
+)
+from app.modules.san_xuat.service import ChungTuHoanThanhService, YeuCauSanXuatService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -144,28 +141,6 @@ def get_receiving_service(
     )
 
 
-def get_material_issuing_service(
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> MaterialIssuingService:
-    return MaterialIssuingService(
-        SqlAlchemyMaterialIssuingRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-        get_mat_hang_availability(db),
-    )
-
-
-def get_finished_goods_issuing_service(
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> FinishedGoodsIssuingService:
-    return FinishedGoodsIssuingService(
-        SqlAlchemyFinishedGoodsIssuingRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-        get_mat_hang_availability(db),
-    )
-
-
 def get_yeu_cau_san_xuat_service(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> YeuCauSanXuatService:
@@ -186,5 +161,10 @@ def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> Inven
     return InventoryService(SqlAlchemyInventoryRepository(db))
 
 
-def get_reporting_service(db: Annotated[AsyncSession, Depends(get_db)]) -> ReportingService:
-    return ReportingService(SqlAlchemyReportingRepository(db))
+def get_chung_tu_hoan_thanh_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> ChungTuHoanThanhService:
+    return ChungTuHoanThanhService(
+        SqlAlchemyHoanThanhRepository(db), audit, SqlAlchemyTransaction(db)
+    )

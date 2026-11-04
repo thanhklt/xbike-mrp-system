@@ -1,9 +1,10 @@
 """Production request and frozen planning representations (contract v3 §8)."""
 
-from datetime import date, datetime
-from typing import Literal
+from datetime import date, datetime, timezone
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien", "hoan_thanh", "da_huy"
@@ -222,3 +223,107 @@ class SanXuatError(BaseModel):
 class SanXuatErrorResponse(BaseModel):
     error: SanXuatError
     meta: ResponseMeta
+
+
+HoanThanhStatus = Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
+HoanThanhSort = Literal["id", "-id", "finish_time", "-finish_time", "ma_phieu", "-ma_phieu"]
+HoanThanhId = Annotated[int, Field(gt=0, le=2**31 - 1, strict=True)]
+
+
+class HoanThanhCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lenh_san_xuat_id: HoanThanhId
+    so_luong_hoan_thanh: HoanThanhId
+    finish_time: AwareDatetime
+
+    @field_validator("finish_time", mode="before")
+    @classmethod
+    def iso_datetime(cls, value):
+        if not isinstance(value, (str, datetime)):
+            raise ValueError("finish_time phải là ISO datetime có múi giờ")
+        return value
+
+    @field_validator("finish_time")
+    @classmethod
+    def normalize_utc(cls, value: datetime) -> datetime:
+        return value.astimezone(timezone.utc)
+
+
+class HoanThanhPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    so_luong_hoan_thanh: HoanThanhId | SkipJsonSchema[None] = None
+    finish_time: AwareDatetime | SkipJsonSchema[None] = None
+
+    @field_validator("finish_time", mode="before")
+    @classmethod
+    def iso_datetime(cls, value):
+        return HoanThanhCreate.iso_datetime(value)
+
+    @model_validator(mode="after")
+    def check_fields(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Cần ít nhất một trường cập nhật")
+        if any(getattr(self, name) is None for name in self.model_fields_set):
+            raise ValueError("Các trường cập nhật không nhận null")
+        if self.finish_time is not None:
+            self.finish_time = self.finish_time.astimezone(timezone.utc)
+        return self
+
+
+class HoanThanhQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    q: str | None = None
+    lenh_san_xuat_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
+    mat_hang_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
+    nhan_vien_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
+    trang_thai: HoanThanhStatus | None = None
+    tu_ngay: date | None = None
+    den_ngay: date | None = None
+    sort: HoanThanhSort = "-id"
+
+    @model_validator(mode="after")
+    def check_dates(self) -> Self:
+        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
+            raise ValueError("Khoảng ngày không hợp lệ")
+        if self.den_ngay == date.max:
+            raise ValueError("den_ngay phải nhỏ hơn 9999-12-31")
+        return self
+
+
+class HoanThanhRead(ChungTuRead):
+    trang_thai: HoanThanhStatus
+    mat_hang_id: int
+
+    @field_validator("finish_time", "created_at")
+    @classmethod
+    def normalize_read_time(cls, value: datetime | None) -> datetime | None:
+        return value.astimezone(timezone.utc) if value is not None else None
+
+
+class HoanThanhResponse(BaseModel):
+    data: HoanThanhRead
+    meta: ResponseMeta
+
+
+class HoanThanhListResponse(BaseModel):
+    data: list[HoanThanhRead]
+    meta: ListResponseMeta
+
+
+class HoanThanhActionRead(HoanThanhRead):
+    giao_dich_kho_ids: list[int]
+    da_ghi_so_truoc_do: bool
+
+
+class HoanThanhActionResponse(BaseModel):
+    data: HoanThanhActionRead
+    meta: ResponseMeta
+
+
+class HoanThanhEmptyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
