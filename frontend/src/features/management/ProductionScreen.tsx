@@ -1,260 +1,316 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import {
-  ArrowRight,
-  Check,
-  ClipboardList,
-  Factory,
-  FilePlus2,
-  Layers,
-  ShieldCheck,
-} from "lucide-react";
-import {
-  ActionButton,
-  Field,
-  FormError,
-  MaterialTable,
-  Notice,
-  PageTitle,
-  Panel,
-  Status,
-} from "./components";
-import { itemById, materialDemand, number } from "./planning";
-import { employees } from "./types";
-import type { OrderKind, WorkOrder, WorkOrderInput } from "./types";
+import { ArrowRight, ClipboardList, Factory, GitBranch, Save, ShieldCheck } from "lucide-react";
+import { ActionButton, Field, FormError, Notice, PageTitle, Panel, Status } from "./components";
+import { itemById, number } from "./planning";
+import type { OrderStatus } from "./types";
 import { useWorkspace, useWorkspaceMutation } from "./workspace-hooks";
+
+const orderLabels: Record<OrderStatus, string> = {
+  nhap: "Nháp",
+  da_gui: "Đã gửi",
+  dang_thuc_hien: "Đang thực hiện",
+  hoan_thanh: "Hoàn thành",
+  da_huy: "Đã hủy",
+};
 
 export function ProductionScreen() {
   const { workspace, notify } = useWorkspace();
   const [params] = useSearchParams();
-  const initialRequest =
-    workspace.requests.find((entry) => entry.id === params.get("request")) ??
-    workspace.requests[workspace.requests.length - 1];
-  const [requestId, setRequestId] = useState(initialRequest.id);
-  const [kind, setKind] = useState<OrderKind>("bike");
-  const [quantity, setQuantity] = useState(() =>
-    Math.max(
-      0,
-      initialRequest.plan.bikesToMake -
-        workspace.orders
-          .filter((order) => order.requestId === initialRequest.id && order.kind === "bike")
-          .reduce((sum, order) => sum + order.quantity, 0),
-    ),
+  const [requestId, setRequestId] = useState(params.get("request") ?? "");
+  const [orderId, setOrderId] = useState("");
+  const [assignment, setAssignment] = useState<{ orderId: string; assigneeId: string } | null>(
+    null,
   );
-  const [assignee, setAssignee] = useState<string>(initialRequest.assignee);
-  const [note, setNote] = useState("");
-  const [created, setCreated] = useState<WorkOrder | null>(null);
-  const request = workspace.requests.find((entry) => entry.id === requestId) ?? initialRequest;
-  const output = itemById(workspace.items, kind === "bike" ? request.productId : "wheel");
-  const planned = kind === "bike" ? request.plan.bikesToMake : request.plan.wheelsToMake;
-  const ordered = workspace.orders
-    .filter((order) => order.requestId === requestId && order.kind === kind)
-    .reduce((total, order) => total + order.quantity, 0);
-  const remaining = Math.max(0, planned - ordered);
-  const lines = materialDemand(
-    workspace.items,
-    kind,
-    Number.isSafeInteger(quantity) && quantity > 0 ? quantity : 0,
+  const assign = useWorkspaceMutation((api, input: { id: string; assigneeId: string | null }) =>
+    api.assignOrder(input),
   );
-  const missing = lines.filter((line) => line.missing > 0).length;
-  const create = useWorkspaceMutation((api, input: WorkOrderInput) => api.createOrder(input));
+  const send = useWorkspaceMutation((api, id: string) => api.sendOrder(id));
+  const orders = workspace.orders.filter((order) => !requestId || order.requestId === requestId);
+  const order = orders.find((entry) => entry.id === orderId) ?? orders[0];
+  const employees = workspace.employees.filter(
+    (employee) => employee.active && employee.role === "nhan_vien",
+  );
+  const busy = assign.isPending || send.isPending;
 
-  function chooseKind(next: OrderKind) {
-    setKind(next);
-    setCreated(null);
-    create.reset();
-    const demand = next === "bike" ? request.plan.bikesToMake : request.plan.wheelsToMake;
-    const existing = workspace.orders
-      .filter((order) => order.requestId === requestId && order.kind === next)
-      .reduce((sum, order) => sum + order.quantity, 0);
-    setQuantity(Math.max(0, demand - existing));
+  function chooseOrder(id: string) {
+    setOrderId(id);
+    setAssignment(null);
+    assign.reset();
+    send.reset();
   }
 
-  async function submit() {
+  async function saveAssignment() {
+    if (!order) return;
     try {
-      const result = await create.mutateAsync({ requestId, kind, quantity, assignee, note });
-      setCreated(result);
+      const assigneeId =
+        assignment?.orderId === order.id ? assignment.assigneeId : order.assigneeId;
+      const result = await assign.mutateAsync({ id: order.id, assigneeId: assigneeId || null });
+      setAssignment(null);
       notify(
-        `Đã tạo ${result.code}`,
-        `Giao ${assignee} sản xuất ${number(result.quantity)} ${output.unit}. Tồn kho giữ nguyên.`,
+        `Đã lưu phân công ${result.code}`,
+        "Chỉ cập nhật người thực hiện. Lượng, BOM và nhu cầu của lệnh giữ nguyên.",
       );
     } catch {
-      /* Show the command error below the form. */
+      /* The mutation error is displayed beside the assignment. */
     }
   }
 
+  async function sendOrder() {
+    if (!order) return;
+    try {
+      const result = await send.mutateAsync(order.id);
+      notify(
+        `Đã gửi ${result.code}`,
+        "Nhân viên được giao có thể xem công việc. Gửi lệnh không thay đổi tồn kho.",
+      );
+    } catch {
+      /* The mutation error is displayed beside the assignment. */
+    }
+  }
+
+  const heading = (
+    <PageTitle
+      step="03 / 04"
+      title="Lệnh sản xuất"
+      description="Phân công và gửi các lệnh được sinh từ kế hoạch yêu cầu."
+    />
+  );
+
+  if (!order) {
+    return (
+      <>
+        {heading}
+        <Panel title="Chưa có lệnh trong yêu cầu này">
+          <div className="m-panel-body">
+            <Notice>
+              Lệnh được tạo tự động khi gửi yêu cầu. Nếu đủ tồn thành phẩm, kế hoạch không cần tạo
+              lệnh sản xuất.
+            </Notice>
+            <Link className="m-text-link" to="/quan-ly/yeu-cau-thanh-pham">
+              Đến yêu cầu thành phẩm <ArrowRight size={16} />
+            </Link>
+            {requestId && (
+              <ActionButton onClick={() => setRequestId("")}>Xem tất cả lệnh</ActionButton>
+            )}
+          </div>
+        </Panel>
+      </>
+    );
+  }
+
+  const request = workspace.requests.find((entry) => entry.id === order.requestId)!;
+  const output = itemById(workspace.items, order.outputId);
+  const bom = workspace.boms.find((entry) => entry.id === order.bomId)!;
+  const parent = workspace.orders.find((entry) => entry.id === order.parentOrderId);
+  const assigneeId =
+    assignment?.orderId === order.id ? assignment.assigneeId : (order.assigneeId ?? "");
+  const changed = assigneeId !== (order.assigneeId ?? "");
+  const locked = order.status !== "nhap";
+  const demand = order.demand.map((line) => {
+    const item = itemById(workspace.items, line.itemId);
+    const issued = workspace.issues
+      .filter((issue) => issue.orderId === order.id && issue.status === "da_duyet")
+      .reduce(
+        (sum, issue) =>
+          sum +
+          issue.lines
+            .filter((entry) => entry.itemId === line.itemId)
+            .reduce((total, entry) => total + entry.quantity, 0),
+        0,
+      );
+    return { ...line, item, issued, remaining: Math.max(0, line.required - issued) };
+  });
+  const shortages = demand.filter((line) => line.remaining > line.item.stock).length;
+  const children = workspace.orders.filter((entry) => entry.parentOrderId === order.id);
+  const worker = workspace.employees.find((entry) => entry.id === order.assigneeId);
+
   return (
     <>
-      <PageTitle
-        step="03 / 04"
-        title="Lệnh sản xuất"
-        description="Chuyển nhu cầu còn thiếu thành công việc cho xưởng."
-        action={
-          created ? (
-            <ActionButton
-              onClick={() => {
-                setCreated(null);
-                setNote("");
-                setQuantity(remaining);
-                create.reset();
-              }}
-            >
-              <FilePlus2 size={16} />
-              Lệnh mới
-            </ActionButton>
-          ) : undefined
-        }
-      />
-      <div className="m-kind-tabs" role="group" aria-label="Loại lệnh sản xuất">
-        <button aria-pressed={kind === "bike"} onClick={() => chooseKind("bike")}>
-          <Factory size={17} />
-          Lệnh lắp xe
-        </button>
-        <button aria-pressed={kind === "wheel"} onClick={() => chooseKind("wheel")}>
-          <Layers size={17} />
-          Lệnh cụm bánh
-        </button>
+      {heading}
+      <div className="m-document-bar">
+        <div>
+          <span className="m-document-code">{order.code}</span>
+          <Status tone={order.status === "hoan_thanh" ? "green" : "neutral"}>
+            {orderLabels[order.status]}
+          </Status>
+        </div>
+        <span className="m-icon-label">
+          <GitBranch size={16} />
+          {parent ? "Lệnh con" : "Lệnh gốc"}
+        </span>
       </div>
       <div className="m-work-grid">
-        <form
-          className="m-main-stack"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
+        <div className="m-main-stack">
           <Panel
-            title="Thông tin lệnh sản xuất"
-            subtitle="Liên kết yêu cầu, xác định đầu ra và người thực hiện."
-            action={
-              <Status tone={created ? "green" : "neutral"}>{created?.code ?? "Chưa tạo"}</Status>
-            }
+            title="Lệnh từ kế hoạch đã gửi"
+            subtitle="Số lượng, đầu ra, BOM và quan hệ cha con đã được lưu cùng kế hoạch."
           >
-            <fieldset className="m-panel-body m-fields" disabled={!!created || create.isPending}>
-              <Field label="Yêu cầu thành phẩm" required wide>
+            <div className="m-panel-body m-fields">
+              <Field label="Lọc theo yêu cầu">
                 <select
                   value={requestId}
+                  disabled={busy}
                   onChange={(event) => {
-                    const next = workspace.requests.find(
-                      (entry) => entry.id === event.target.value,
-                    );
-                    if (!next) return;
-                    setRequestId(next.id);
-                    setAssignee(next.assignee);
-                    const total = kind === "bike" ? next.plan.bikesToMake : next.plan.wheelsToMake;
-                    const existing = workspace.orders
-                      .filter((order) => order.requestId === next.id && order.kind === kind)
-                      .reduce((sum, order) => sum + order.quantity, 0);
-                    setQuantity(Math.max(0, total - existing));
+                    setRequestId(event.target.value);
+                    chooseOrder("");
                   }}
                 >
+                  <option value="">Tất cả yêu cầu</option>
                   {workspace.requests.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      {entry.code} · {itemById(workspace.items, entry.productId).name} ·{" "}
-                      {entry.quantity} xe
+                      {entry.code} · {itemById(workspace.items, entry.productId).name}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Thành phẩm đầu ra">
-                <input value={`${output.code} · ${output.name}`} readOnly />
-              </Field>
-              <Field
-                label="Số lượng cần sản xuất"
-                required
-                hint={`${created ? "Đã tạo" : "Chưa tạo lệnh"}: ${number(created ? created.quantity : remaining)} ${output.unit}`}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  max={created ? created.quantity : remaining || 1}
-                  step={1}
-                  required
-                  value={Number.isNaN(quantity) ? "" : quantity}
-                  onChange={(event) => setQuantity(event.target.valueAsNumber)}
-                />
-              </Field>
-              <Field label="Nhân viên thực hiện" required>
-                <select value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-                  {employees.map((name) => (
-                    <option key={name}>{name}</option>
+              <Field label="Chọn lệnh sản xuất">
+                <select
+                  value={order.id}
+                  disabled={busy}
+                  onChange={(event) => chooseOrder(event.target.value)}
+                >
+                  {orders.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.code} · {itemById(workspace.items, entry.outputId).name} ·{" "}
+                      {orderLabels[entry.status]}
+                    </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Loại công việc">
-                <input
-                  readOnly
-                  value={kind === "bike" ? "Lắp ráp xe thành phẩm" : "Sản xuất cụm bánh xe"}
-                />
+              <Field label="Mặt hàng đầu ra">
+                <input value={`${output.code} · ${output.name}`} readOnly />
               </Field>
-              <Field label="Chỉ dẫn sản xuất" wide>
-                <textarea
-                  rows={2}
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder="Ghi rõ thứ tự ưu tiên hoặc lưu ý cho nhân viên…"
-                />
+              <Field label="Số lượng sản xuất">
+                <input value={`${number(order.quantity)} ${output.unit}`} readOnly />
               </Field>
-            </fieldset>
+              <Field label="BOM đã chốt">
+                <input value={`${output.code} · Phiên bản ${bom.version}`} readOnly />
+              </Field>
+              <Field label="Lệnh cha">
+                <input value={parent?.code ?? "Không có · Lệnh gốc của yêu cầu"} readOnly />
+              </Field>
+              <Field label="Ngày tạo">
+                <input value={new Date(order.createdAt).toLocaleString("vi-VN")} readOnly />
+              </Field>
+              <Field label="Trạng thái">
+                <input value={orderLabels[order.status]} readOnly />
+              </Field>
+            </div>
           </Panel>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveAssignment();
+            }}
+          >
+            <Panel
+              title="Phân công thực hiện"
+              subtitle="Chỉ lệnh nháp được đổi nhân viên. Gửi lệnh cần nhân viên đang hoạt động."
+            >
+              <fieldset disabled={locked || busy} className="m-panel-body m-fields">
+                <Field label="Nhân viên thực hiện" wide hint="Có thể để trống khi còn nháp.">
+                  <select
+                    value={assigneeId}
+                    onChange={(event) => {
+                      setAssignment({ orderId: order.id, assigneeId: event.target.value });
+                      assign.reset();
+                      send.reset();
+                    }}
+                  >
+                    <option value="">Chưa giao nhân viên</option>
+                    {employees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.code} · {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </fieldset>
+              <div className="m-panel-body m-panel-body--topless">
+                <FormError error={assign.error ?? send.error} />
+                <Notice tone={shortages ? "amber" : "neutral"}>
+                  {locked
+                    ? `Lệnh ${orderLabels[order.status].toLocaleLowerCase("vi-VN")} · ${worker?.name ?? "Chưa có nhân viên được giao"}.`
+                    : shortages
+                      ? "Thiếu vật tư không chặn gửi lệnh. Nhân viên chỉ bắt đầu khi mọi vật tư đã được cấp đủ."
+                      : "Gửi lệnh chuyển sang Đã gửi; không trừ vật tư hoặc cộng thành phẩm."}
+                </Notice>
+              </div>
+              <footer className="m-action-bar">
+                <span>
+                  <ShieldCheck size={16} />
+                  {changed ? "Lưu phân công trước khi gửi" : "Tồn kho không đổi khi gửi lệnh"}
+                </span>
+                <div>
+                  <ActionButton type="submit" disabled={locked || busy || !changed}>
+                    <Save size={16} />
+                    {assign.isPending ? "Đang lưu…" : "Lưu phân công"}
+                  </ActionButton>
+                  <ActionButton
+                    variant="primary"
+                    disabled={locked || busy || changed || !assigneeId}
+                    onClick={() => void sendOrder()}
+                  >
+                    {send.isPending ? "Đang gửi…" : "Gửi lệnh"}
+                    <ArrowRight size={16} />
+                  </ActionButton>
+                </div>
+              </footer>
+            </Panel>
+          </form>
           <Panel
-            title="Định mức cấp vật tư"
-            subtitle={`Nhu cầu cho ${number(Number.isFinite(quantity) ? quantity : 0)} ${output.unit} ${output.name}.`}
+            title="Nhu cầu trực tiếp đã chốt"
+            subtitle="Đọc từ ảnh chụp định mức của lệnh; không phân rã lại theo BOM mới."
             action={
-              <Status tone={missing ? "amber" : "green"}>
-                {missing ? `${missing} loại còn thiếu` : "Vật tư sẵn sàng"}
+              <Status tone={shortages ? "amber" : "neutral"}>
+                {shortages ? `${shortages} loại chưa đủ tồn` : "Tồn đáp ứng phần chưa cấp"}
               </Status>
             }
           >
-            <MaterialTable items={workspace.items} lines={lines} />
+            <div className="m-table-scroll">
+              <table className="m-table">
+                <thead>
+                  <tr>
+                    <th>Vật tư</th>
+                    <th className="m-number">Cần cấp</th>
+                    <th className="m-number">Đã cấp</th>
+                    <th className="m-number">Còn cần cấp</th>
+                    <th className="m-number">Tồn hiện tại</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demand.map((line) => (
+                    <tr key={line.itemId}>
+                      <td>
+                        <strong>{line.item.name}</strong>
+                        <small>
+                          {line.item.code} · {line.item.unit}
+                        </small>
+                      </td>
+                      <td className="m-number">{number(line.required)}</td>
+                      <td className="m-number">{number(line.issued)}</td>
+                      <td className="m-number">{number(line.remaining)}</td>
+                      <td
+                        className={`m-number ${line.remaining > line.item.stock ? "m-shortage" : ""}`}
+                      >
+                        {number(line.item.stock)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="m-panel-body">
-              <Notice tone={missing ? "amber" : "neutral"}>
-                {missing
-                  ? "Có thể tạo lệnh dù vật tư chưa đủ. Nhân viên cần được cấp đủ vật tư trước khi bắt đầu sản xuất."
-                  : "Định mức dùng để lập đề nghị xuất. Tạo lệnh không trừ vật tư và không cộng thành phẩm."}
+              <Notice>
+                Chỉ phiếu xuất vật tư đã duyệt mới được tính là đã cấp. Bắt đầu và hoàn thành lệnh
+                thuộc luồng công việc của nhân viên.
               </Notice>
             </div>
-            <FormError error={create.error} />
-            {created && (
-              <div className="m-success-card">
-                <Check size={20} />
-                <div>
-                  <strong>{created.code} đã được tạo</strong>
-                  <p>
-                    {assignee} · {number(created.quantity)} {output.unit} {output.name}
-                  </p>
-                </div>
-                <Status tone={missing ? "amber" : "neutral"}>Chờ cấp vật tư</Status>
-              </div>
-            )}
-            {!created && remaining === 0 && (
-              <div className="m-panel-body">
-                <Notice>
-                  Phần nhu cầu này đã được tạo đủ lệnh hoặc không cần sản xuất thêm. Anh có thể chọn
-                  yêu cầu hoặc loại lệnh khác.
-                </Notice>
-              </div>
-            )}
-            <footer className="m-action-bar">
-              <span>
-                <ShieldCheck size={16} />
-                Tồn kho không đổi khi tạo lệnh
-              </span>
-              <div>
-                <ActionButton
-                  type="submit"
-                  variant="primary"
-                  disabled={!!created || create.isPending || remaining === 0}
-                >
-                  {create.isPending ? "Đang tạo…" : "Tạo lệnh sản xuất"}
-                  <ArrowRight size={16} />
-                </ActionButton>
-              </div>
-            </footer>
           </Panel>
-        </form>
+        </div>
         <aside className="m-side-stack">
-          <Panel title="Nhu cầu liên quan">
+          <Panel title="Yêu cầu và cây lệnh">
             <div className="m-panel-body">
               <div className="m-linked-document">
                 <ClipboardList size={21} />
@@ -265,58 +321,64 @@ export function ProductionScreen() {
               </div>
               <dl className="m-summary-list">
                 <div>
-                  <dt>Tổng cần đáp ứng</dt>
+                  <dt>Cần đáp ứng</dt>
                   <dd>{number(request.quantity)} xe</dd>
                 </div>
                 <div>
-                  <dt>Xe cần lắp</dt>
-                  <dd>{number(request.plan.bikesToMake)} xe</dd>
+                  <dt>Lệnh cha</dt>
+                  <dd>{parent?.code ?? "Không có"}</dd>
                 </div>
                 <div>
-                  <dt>Cụm bánh cần làm</dt>
-                  <dd>{number(request.plan.wheelsToMake)} cụm</dd>
-                </div>
-                <div>
-                  <dt>Đã tạo lệnh loại này</dt>
-                  <dd>
-                    {number(ordered)} {output.unit}
-                  </dd>
+                  <dt>Lệnh con</dt>
+                  <dd>{children.length}</dd>
                 </div>
               </dl>
+              {parent && (
+                <ActionButton variant="plain" onClick={() => chooseOrder(parent.id)}>
+                  Xem {parent.code}
+                  <ArrowRight size={14} />
+                </ActionButton>
+              )}
+              {children.map((child) => (
+                <ActionButton key={child.id} variant="plain" onClick={() => chooseOrder(child.id)}>
+                  Xem {child.code}
+                  <ArrowRight size={14} />
+                </ActionButton>
+              ))}
               <Link className="m-text-link" to="/quan-ly/yeu-cau-thanh-pham">
                 Tạo yêu cầu khác
                 <ArrowRight size={15} />
               </Link>
             </div>
           </Panel>
-          <Panel title="Sau khi tạo lệnh">
+          <Panel title="Từ kế hoạch đến sản xuất">
             <ol className="m-process-list">
               <li className="is-current">
                 <span>1</span>
                 <div>
-                  <strong>Tạo lệnh sản xuất</strong>
-                  <small>Quản lý giao việc cho nhân viên</small>
+                  <strong>Gửi yêu cầu</strong>
+                  <small>Tự sinh cây lệnh nháp theo BOM</small>
                 </div>
               </li>
               <li>
                 <span>2</span>
                 <div>
-                  <strong>Đề nghị xuất vật tư</strong>
-                  <small>Nhân viên lập phiếu xuất</small>
+                  <strong>Phân công và gửi lệnh</strong>
+                  <small>Quản lý giao việc cho nhân viên</small>
                 </div>
               </li>
               <li>
                 <span>3</span>
                 <div>
-                  <strong>Duyệt cấp vật tư</strong>
-                  <small>Kiểm tra tồn trước khi ghi sổ</small>
+                  <strong>Cấp vật tư</strong>
+                  <small>Quản lý lập và duyệt phiếu xuất</small>
                 </div>
               </li>
               <li>
                 <span>4</span>
                 <div>
-                  <strong>Sản xuất và hoàn thành</strong>
-                  <small>Gửi chứng từ hoàn thành</small>
+                  <strong>Thực hiện và hoàn thành</strong>
+                  <small>Nhân viên lập chứng từ hoàn thành</small>
                 </div>
               </li>
             </ol>
@@ -327,24 +389,14 @@ export function ProductionScreen() {
               </Link>
             </div>
           </Panel>
-          {workspace.orders.length > 0 && (
-            <Panel title="Lệnh vừa tạo">
-              <div className="m-recent-list">
-                {[...workspace.orders]
-                  .reverse()
-                  .slice(0, 3)
-                  .map((order) => (
-                    <div key={order.id}>
-                      <strong>{order.code}</strong>
-                      <span>
-                        {order.quantity} {itemById(workspace.items, order.outputId).unit} ·{" "}
-                        {order.assignee}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </Panel>
-          )}
+          <div className="m-rule-note">
+            <Factory size={20} strokeWidth={1.5} />
+            <strong>Lệnh giữ nguyên kế hoạch</strong>
+            <p>
+              Mỗi lệnh gắn đúng mặt hàng, phiên bản BOM và yêu cầu đã gửi. Lệnh con nhập đầu ra
+              trước khi cấp bán thành phẩm cho lệnh cha.
+            </p>
+          </div>
         </aside>
       </div>
     </>

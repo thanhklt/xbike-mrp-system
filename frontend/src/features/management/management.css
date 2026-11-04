@@ -1403,7 +1403,7 @@
   font-weight: 400;
 }
 .m-issue-table {
-  min-width: 460px;
+  min-width: 760px;
 }
 .m-issue-table td:first-child {
   min-width: 140px;
@@ -1906,7 +1906,7 @@
     min-width: 730px;
   }
   .m-issue-table {
-    min-width: 470px;
+    min-width: 760px;
   }
   .m-table th:first-child,
   .m-table td:first-child {

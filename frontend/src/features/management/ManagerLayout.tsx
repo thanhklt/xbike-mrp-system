@@ -18,12 +18,13 @@ import {
 import { createDemoApi } from "./demo-api";
 import { ActionButton, ConfirmDialog, Status } from "./components";
 import type { WorkspaceContext } from "./workspace-hooks";
+import { currentManager } from "./types";
 import "./management.css";
 
 const navigation = [
   {
     path: "nhap-kho",
-    label: "Phiếu nhập NVL",
+    label: "Phiếu nhập kho",
     icon: ArrowDownToLine,
     description: "Tiếp nhận vật tư",
   },
@@ -37,7 +38,7 @@ const navigation = [
     path: "lenh-san-xuat",
     label: "Lệnh sản xuất",
     icon: Factory,
-    description: "Phân công thực hiện",
+    description: "Giao và gửi lệnh",
   },
   {
     path: "duyet-phieu-xuat",
@@ -70,7 +71,8 @@ export function ManagerLayout() {
   const location = useLocation();
   const current =
     navigation.find((entry) => location.pathname.includes(entry.path)) ?? navigation[0];
-  const pending = workspace.data?.issues.filter((entry) => entry.status === "pending").length ?? 0;
+  const pending =
+    workspace.data?.issues.filter((entry) => entry.status === "cho_duyet").length ?? 0;
   useEffect(() => {
     localStorage.setItem("xbike-ui-theme", theme);
     document.documentElement.style.colorScheme = theme;
@@ -225,7 +227,7 @@ export function ManagerLayout() {
           <div className="m-account">
             <span className="m-avatar">TB</span>
             <div>
-              <strong>Trần Thanh Bình</strong>
+              <strong>{currentManager.name}</strong>
               <small>Quản lý · Tài khoản minh họa</small>
             </div>
           </div>
@@ -248,7 +250,7 @@ export function ManagerLayout() {
             <strong>{current.label}</strong>
           </div>
           <div className="m-topbar-actions">
-            <Status>Bản demo</Status>
+            <Status>Demo v3.1</Status>
             <span className="m-topbar-divider" />
             <ActionButton
               variant="plain"
@@ -342,8 +344,8 @@ export function ManagerLayout() {
         >
           <ol className="m-help-list">
             <li>Lưu nháp phiếu nhập; xác nhận để tăng tồn.</li>
-            <li>Tính phần thành phẩm còn thiếu và BOM hai cấp.</li>
-            <li>Tạo lệnh lắp xe hoặc cụm bánh, giao nhân viên.</li>
+            <li>Lưu nháp yêu cầu, tính kế hoạch rồi gửi để sinh cây lệnh.</li>
+            <li>Chọn lệnh đã sinh, giao nhân viên và gửi lệnh.</li>
             <li>Kiểm tra tồn rồi duyệt hoặc từ chối phiếu xuất.</li>
           </ol>
           <p className="m-muted">

@@ -19,27 +19,26 @@ import {
   Panel,
   Status,
 } from "./components";
-import { documentTotal, itemById, money, number } from "./planning";
-import type { ItemKind, Issue, IssueStatus } from "./types";
+import { documentTotal, itemById, issueApprovalProblem, money, number } from "./planning";
+import type { IssueKind, Issue, IssueStatus } from "./types";
 import { useWorkspace, useWorkspaceMutation } from "./workspace-hooks";
 
 const statusNames: Record<IssueStatus, string> = {
-  pending: "Chờ duyệt",
-  approved: "Đã duyệt",
-  rejected: "Từ chối",
+  cho_duyet: "Chờ duyệt",
+  da_duyet: "Đã duyệt",
+  tu_choi: "Từ chối",
 };
-const kindNames: Record<ItemKind, string> = {
-  material: "Nguyên vật liệu",
-  component: "Bán thành phẩm",
-  product: "Thành phẩm",
+const kindNames: Record<IssueKind, string> = {
+  xuat_vat_tu: "Xuất vật tư",
+  xuat_thanh_pham: "Xuất thành phẩm",
 };
-const statusTones = { pending: "amber", approved: "green", rejected: "red" } as const;
+const statusTones = { cho_duyet: "amber", da_duyet: "green", tu_choi: "red" } as const;
 
 export function ApprovalScreen() {
   const { workspace, notify } = useWorkspace();
   const [selectedId, setSelectedId] = useState("issue-26");
-  const [filter, setFilter] = useState<"all" | IssueStatus>("pending");
-  const [kind, setKind] = useState<"all" | ItemKind>("all");
+  const [filter, setFilter] = useState<"all" | IssueStatus>("cho_duyet");
+  const [kind, setKind] = useState<"all" | IssueKind>("all");
   const [search, setSearch] = useState("");
   const [reason, setReason] = useState("");
   const [dialog, setDialog] = useState<"approve" | "reject" | null>(null);
@@ -49,15 +48,29 @@ export function ApprovalScreen() {
   const reject = useWorkspaceMutation((api, input: { id: string; reason: string }) =>
     api.rejectIssue(input),
   );
-  const pending = workspace.issues.filter((issue) => issue.status === "pending");
-  const insufficient = pending.filter((issue) =>
-    issue.lines.some((line) => itemById(workspace.items, line.itemId).stock < line.quantity),
-  );
+  const pending = workspace.issues.filter((issue) => issue.status === "cho_duyet");
+  const blocked = pending.filter((issue) => issueApprovalProblem(workspace, issue));
+  const creatorName = (issue: Issue) => {
+    const employee = workspace.employees.find((entry) => entry.id === issue.creatorId);
+    return employee ? `${employee.code} · ${employee.name}` : "Không có thông tin người lập";
+  };
+  const sourceName = (issue: Issue) => {
+    if (issue.kind === "xuat_vat_tu") {
+      const order = workspace.orders.find((entry) => entry.id === issue.orderId);
+      return order
+        ? `${order.code} · ${itemById(workspace.items, order.outputId).name}`
+        : "Không tìm thấy lệnh nguồn";
+    }
+    const request = workspace.requests.find((entry) => entry.id === issue.requestId);
+    return request
+      ? `${request.code} · ${itemById(workspace.items, request.productId).name}`
+      : "Không tìm thấy yêu cầu nguồn";
+  };
   const filtered = workspace.issues.filter((issue) => {
     const searchable = [
       issue.code,
-      issue.author,
-      issue.source,
+      creatorName(issue),
+      sourceName(issue),
       ...issue.lines.map((line) => itemById(workspace.items, line.itemId).name),
     ]
       .join(" ")
@@ -69,9 +82,9 @@ export function ApprovalScreen() {
     );
   });
   const selected = filtered.find((issue) => issue.id === selectedId) ?? filtered[0];
-  const selectedMissing =
-    selected?.lines.some((line) => itemById(workspace.items, line.itemId).stock < line.quantity) ??
-    false;
+  const selectedProblem =
+    selected?.status === "cho_duyet" ? issueApprovalProblem(workspace, selected) : null;
+  const selectedTotal = selected ? documentTotal(selected.lines) : null;
   const busy = approve.isPending || reject.isPending;
 
   function select(issue: Issue) {
@@ -109,14 +122,14 @@ export function ApprovalScreen() {
       <PageTitle
         step="04 / 04"
         title="Duyệt phiếu xuất"
-        description={`${pending.length} phiếu đang chờ quyết định${insufficient.length ? ` · ${insufficient.length} phiếu cần bổ sung tồn kho` : " · Tồn kho đáp ứng các phiếu đang chờ"}.`}
+        description={`${pending.length} phiếu chờ duyệt · ${blocked.length} phiếu chưa đủ điều kiện xuất kho.`}
       />
       <div className={`m-approval-grid ${mobileDetail ? "is-detail" : "is-list"}`}>
         <section className="m-approval-list m-panel" aria-label="Danh sách phiếu xuất">
           <header className="m-panel-heading">
             <div>
               <h2>Hàng chờ phê duyệt</h2>
-              <p>Phiếu đề nghị từ nhân viên</p>
+              <p>Quản lý lập và xử lý phiếu xuất</p>
             </div>
             <span className="m-nav-count">{pending.length}</span>
           </header>
@@ -143,9 +156,9 @@ export function ApprovalScreen() {
                   onChange={(event) => setFilter(event.target.value as typeof filter)}
                 >
                   <option value="all">Tất cả trạng thái</option>
-                  <option value="pending">Chờ duyệt ({pending.length})</option>
-                  <option value="approved">Đã duyệt</option>
-                  <option value="rejected">Từ chối</option>
+                  <option value="cho_duyet">Chờ duyệt ({pending.length})</option>
+                  <option value="da_duyet">Đã duyệt</option>
+                  <option value="tu_choi">Từ chối</option>
                 </select>
               </label>
               <label>
@@ -167,11 +180,8 @@ export function ApprovalScreen() {
           <div className="m-queue-items">
             {filtered.length ? (
               filtered.map((issue) => {
-                const shortage =
-                  issue.status === "pending" &&
-                  issue.lines.some(
-                    (line) => itemById(workspace.items, line.itemId).stock < line.quantity,
-                  );
+                const problem =
+                  issue.status === "cho_duyet" ? issueApprovalProblem(workspace, issue) : null;
                 return (
                   <button
                     className={`m-queue-item ${selected?.id === issue.id ? "is-selected" : ""}`}
@@ -192,12 +202,12 @@ export function ApprovalScreen() {
                       <span>
                         {kindNames[issue.kind]} · {issue.lines.length} dòng
                       </span>
-                      {shortage && <span className="m-shortage-label">Thiếu tồn</span>}
+                      {problem && <span className="m-shortage-label">Cần kiểm tra</span>}
                     </div>
                     <div className="m-queue-item-bottom">
-                      <span>{issue.author}</span>
+                      <span>{creatorName(issue)}</span>
                       <span>
-                        {new Date(`${issue.date}T00:00:00`).toLocaleDateString("vi-VN", {
+                        {new Date(issue.createdAt).toLocaleDateString("vi-VN", {
                           day: "2-digit",
                           month: "2-digit",
                         })}
@@ -254,16 +264,16 @@ export function ApprovalScreen() {
                 </div>
                 <dl className="m-detail-grid">
                   <div>
-                    <dt>Người đề nghị</dt>
-                    <dd>{selected.author}</dd>
+                    <dt>Quản lý lập phiếu</dt>
+                    <dd>{creatorName(selected)}</dd>
                   </div>
                   <div>
                     <dt>Ngày lập phiếu</dt>
-                    <dd>{new Date(`${selected.date}T00:00:00`).toLocaleDateString("vi-VN")}</dd>
+                    <dd>{new Date(selected.createdAt).toLocaleDateString("vi-VN")}</dd>
                   </div>
                   <div className="m-detail-wide">
                     <dt>Chứng từ nguồn</dt>
-                    <dd>{selected.source}</dd>
+                    <dd>{sourceName(selected)}</dd>
                   </div>
                 </dl>
               </div>
@@ -277,11 +287,13 @@ export function ApprovalScreen() {
                       <th>Hàng hóa</th>
                       <th className="m-number">Đề nghị</th>
                       <th className="m-number">
-                        {selected.status === "approved" ? "Tồn trước" : "Tồn hiện tại"}
+                        {selected.status === "da_duyet" ? "Tồn trước" : "Tồn hiện tại"}
                       </th>
                       <th className="m-number">
-                        {selected.status === "approved" ? "Tồn sau" : "Sau duyệt"}
+                        {selected.status === "da_duyet" ? "Tồn sau" : "Tồn dự kiến"}
                       </th>
+                      <th className="m-number">Đơn giá chốt</th>
+                      <th className="m-number">Thành tiền</th>
                       <th>Kiểm tra</th>
                     </tr>
                   </thead>
@@ -296,7 +308,7 @@ export function ApprovalScreen() {
                           <td>
                             <strong>{item.name}</strong>
                             <small>
-                              {item.code} · {item.unit}
+                              {item.code} · SKU {item.sku} · {item.unit}
                             </small>
                           </td>
                           <td className="m-number">
@@ -304,12 +316,18 @@ export function ApprovalScreen() {
                           </td>
                           <td className="m-number">{number(before)}</td>
                           <td className={`m-number ${after < 0 ? "m-negative" : ""}`}>
-                            {selected.status === "rejected" ? "—" : number(after)}
+                            {selected.status === "tu_choi" ? "—" : number(after)}
+                          </td>
+                          <td className="m-number">
+                            {line.price === null ? "Chưa chốt" : money(line.price)}
+                          </td>
+                          <td className="m-number">
+                            {line.price === null ? "—" : money(line.price * line.quantity)}
                           </td>
                           <td>
-                            {selected.status === "approved" ? (
+                            {selected.status === "da_duyet" ? (
                               <Check size={17} className="m-positive" aria-label="Đã xuất" />
-                            ) : selected.status === "rejected" ? (
+                            ) : selected.status === "tu_choi" ? (
                               <span className="m-muted">Không xuất</span>
                             ) : (
                               <Status tone={after < 0 ? "red" : "green"}>
@@ -325,33 +343,33 @@ export function ApprovalScreen() {
               </div>
               <div className="m-panel-total">
                 <span>Giá trị phiếu xuất</span>
-                <strong>{money(documentTotal(selected.lines))}</strong>
+                <strong>{selectedTotal === null ? "Chưa chốt giá" : money(selectedTotal)}</strong>
               </div>
               <div className="m-panel-body m-detail-notes">
                 <Notice
                   tone={
-                    selected.status === "approved"
+                    selected.status === "da_duyet"
                       ? "green"
-                      : selected.status === "rejected"
+                      : selected.status === "tu_choi"
                         ? "neutral"
-                        : selectedMissing
+                        : selectedProblem
                           ? "amber"
                           : "green"
                   }
                 >
-                  {selected.status === "approved"
+                  {selected.status === "da_duyet"
                     ? "Đã ghi nhận xuất kho. Phiếu được khóa để tránh trừ tồn lần thứ hai."
-                    : selected.status === "rejected"
+                    : selected.status === "tu_choi"
                       ? "Phiếu đã bị từ chối, không làm thay đổi tồn kho."
-                      : selectedMissing
-                        ? "Chưa đủ tồn cho toàn bộ phiếu. Vui lòng bổ sung vật tư hoặc từ chối kèm lý do."
-                        : "Tồn kho hiện đáp ứng phiếu. Số lượng sẽ được kiểm tra lại khi anh xác nhận duyệt."}
+                      : selectedProblem
+                        ? selectedProblem
+                        : "Phiếu đủ điều kiện theo dữ liệu demo hiện tại. Duyệt sẽ kiểm tra lại tồn và chốt giá từ mặt hàng."}
                 </Notice>
-                <div className="m-note-block">
-                  <span>Ghi chú của nhân viên</span>
-                  <p>{selected.note || "Không có ghi chú."}</p>
-                </div>
-                {selected.status === "rejected" && (
+                <p className="m-help">
+                  Đơn giá và tổng tiền để trống trước duyệt. Khi duyệt, giá được lấy từ danh mục mặt
+                  hàng và giữ nguyên trên phiếu.
+                </p>
+                {selected.status === "tu_choi" && (
                   <div className="m-note-block m-rejection-note">
                     <span>Lý do từ chối</span>
                     <p>{selected.reason}</p>
@@ -362,11 +380,11 @@ export function ApprovalScreen() {
               <footer className="m-action-bar m-approval-actions">
                 <span>
                   <ShieldCheck size={16} />
-                  {selected.status === "pending"
+                  {selected.status === "cho_duyet"
                     ? "Chỉ ghi sổ sau khi duyệt"
                     : "Phiếu đã được xử lý"}
                 </span>
-                {selected.status === "pending" ? (
+                {selected.status === "cho_duyet" ? (
                   <div>
                     <ActionButton
                       variant="danger"
@@ -380,7 +398,7 @@ export function ApprovalScreen() {
                     </ActionButton>
                     <ActionButton
                       variant="primary"
-                      disabled={selectedMissing || busy}
+                      disabled={!!selectedProblem || busy}
                       onClick={() => setDialog("approve")}
                     >
                       <CheckCircle2 size={16} />
@@ -421,7 +439,7 @@ export function ApprovalScreen() {
           <p>
             {dialog === "approve"
               ? "Các vật tư sau sẽ được trừ khỏi tồn kho demo:"
-              : "Lý do được lưu để nhân viên biết và điều chỉnh đề nghị."}
+              : "Lý do được lưu để quản lý đối chiếu phiếu bị từ chối."}
           </p>
           {dialog === "approve" ? (
             <ul className="m-confirm-lines">

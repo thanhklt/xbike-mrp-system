@@ -20,7 +20,7 @@ import {
   Status,
 } from "./components";
 import { documentTotal, itemById, money, number, today } from "./planning";
-import { suppliers } from "./types";
+import { currentManager } from "./types";
 import type { DocumentLine, Receipt, ReceiptInput } from "./types";
 import { useWorkspace, useWorkspaceMutation } from "./workspace-hooks";
 
@@ -37,7 +37,7 @@ export function ReceivingScreen() {
   const last = workspace.receipts[workspace.receipts.length - 1];
   const [record, setRecord] = useState<Receipt | undefined>(last);
   const [date, setDate] = useState(last?.date ?? today());
-  const [supplier, setSupplier] = useState(last?.supplier ?? suppliers[0]);
+  const [supplierId, setSupplierId] = useState(last?.supplierId ?? workspace.suppliers[0].id);
   const [note, setNote] = useState(last?.note ?? "");
   const [rows, setRows] = useState<ReceiptRow[]>(() =>
     last ? last.lines.map((line) => ({ ...line, rowId: crypto.randomUUID() })) : startingRows(),
@@ -46,8 +46,13 @@ export function ReceivingScreen() {
   const form = useRef<HTMLFormElement>(null);
   const save = useWorkspaceMutation((api, input: ReceiptInput) => api.saveReceipt(input));
   const confirm = useWorkspaceMutation((api, input: ReceiptInput) => api.confirmReceipt(input));
-  const materials = workspace.items.filter((item) => item.kind === "material");
-  const locked = record?.status === "confirmed";
+  const materials = workspace.items.filter(
+    (item) => item.active && (item.kind === "nguyen_vat_lieu" || item.kind === "linh_kien"),
+  );
+  const supplier = workspace.suppliers.find((entry) => entry.id === supplierId);
+  const creator =
+    workspace.employees.find((entry) => entry.id === record?.creatorId) ?? currentManager;
+  const locked = record?.status === "hoan_thanh";
   const busy = save.isPending || confirm.isPending;
   const total = documentTotal(rows);
   const quantity = rows.reduce(
@@ -67,7 +72,7 @@ export function ReceivingScreen() {
     return {
       id: record?.id,
       date,
-      supplier,
+      supplierId,
       note,
       lines: rows.map(({ itemId, quantity, price }) => ({ itemId, quantity, price })),
     };
@@ -113,8 +118,8 @@ export function ReceivingScreen() {
     <>
       <PageTitle
         step="01 / 04"
-        title="Phiếu nhập nguyên vật liệu"
-        description="Tiếp nhận vật tư từ nhà cung cấp và ghi nhận vào kho."
+        title="Phiếu nhập kho"
+        description="Tiếp nhận nguyên vật liệu, linh kiện từ nhà cung cấp."
         action={
           <ActionButton onClick={newReceipt} disabled={busy}>
             <FilePlus2 size={16} />
@@ -152,12 +157,14 @@ export function ReceivingScreen() {
             <fieldset disabled={locked || busy} className="m-panel-body m-fields">
               <Field label="Nhà cung cấp" required wide>
                 <select
-                  value={supplier}
-                  onChange={(event) => setSupplier(event.target.value)}
+                  value={supplierId}
+                  onChange={(event) => setSupplierId(event.target.value)}
                   required
                 >
-                  {suppliers.map((name) => (
-                    <option key={name}>{name}</option>
+                  {workspace.suppliers.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.code} · {entry.name}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -170,7 +177,17 @@ export function ReceivingScreen() {
                 />
               </Field>
               <Field label="Người lập">
-                <input value="Trần Thanh Bình" readOnly />
+                <input value={`${creator.code} · ${creator.name}`} readOnly />
+              </Field>
+              <Field label="Ngày tạo phiếu" hint="Độc lập với ngày nhập nghiệp vụ">
+                <input
+                  value={
+                    record
+                      ? new Date(record.createdAt).toLocaleString("vi-VN")
+                      : "Được ghi khi lưu phiếu"
+                  }
+                  readOnly
+                />
               </Field>
               <Field label="Ghi chú" wide>
                 <textarea
@@ -183,7 +200,7 @@ export function ReceivingScreen() {
             </fieldset>
           </Panel>
           <Panel
-            title="Danh sách nguyên vật liệu"
+            title="Nguyên vật liệu và linh kiện"
             subtitle="Mỗi vật tư chỉ xuất hiện một lần trong phiếu."
             action={<span className="m-subtle-count">{rows.length} dòng vật tư</span>}
           >
@@ -230,7 +247,10 @@ export function ReceivingScreen() {
                               ))}
                             </select>
                             <small>
-                              {item.code} <span>· {item.unit}</span>
+                              {item.code}{" "}
+                              <span>
+                                · SKU {item.sku} · {item.unit}
+                              </span>
                             </small>
                           </td>
                           <td className="m-number m-muted">{number(item.stock)}</td>
@@ -360,7 +380,7 @@ export function ReceivingScreen() {
               <dl className="m-summary-list">
                 <div>
                   <dt>Loại chứng từ</dt>
-                  <dd>Nhập nguyên vật liệu</dd>
+                  <dd>Nhập vật tư từ nhà cung cấp</dd>
                 </div>
                 <div>
                   <dt>Số dòng vật tư</dt>
@@ -415,7 +435,7 @@ export function ReceivingScreen() {
         >
           <p>
             Nhập <strong>{number(quantity)} đơn vị</strong> thuộc{" "}
-            <strong>{rows.length} dòng vật tư</strong> từ {supplier}.
+            <strong>{rows.length} dòng vật tư</strong> từ {supplier?.name}.
           </p>
           <div className="m-dialog-stat">
             <span>Tổng giá trị</span>

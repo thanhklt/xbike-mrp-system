@@ -7,7 +7,7 @@ import type {
   RequestInput,
   ProductionRequest,
   WorkOrder,
-  WorkOrderInput,
+  RequestPreview,
   Workspace,
 } from "./types";
 
@@ -46,8 +46,26 @@ export function createDemoApi() {
           case "/requests":
             response.data = engine.createRequest(body as unknown as RequestInput);
             break;
-          case "/work-orders":
-            response.data = engine.createOrder(body as unknown as WorkOrderInput);
+          case "/requests/update":
+            response.data = engine.updateRequest(
+              String(body.id),
+              body.input as unknown as RequestInput,
+            );
+            break;
+          case "/requests/preview":
+            response.data = engine.previewRequest(String(body.id));
+            break;
+          case "/requests/send":
+            response.data = engine.sendRequest(String(body.id), String(body.token));
+            break;
+          case "/work-orders/assign":
+            response.data = engine.assignOrder(
+              String(body.id),
+              body.assigneeId === null ? null : String(body.assigneeId),
+            );
+            break;
+          case "/work-orders/send":
+            response.data = engine.sendOrder(String(body.id));
             break;
           case "/issues/approve":
             response.data = engine.approveIssue(String(body.id));
@@ -79,8 +97,16 @@ export function createDemoApi() {
       (await client.post<Receipt>("/receipts/confirm", body)).data,
     createRequest: async (body: RequestInput) =>
       (await client.post<ProductionRequest>("/requests", body)).data,
-    createOrder: async (body: WorkOrderInput) =>
-      (await client.post<WorkOrder>("/work-orders", body)).data,
+    updateRequest: async (body: { id: string; input: RequestInput }) =>
+      (await client.post<ProductionRequest>("/requests/update", body)).data,
+    previewRequest: async (id: string) =>
+      (await client.post<RequestPreview>("/requests/preview", { id })).data,
+    sendRequest: async (body: { id: string; token: string }) =>
+      (await client.post<ProductionRequest>("/requests/send", body)).data,
+    assignOrder: async (body: { id: string; assigneeId: string | null }) =>
+      (await client.post<WorkOrder>("/work-orders/assign", body)).data,
+    sendOrder: async (id: string) =>
+      (await client.post<WorkOrder>("/work-orders/send", { id })).data,
     approveIssue: async (id: string) =>
       (await client.post<Workspace>("/issues/approve", { id })).data,
     rejectIssue: async (body: { id: string; reason: string }) =>
