@@ -912,4 +912,4 @@ mặt hàng, lượng và thời gian. Mã audit đối tượng là
 Các sơ đồ được đối chiếu router, schema, service, repository, dependency và bootstrap.
 Chưa render/kiểm cú pháp bằng Mermaid. Theo yêu cầu dev, không tiếp tục kiểm thử DB
 riêng; chưa xác nhận tính atomic và xử lý đồng thời bằng PostgreSQL thực tế.
-API giao/gửi/bắt đầu lệnh chưa có; các API mới cần lệnh đã được giao và đang thực hiện.
+API giao/gửi/bắt đầu lệnh nằm trong module `lenh_san_xuat`, xem [sequence lệnh](lenh_san_xuat.md).

@@ -11,6 +11,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.lenh_san_xuat.router import router as lenh_san_xuat_router
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
 from app.modules.mat_hang.synchronizer import create_synchronizer
@@ -110,5 +111,6 @@ app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(phieu_nhap_router, prefix=api_v1_prefix)
 app.include_router(phieu_xuat_router, prefix=api_v1_prefix)
 app.include_router(san_xuat_router, prefix=api_v1_prefix)
+app.include_router(lenh_san_xuat_router, prefix=api_v1_prefix)
 app.include_router(hoan_thanh_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)

@@ -17,6 +17,8 @@ from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomPlanningReader, BomService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
+from app.modules.lenh_san_xuat.repository import SqlAlchemyLenhSanXuatRepository
+from app.modules.lenh_san_xuat.service import LenhSanXuatService
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
@@ -161,6 +163,19 @@ def get_yeu_cau_san_xuat_service(
 
 def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
     return InventoryService(SqlAlchemyInventoryRepository(db))
+
+
+def get_lenh_san_xuat_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> LenhSanXuatService:
+    transaction = SqlAlchemyTransaction(db)
+    return LenhSanXuatService(
+        SqlAlchemyLenhSanXuatRepository(db),
+        audit,
+        transaction,
+        NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
+    )
 
 
 def get_chung_tu_hoan_thanh_service(

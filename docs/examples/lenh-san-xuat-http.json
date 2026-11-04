@@ -1,0 +1,288 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/lenh_san_xuat?q=000201",
+    "actor_id": 2,
+    "status": 200,
+    "headers": {},
+    "body": {
+      "data": [
+        {
+          "id": 201,
+          "ma_lenh_san_xuat": "LSX-202611-000201",
+          "yeu_cau_san_xuat_id": 100,
+          "lenh_san_xuat_cha_id": null,
+          "mat_hang_id": 1,
+          "bom_id": 1,
+          "so_luong": 2,
+          "nhan_vien_id": null,
+          "trang_thai": "nhap",
+          "created_at": "2026-11-04T00:30:00Z",
+          "started_at": null,
+          "completed_at": null,
+          "nhu_cau_truc_tiep": [
+            {
+              "mat_hang_id": 8,
+              "so_luong_can": 4,
+              "id": 29
+            }
+          ],
+          "so_luong_da_hoan_thanh": 0,
+          "so_luong_con_phai_hoan_thanh": 2,
+          "lenh_con_ids": []
+        }
+      ],
+      "meta": {
+        "request_id": "62b600b6-82df-4071-b492-d99eaf6258f9",
+        "page": 1,
+        "page_size": 20,
+        "total": 1,
+        "total_pages": 1
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/lenh_san_xuat/201",
+    "actor_id": 2,
+    "status": 200,
+    "headers": {
+      "etag": "\"9583e3ba50d605145f29601c2b9c6f6f7943ed6b3503b25f52b01b39ec8e7388\""
+    },
+    "body": {
+      "data": {
+        "id": 201,
+        "ma_lenh_san_xuat": "LSX-202611-000201",
+        "yeu_cau_san_xuat_id": 100,
+        "lenh_san_xuat_cha_id": null,
+        "mat_hang_id": 1,
+        "bom_id": 1,
+        "so_luong": 2,
+        "nhan_vien_id": null,
+        "trang_thai": "nhap",
+        "created_at": "2026-11-04T00:30:00Z",
+        "started_at": null,
+        "completed_at": null,
+        "nhu_cau_truc_tiep": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "id": 29
+          }
+        ],
+        "so_luong_da_hoan_thanh": 0,
+        "so_luong_con_phai_hoan_thanh": 2,
+        "lenh_con_ids": []
+      },
+      "meta": {
+        "request_id": "4e58b0ca-10d0-42c2-9e36-151a51a483e1"
+      }
+    }
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/lenh_san_xuat/201",
+    "actor_id": 2,
+    "status": 200,
+    "headers": {
+      "etag": "\"b0fe4cfb8e787a5edb416f61ced58c39e32a011497d5f9825a51272f2f0e12f6\""
+    },
+    "body": {
+      "data": {
+        "id": 201,
+        "ma_lenh_san_xuat": "LSX-202611-000201",
+        "yeu_cau_san_xuat_id": 100,
+        "lenh_san_xuat_cha_id": null,
+        "mat_hang_id": 1,
+        "bom_id": 1,
+        "so_luong": 2,
+        "nhan_vien_id": 3,
+        "trang_thai": "nhap",
+        "created_at": "2026-11-04T00:30:00Z",
+        "started_at": null,
+        "completed_at": null,
+        "nhu_cau_truc_tiep": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "id": 29
+          }
+        ],
+        "so_luong_da_hoan_thanh": 0,
+        "so_luong_con_phai_hoan_thanh": 2,
+        "lenh_con_ids": []
+      },
+      "meta": {
+        "request_id": "b2557cff-eb28-4941-a0c7-c7d2db8207bd"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/lenh_san_xuat/201/vat_tu",
+    "actor_id": 3,
+    "status": 200,
+    "headers": {
+      "etag": "\"b0fe4cfb8e787a5edb416f61ced58c39e32a011497d5f9825a51272f2f0e12f6\""
+    },
+    "body": {
+      "data": {
+        "lenh_san_xuat_id": 201,
+        "du_dieu_kien_bat_dau": false,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "so_luong_da_cap": 0,
+            "so_luong_con_phai_cap": 4,
+            "ton_hien_tai": 120
+          }
+        ]
+      },
+      "meta": {
+        "request_id": "24635f92-4b4a-40ee-a4c9-4a89e2c91a51"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/lenh_san_xuat/201/gui",
+    "actor_id": 2,
+    "status": 200,
+    "headers": {
+      "etag": "\"fa0bd7fb2f2b9f391462fe649f03605adb47521564e5ce3e9008d3d786f8a1db\""
+    },
+    "body": {
+      "data": {
+        "id": 201,
+        "ma_lenh_san_xuat": "LSX-202611-000201",
+        "yeu_cau_san_xuat_id": 100,
+        "lenh_san_xuat_cha_id": null,
+        "mat_hang_id": 1,
+        "bom_id": 1,
+        "so_luong": 2,
+        "nhan_vien_id": 3,
+        "trang_thai": "da_gui",
+        "created_at": "2026-11-04T00:30:00Z",
+        "started_at": null,
+        "completed_at": null,
+        "nhu_cau_truc_tiep": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "id": 29
+          }
+        ],
+        "so_luong_da_hoan_thanh": 0,
+        "so_luong_con_phai_hoan_thanh": 2,
+        "lenh_con_ids": []
+      },
+      "meta": {
+        "request_id": "17fdb09a-5c2a-4aa3-81f0-7ea5e12a6d0a"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/lenh_san_xuat/201/vat_tu",
+    "actor_id": 3,
+    "status": 200,
+    "headers": {
+      "etag": "\"bdb72561cd530705f49f2000c677ebe12f0d1e1724797939146fe0edee5470f8\""
+    },
+    "body": {
+      "data": {
+        "lenh_san_xuat_id": 201,
+        "du_dieu_kien_bat_dau": true,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "so_luong_da_cap": 4,
+            "so_luong_con_phai_cap": 0,
+            "ton_hien_tai": 116
+          }
+        ]
+      },
+      "meta": {
+        "request_id": "c4d5f5fa-fbaf-4bdf-a526-e713386f8679"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/lenh_san_xuat/201/bat_dau",
+    "actor_id": 3,
+    "status": 200,
+    "headers": {
+      "etag": "\"970e2ae6dfea8cb6af07320f4369f8e403ee2f1eb0c684913e2e0be2e5773225\""
+    },
+    "body": {
+      "data": {
+        "id": 201,
+        "ma_lenh_san_xuat": "LSX-202611-000201",
+        "yeu_cau_san_xuat_id": 100,
+        "lenh_san_xuat_cha_id": null,
+        "mat_hang_id": 1,
+        "bom_id": 1,
+        "so_luong": 2,
+        "nhan_vien_id": 3,
+        "trang_thai": "dang_thuc_hien",
+        "created_at": "2026-11-04T00:30:00Z",
+        "started_at": "2026-11-04T16:53:27.903328Z",
+        "completed_at": null,
+        "nhu_cau_truc_tiep": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "id": 29
+          }
+        ],
+        "so_luong_da_hoan_thanh": 0,
+        "so_luong_con_phai_hoan_thanh": 2,
+        "lenh_con_ids": []
+      },
+      "meta": {
+        "request_id": "e54e616f-768f-4504-bc58-d9429112f398"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/lenh_san_xuat/203/huy",
+    "actor_id": 2,
+    "status": 200,
+    "headers": {
+      "etag": "\"2ce64cac3dd2cb717d3bdee85e8deb95cf1d8349389c62edb9c6acebb26281bc\""
+    },
+    "body": {
+      "data": {
+        "id": 203,
+        "ma_lenh_san_xuat": "LSX-202611-000203",
+        "yeu_cau_san_xuat_id": 100,
+        "lenh_san_xuat_cha_id": null,
+        "mat_hang_id": 1,
+        "bom_id": 1,
+        "so_luong": 2,
+        "nhan_vien_id": 5,
+        "trang_thai": "da_huy",
+        "created_at": "2026-11-04T00:30:00Z",
+        "started_at": null,
+        "completed_at": null,
+        "nhu_cau_truc_tiep": [
+          {
+            "mat_hang_id": 8,
+            "so_luong_can": 4,
+            "id": 31
+          }
+        ],
+        "so_luong_da_hoan_thanh": 0,
+        "so_luong_con_phai_hoan_thanh": 2,
+        "lenh_con_ids": []
+      },
+      "meta": {
+        "request_id": "6fd367ad-2561-4c80-88b7-0acad5eb4cca"
+      }
+    }
+  }
+]
