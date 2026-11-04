@@ -14,12 +14,28 @@ import { AuditPage } from "@/features/reports/AuditPage";
 import { ReportsPage } from "@/features/reports/ReportsPage";
 import { SuppliersPage } from "@/features/suppliers/SuppliersPage";
 import { MainLayout } from "@/layouts/MainLayout";
+import { OperationsLayout, OperationsPage } from "@/features/operations/Operations";
 
 export const AppRoutes: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route element={<OperationsLayout />}>
+          <Route path="/mathang" element={<OperationsPage key="mathang" page="mathang" />} />
+          <Route
+            path="/lenhsanxuat"
+            element={<OperationsPage key="lenhsanxuat" page="lenhsanxuat" />}
+          />
+          <Route
+            path="/giaodichkho"
+            element={<OperationsPage key="giaodichkho" page="giaodichkho" />}
+          />
+          <Route
+            path="/dieuchinhkho"
+            element={<OperationsPage key="dieuchinhkho" page="dieuchinhkho" />}
+          />
+        </Route>
 
         <Route element={<MainLayout />}>
           <Route path="/" element={<ReportsPage />} />

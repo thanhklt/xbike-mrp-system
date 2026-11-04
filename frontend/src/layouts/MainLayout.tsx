@@ -32,6 +32,7 @@ export const MainLayout: React.FC = () => {
       items: [
         { name: "Dashboard", path: "/", icon: <LayoutDashboard size={18} /> },
         { name: "MRP Run & Reports", path: "/reports", icon: <Compass size={18} /> },
+        { name: "Kho & sản xuất · Demo", path: "/mathang", icon: <Boxes size={18} /> },
       ],
     },
     {

@@ -1,0 +1,777 @@
+{
+  "nextAdjustmentId": 304,
+  "nextTicketId": 402,
+  "items": [
+    {
+      "id": 1,
+      "sku": "AL-6061-T6",
+      "ten_mat_hang": "Ống nhôm hợp kim 6061",
+      "loai_mat_hang": "nguyen_vat_lieu",
+      "don_vi_tinh": "cay",
+      "don_gia": 185000,
+      "mau_sac": "bac",
+      "ma_mat_hang": "MH-000001",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "sku": "ST-BOLT-M6",
+      "ten_mat_hang": "Bu lông lục giác M6 × 20",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "cai",
+      "don_gia": 2500,
+      "mau_sac": "bac",
+      "ma_mat_hang": "MH-000002",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "sku": "WH-RIM-26",
+      "ten_mat_hang": "Vành bánh xe nhôm 26 inch",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "cai",
+      "don_gia": 245000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000003",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 4,
+      "sku": "TY-URBAN-26",
+      "ten_mat_hang": "Lốp xe Urban 26 × 1.75",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "cai",
+      "don_gia": 165000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000004",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 5,
+      "sku": "BR-DISC-160",
+      "ten_mat_hang": "Bộ phanh đĩa cơ 160 mm",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "bo",
+      "don_gia": 320000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000005",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 6,
+      "sku": "PAINT-NV-01",
+      "ten_mat_hang": "Sơn phủ tĩnh điện xanh navy",
+      "loai_mat_hang": "nguyen_vat_lieu",
+      "don_vi_tinh": "kg",
+      "don_gia": 120000,
+      "mau_sac": "xanh_navy",
+      "ma_mat_hang": "MH-000006",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 7,
+      "sku": "FR-URBAN-M",
+      "ten_mat_hang": "Khung xe Urban cỡ M",
+      "loai_mat_hang": "ban_thanh_pham",
+      "don_vi_tinh": "cai",
+      "don_gia": 1250000,
+      "mau_sac": "xanh_navy",
+      "ma_mat_hang": "MH-000007",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 8,
+      "sku": "WH-URBAN-26",
+      "ten_mat_hang": "Cụm bánh xe Urban 26 inch",
+      "loai_mat_hang": "ban_thanh_pham",
+      "don_vi_tinh": "bo",
+      "don_gia": 890000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000008",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 9,
+      "sku": "XB-URBAN-M",
+      "ten_mat_hang": "Xe đạp xBike Urban M",
+      "loai_mat_hang": "thanh_pham",
+      "don_vi_tinh": "chiec",
+      "don_gia": 4200000,
+      "mau_sac": "xanh_navy",
+      "ma_mat_hang": "MH-000009",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 10,
+      "sku": "XB-CITY-S",
+      "ten_mat_hang": "Xe đạp xBike City S",
+      "loai_mat_hang": "thanh_pham",
+      "don_vi_tinh": "chiec",
+      "don_gia": 3650000,
+      "mau_sac": "trang",
+      "ma_mat_hang": "MH-000010",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 11,
+      "sku": "CH-8S-116",
+      "ten_mat_hang": "Xích xe đạp 8 tốc độ",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "cai",
+      "don_gia": 95000,
+      "mau_sac": "bac",
+      "ma_mat_hang": "MH-000011",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 12,
+      "sku": "SD-COMFORT",
+      "ten_mat_hang": "Yên xe Comfort",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "cai",
+      "don_gia": 185000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000012",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    },
+    {
+      "id": 13,
+      "sku": "GR-URBAN",
+      "ten_mat_hang": "Tay nắm cao su Urban",
+      "loai_mat_hang": "linh_kien",
+      "don_vi_tinh": "bo",
+      "don_gia": 45000,
+      "mau_sac": "den",
+      "ma_mat_hang": "MH-000013",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": false
+    },
+    {
+      "id": 14,
+      "sku": "FR-CITY-S",
+      "ten_mat_hang": "Khung xe City cỡ S",
+      "loai_mat_hang": "ban_thanh_pham",
+      "don_vi_tinh": "cai",
+      "don_gia": 1050000,
+      "mau_sac": "trang",
+      "ma_mat_hang": "MH-000014",
+      "mo_ta": "Vật tư và sản phẩm thuộc danh mục xBike.",
+      "is_active": true
+    }
+  ],
+  "ledger": [
+    {
+      "id": 501,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": 500,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T06:01:00Z"
+    },
+    {
+      "id": 502,
+      "mat_hang_id": 2,
+      "so_luong_bien_dong": 1200,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T07:02:00Z"
+    },
+    {
+      "id": 503,
+      "mat_hang_id": 3,
+      "so_luong_bien_dong": 160,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T08:03:00Z"
+    },
+    {
+      "id": 504,
+      "mat_hang_id": 4,
+      "so_luong_bien_dong": 160,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T02:04:00Z"
+    },
+    {
+      "id": 505,
+      "mat_hang_id": 5,
+      "so_luong_bien_dong": 90,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T03:05:00Z"
+    },
+    {
+      "id": 506,
+      "mat_hang_id": 6,
+      "so_luong_bien_dong": 50,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T04:06:00Z"
+    },
+    {
+      "id": 507,
+      "mat_hang_id": 7,
+      "so_luong_bien_dong": 80,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000026",
+      "source_id": 26,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T05:07:00Z"
+    },
+    {
+      "id": 508,
+      "mat_hang_id": 8,
+      "so_luong_bien_dong": 70,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000027",
+      "source_id": 27,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T06:08:00Z"
+    },
+    {
+      "id": 509,
+      "mat_hang_id": 9,
+      "so_luong_bien_dong": 24,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000028",
+      "source_id": 28,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T07:09:00Z"
+    },
+    {
+      "id": 510,
+      "mat_hang_id": 10,
+      "so_luong_bien_dong": 16,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000029",
+      "source_id": 29,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T08:10:00Z"
+    },
+    {
+      "id": 511,
+      "mat_hang_id": 11,
+      "so_luong_bien_dong": 200,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T02:11:00Z"
+    },
+    {
+      "id": 512,
+      "mat_hang_id": 12,
+      "so_luong_bien_dong": 100,
+      "loai_giao_dich": "nhap_vat_tu",
+      "source": "PN-202611-000041",
+      "source_id": 41,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T03:12:00Z"
+    },
+    {
+      "id": 513,
+      "mat_hang_id": 14,
+      "so_luong_bien_dong": 40,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000033",
+      "source_id": 33,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T04:13:00Z"
+    },
+    {
+      "id": 514,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": -180,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000018",
+      "source_id": 18,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T05:14:00Z"
+    },
+    {
+      "id": 515,
+      "mat_hang_id": 2,
+      "so_luong_bien_dong": -480,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000018",
+      "source_id": 18,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T06:15:00Z"
+    },
+    {
+      "id": 516,
+      "mat_hang_id": 3,
+      "so_luong_bien_dong": -60,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000018",
+      "source_id": 18,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T07:16:00Z"
+    },
+    {
+      "id": 517,
+      "mat_hang_id": 4,
+      "so_luong_bien_dong": -60,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000018",
+      "source_id": 18,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T08:17:00Z"
+    },
+    {
+      "id": 518,
+      "mat_hang_id": 7,
+      "so_luong_bien_dong": -30,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000019",
+      "source_id": 19,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T02:18:00Z"
+    },
+    {
+      "id": 519,
+      "mat_hang_id": 8,
+      "so_luong_bien_dong": -30,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000019",
+      "source_id": 19,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T03:19:00Z"
+    },
+    {
+      "id": 520,
+      "mat_hang_id": 9,
+      "so_luong_bien_dong": -10,
+      "loai_giao_dich": "xuat_thanh_pham",
+      "source": "PX-202611-000020",
+      "source_id": 20,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T04:20:00Z"
+    },
+    {
+      "id": 521,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": -5,
+      "loai_giao_dich": "dieu_chinh_ton_kho",
+      "source": "DCK-202611-000001",
+      "source_id": 301,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-03T05:21:00Z"
+    },
+    {
+      "id": 522,
+      "mat_hang_id": 9,
+      "so_luong_bien_dong": 12,
+      "loai_giao_dich": "nhap_san_pham_san_xuat",
+      "source": "HTSX-202611-000013",
+      "source_id": 13,
+      "nhan_vien_id": 21,
+      "posted_at": "2026-11-04T06:22:00Z"
+    },
+    {
+      "id": 523,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": -24,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000021",
+      "source_id": 21,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-04T07:23:00Z"
+    },
+    {
+      "id": 524,
+      "mat_hang_id": 2,
+      "so_luong_bien_dong": -48,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000021",
+      "source_id": 21,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-04T08:24:00Z"
+    },
+    {
+      "id": 525,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": -48,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000106",
+      "source_id": 106,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T02:25:00Z"
+    },
+    {
+      "id": 526,
+      "mat_hang_id": 2,
+      "so_luong_bien_dong": -96,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000106",
+      "source_id": 106,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T03:26:00Z"
+    },
+    {
+      "id": 527,
+      "mat_hang_id": 1,
+      "so_luong_bien_dong": -32,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000109",
+      "source_id": 109,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T04:27:00Z"
+    },
+    {
+      "id": 528,
+      "mat_hang_id": 2,
+      "so_luong_bien_dong": -64,
+      "loai_giao_dich": "xuat_vat_tu",
+      "source": "PX-202611-000109",
+      "source_id": 109,
+      "nhan_vien_id": 10,
+      "posted_at": "2026-11-02T05:28:00Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": 101,
+      "mat_hang_id": 9,
+      "so_luong": 30,
+      "nhan_vien_id": 21,
+      "trang_thai": "dang_thuc_hien",
+      "so_luong_da_hoan_thanh": 12,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 61,
+      "bom_id": 19,
+      "ma_lenh_san_xuat": "LSX-202611-000001",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": "2026-11-04T01:00:00Z",
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 7,
+          "so_luong_can": 30,
+          "so_luong_da_cap": 30
+        },
+        {
+          "mat_hang_id": 8,
+          "so_luong_can": 30,
+          "so_luong_da_cap": 30
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "mat_hang_id": 7,
+      "so_luong": 60,
+      "nhan_vien_id": 22,
+      "trang_thai": "da_gui",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": 101,
+      "yeu_cau_san_xuat_id": 61,
+      "bom_id": 17,
+      "ma_lenh_san_xuat": "LSX-202611-000002",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 120,
+          "so_luong_da_cap": 0
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 240,
+          "so_luong_da_cap": 0
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "mat_hang_id": 8,
+      "so_luong": 60,
+      "nhan_vien_id": 21,
+      "trang_thai": "nhap",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": 101,
+      "yeu_cau_san_xuat_id": 61,
+      "bom_id": 18,
+      "ma_lenh_san_xuat": "LSX-202611-000003",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 120,
+          "so_luong_da_cap": 0
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 240,
+          "so_luong_da_cap": 0
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "mat_hang_id": 10,
+      "so_luong": 20,
+      "nhan_vien_id": 23,
+      "trang_thai": "da_gui",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 20,
+      "ma_lenh_san_xuat": "LSX-202611-000004",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 40,
+          "so_luong_da_cap": 0
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 80,
+          "so_luong_da_cap": 0
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "mat_hang_id": 14,
+      "so_luong": 40,
+      "nhan_vien_id": null,
+      "trang_thai": "nhap",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": 104,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 24,
+      "ma_lenh_san_xuat": "LSX-202611-000005",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 80,
+          "so_luong_da_cap": 0
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 160,
+          "so_luong_da_cap": 0
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "mat_hang_id": 9,
+      "so_luong": 24,
+      "nhan_vien_id": 21,
+      "trang_thai": "hoan_thanh",
+      "so_luong_da_hoan_thanh": 24,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 19,
+      "ma_lenh_san_xuat": "LSX-202611-000006",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": "2026-11-03T09:00:00Z",
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 48,
+          "so_luong_da_cap": 48
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 96,
+          "so_luong_da_cap": 96
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "mat_hang_id": 7,
+      "so_luong": 20,
+      "nhan_vien_id": 22,
+      "trang_thai": "da_huy",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 17,
+      "ma_lenh_san_xuat": "LSX-202611-000007",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 40,
+          "so_luong_da_cap": 0
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 80,
+          "so_luong_da_cap": 0
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "mat_hang_id": 8,
+      "so_luong": 12,
+      "nhan_vien_id": 21,
+      "trang_thai": "da_gui",
+      "so_luong_da_hoan_thanh": 0,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 18,
+      "ma_lenh_san_xuat": "LSX-202611-000008",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": null,
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 24,
+          "so_luong_da_cap": 24
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 48,
+          "so_luong_da_cap": 48
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "mat_hang_id": 10,
+      "so_luong": 16,
+      "nhan_vien_id": 23,
+      "trang_thai": "hoan_thanh",
+      "so_luong_da_hoan_thanh": 16,
+      "lenh_san_xuat_cha_id": null,
+      "yeu_cau_san_xuat_id": 62,
+      "bom_id": 20,
+      "ma_lenh_san_xuat": "LSX-202611-000009",
+      "created_at": "2026-11-03T02:00:00Z",
+      "started_at": null,
+      "completed_at": "2026-11-03T09:00:00Z",
+      "vat_tu": [
+        {
+          "mat_hang_id": 1,
+          "so_luong_can": 32,
+          "so_luong_da_cap": 32
+        },
+        {
+          "mat_hang_id": 2,
+          "so_luong_can": 64,
+          "so_luong_da_cap": 64
+        }
+      ]
+    }
+  ],
+  "adjustments": [
+    {
+      "id": 303,
+      "ma_phieu": "DCK-202611-000003",
+      "phieu_nhap_id": 41,
+      "nhan_vien_id": 10,
+      "trang_thai": "nhap",
+      "ly_do": "Đối chiếu số lượng nhôm nhận thực tế với phiếu nhập.",
+      "created_at": "2026-11-04T02:30:00Z",
+      "confirmed_at": null,
+      "chi_tiet": [
+        {
+          "mat_hang_id": 1,
+          "giao_dich_goc_id": 501,
+          "so_luong_hieu_luc_truoc": 495,
+          "so_luong_dung": 490,
+          "so_luong_bien_dong": -5
+        }
+      ]
+    },
+    {
+      "id": 302,
+      "ma_phieu": "DCK-202611-000002",
+      "phieu_nhap_id": 41,
+      "nhan_vien_id": 10,
+      "trang_thai": "loi",
+      "ly_do": "Đối soát lại số lượng bu lông từ nhà cung cấp.",
+      "created_at": "2026-11-03T08:20:00Z",
+      "confirmed_at": null,
+      "ticket_id": 401,
+      "chi_tiet": [
+        {
+          "mat_hang_id": 2,
+          "giao_dich_goc_id": 502,
+          "so_luong_hieu_luc_truoc": 1200,
+          "so_luong_dung": 100,
+          "so_luong_bien_dong": -1100
+        }
+      ]
+    },
+    {
+      "id": 301,
+      "ma_phieu": "DCK-202611-000001",
+      "phieu_nhap_id": 41,
+      "nhan_vien_id": 10,
+      "trang_thai": "da_xac_nhan",
+      "ly_do": "Điều chỉnh 5 cây nhôm ghi dư khi nhập hàng.",
+      "created_at": "2026-11-03T04:00:00Z",
+      "confirmed_at": "2026-11-03T06:00:00Z",
+      "chi_tiet": [
+        {
+          "mat_hang_id": 1,
+          "giao_dich_goc_id": 501,
+          "so_luong_hieu_luc_truoc": 500,
+          "so_luong_dung": 495,
+          "so_luong_bien_dong": -5
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "id": 401,
+      "ma_ticket": "TKDC-202611-000001",
+      "phieu_nhap_id": 41,
+      "trang_thai": "cho_xu_ly",
+      "mo_ta_loi": "Điều chỉnh giảm vượt số lượng tồn kho.",
+      "created_at": "2026-11-03T08:21:00Z"
+    }
+  ],
+  "names": {
+    "10": "Nguyễn Văn An",
+    "21": "Trần Minh Tuấn",
+    "22": "Lê Thị Mai",
+    "23": "Phạm Quốc Huy"
+  }
+}

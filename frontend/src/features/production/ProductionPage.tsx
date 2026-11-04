@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle, Clock, HardHat, Plus } from "lucide-react";
+import { Clock, Plus } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
