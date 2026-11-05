@@ -31,7 +31,7 @@ export function UsersPage() {
           </Link>
         }
       />
-      <div className={id ? "split-view" : ""}>
+      <div>
         <Collection
           collection={collection}
           filters={[

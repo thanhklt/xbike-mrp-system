@@ -1,206 +1,141 @@
-# 🚴 xBike MRP System
+# xBike MRP System
 
-**xBike MRP System** is a modern, enterprise-grade Manufacturing Resource Planning (MRP) solution engineered specifically for bicycle manufacturing and assembly operations. It streamlines material requirements planning, multi-level Bills of Materials (BOM), inventory tracking, procurement, work order execution, and dispatching.
+## 1. Giới thiệu project
 
----
+**xBike MRP System** là hệ thống nội bộ hỗ trợ quản lý nhu cầu vật tư, sản xuất và tồn kho cho doanh nghiệp sản xuất, lắp ráp và bán xe đạp.
 
-## 🏗️ Architecture & Tech Stack
+Phạm vi nghiệp vụ gồm quản lý mặt hàng (nguyên vật liệu, linh kiện, bán thành phẩm, thành phẩm), nhà cung cấp, công thức BOM nhiều cấp, nhập/xuất kho, yêu cầu và lệnh sản xuất, chứng từ hoàn thành sản xuất, điều chỉnh kho, báo cáo và lịch sử thao tác.
 
-### Backend
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+) - High performance, automatic OpenAPI documentation.
-- **ORM**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (Async Engine with `asyncpg`).
-- **Migrations**: [Alembic](https://alembic.sqlalchemy.org/).
-- **Validation & Serialization**: [Pydantic v2](https://docs.pydantic.dev/).
-- **Authentication**: JWT-based OAuth2 with bcrypt password hashing and Role-Based Access Control (RBAC).
-- **Testing & Code Quality**: `pytest`, `httpx`, `ruff`.
+Hệ thống phục vụ ba nhóm người dùng: **Quản trị viên**, **Quản lý kho** và **Nhân viên**. Backend tổ chức theo kiến trúc **modular monolith**, frontend giao tiếp với backend qua REST API.
 
-### Frontend
-- **Framework**: [React 18+](https://react.dev/) + JavaScript (JSX) + [Vite](https://vitejs.dev/).
-- **State & Data Fetching**: [TanStack Query (React Query)](https://tanstack.com/query/latest) + [Axios](https://axios-http.com/).
-- **Styling**: Modular CSS / Modern UI tokens with sleek dark/light aesthetic.
-- **Icons**: [Lucide React](https://lucide.dev/).
-- **Routing**: [React Router v6](https://reactrouter.com/).
+Phạm vi sản phẩm tham chiếu [PRD v0.2 — `xbike_prd_v2.docx`](https://drive.google.com/file/d/1OaRwraXHxPGA6l7P2vJwhdjdc5juXdDY/view) và [SRS — `SRS_v4.txt` (nội dung phiên bản 3.0)](https://drive.google.com/file/d/1GTqAuq1JTyMBt-Xu6BXorSJAFDhg87zn/view). Đây là mô tả phạm vi nghiệp vụ, không phải xác nhận toàn bộ chức năng đã được triển khai và kiểm thử.
 
-### Infrastructure & DevOps
-- **Database**: PostgreSQL 16
-- **Reverse Proxy**: Nginx
-- **Containerization**: Docker & Docker Compose
-- **CI/CD**: GitHub Actions (linting, unit tests)
+## 2. Công thức BOM
 
----
+**BOM (Bill of Materials)** là danh sách thành phần và định mức số lượng cần để sản xuất **một đơn vị** thành phẩm hoặc bán thành phẩm.
 
-## 📁 Project Directory Structure
+Theo mục 3 của SRS và FR-03, FR-07, FR-08 của PRD trên Drive, bốn model thành phẩm demo là **Mountain Pro**, **City Ride**, **Speed Sport** và **Kids Fun**. Mỗi model có BOM riêng với cấu trúc thành phần sau:
+
+```text
+Xe đạp (thành phẩm, theo từng model)
+├── Khung xe
+├── Phuộc xe
+├── Cụm bánh xe (bán thành phẩm)
+│   ├── Vành bánh xe
+│   ├── Moay-ơ
+│   └── Nan hoa
+├── Lốp xe
+├── Xích xe
+├── Bàn đạp
+├── Dây phanh
+├── Yên xe
+├── Đĩa xích
+└── Bộ ốc vít
+```
+
+Các thành phần ngoài cụm bánh xe được phân loại là nguyên vật liệu/linh kiện. Tài liệu nguồn **chưa ấn định định mức số lượng kỹ thuật hoặc mã linh kiện dùng chung giữa các model**. Quản lý kho khai báo mã mặt hàng, đơn vị tính và định mức dương cho từng dòng BOM.
+
+Cách tính nhu cầu theo tài liệu:
+
+| Đại lượng | Công thức |
+| --- | --- |
+| Số lượng thành phẩm cần sản xuất | `max(0, số lượng yêu cầu − tồn thành phẩm hiện có)` |
+| Nhu cầu trực tiếp của một thành phần | `số lượng của lệnh × định mức thành phần trong BOM đã chốt` |
+| Số lượng bán thành phẩm cần sản xuất thêm | `max(0, nhu cầu bán thành phẩm − tồn bán thành phẩm được phân bổ)` |
+| Nhu cầu linh kiện cho lệnh con | `số lượng bán thành phẩm cần sản xuất thêm × định mức trong BOM của bán thành phẩm` |
+
+Ưu tiên dùng bán thành phẩm có sẵn; chỉ phân rã BOM và lập lệnh con cho phần thiếu. Lệnh cha lưu nhu cầu cụm bánh xe, lệnh con lưu nhu cầu vành, moay-ơ và nan hoa; tránh tính trùng linh kiện của cụm đã có trong kho hoặc phân bổ cùng một lượng tồn cho nhiều nhánh.
+
+Ví dụ trong PRD: lệnh cha cần **20 cụm bánh xe**, kho có **8 cụm**, thì nhu cầu trực tiếp của cha vẫn là **20 cụm**, lệnh con sản xuất thêm **12 cụm**. Đây là dữ liệu minh họa kiểm thử, không phải định mức kỹ thuật đã chốt.
+
+BOM không được trùng mã thành phần hoặc có tham chiếu vòng. Mỗi mặt hàng có tối đa một BOM hiện hành; BOM đã được lệnh sử dụng phải giữ bất biến, thay đổi bằng phiên bản mới. Mỗi lệnh chốt BOM và lưu bản chụp nhu cầu. Việc tính nhu cầu không giữ chỗ hoặc thay đổi tồn kho; tồn được kiểm tra lại khi duyệt xuất.
+
+## 3. Cấu trúc thư mục
+
+Cấu trúc chính theo repository hiện tại, lược bỏ thư mục cache, môi trường ảo, dependency và kết quả build:
 
 ```text
 xbike-mrp-system/
-├── .github/
-│   └── workflows/
-│       ├── backend-ci.yml           # Backend linting & automated test workflow
-│       └── frontend-ci.yml          # Frontend linting & build workflow
-│
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                  # FastAPI application entrypoint & middleware
-│   │   ├── core/                    # Core configuration, DB, security & exceptions
-│   │   │   ├── config.py
-│   │   │   ├── database.py
-│   │   │   ├── exceptions.py
-│   │   │   ├── logging.py
-│   │   │   └── security.py
-│   │   │
-│   │   ├── modules/                 # Modular domain-driven feature modules
-│   │   │   ├── auth/                # Authentication & JWT tokens
-│   │   │   ├── users/               # User management & roles
-│   │   │   ├── mat_hang/            # Danh mục mặt hàng, cache và soft delete
-│   │   │   ├── suppliers/           # Vendor management & purchase catalog
-│   │   │   ├── bom/                 # Multi-level Bill of Materials
-│   │   │   ├── inventory/           # Stock on hand, bins & warehouse transactions
-│   │   │   ├── receiving/           # Goods receipt notes (GRN) & quality inspection
-│   │   │   ├── material_issuing/    # Material picking & staging for shop floor
-│   │   │   ├── production/          # Work orders & shop floor assembly tracking
-│   │   │   ├── finished_goods_issuing/ # Finished bike dispatch & shipment
-│   │   │   ├── reporting/           # MRP run calculations, stock & production analytics
-│   │   │   └── audit/               # Immutable compliance audit logging
-│   │   │
-│   │   └── shared/                  # Common utilities, enums & pagination
-│   │       ├── enums.py
-│   │       └── pagination.py
-│   │
-│   ├── migrations/                  # Alembic database migration scripts
-│   ├── tests/                       # Pytest test suite
-│   ├── alembic.ini                  # Alembic environment config
-│   ├── Dockerfile                   # Backend Docker container recipe
-│   ├── pyproject.toml               # Python dependencies and tool settings
-│   └── .env.example                 # Backend environment variable template
-│
+│   │   ├── main.py                 # FastAPI app, middleware, đăng ký router
+│   │   ├── dependencies.py         # Ghép dependency và kiểm tra xác thực
+│   │   ├── models.py               # Đăng ký ORM của các module
+│   │   ├── config/                 # Cấu hình ứng dụng
+│   │   ├── core/                   # Database, security, lỗi và transaction
+│   │   ├── shared/                 # Enum, phân trang và cấu trúc dùng chung
+│   │   └── modules/                # Các module nghiệp vụ
+│   │       ├── audit/
+│   │       ├── auth/
+│   │       ├── bom/
+│   │       ├── dieu_chinh_kho/
+│   │       ├── finished_goods_issuing/
+│   │       ├── inventory/
+│   │       ├── material_issuing/
+│   │       ├── mat_hang/
+│   │       ├── nhan_vien/
+│   │       ├── nha_cung_cap/
+│   │       ├── phieu_nhap/
+│   │       ├── phieu_xuat/
+│   │       ├── reporting/
+│   │       └── san_xuat/
+│   ├── tests/                      # Kiểm thử backend
+│   ├── Dockerfile
+│   ├── pyproject.toml              # Dependency Python và cấu hình công cụ
+│   ├── poetry.lock
+│   └── README.md                   # Tài liệu riêng cho backend
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                     # App entry point, routing setup, providers
-│   │   ├── components/              # Shared UI components (Buttons, Modals, Tables)
-│   │   ├── features/                # Domain-specific UI features & view models
-│   │   │   ├── auth/
-│   │   │   ├── materials/
-│   │   │   ├── products/
-│   │   │   ├── suppliers/
-│   │   │   ├── bom/
-│   │   │   ├── inventory/
-│   │   │   ├── receiving/
-│   │   │   ├── material-issuing/
-│   │   │   ├── production/
-│   │   │   ├── finished-goods-issuing/
-│   │   │   └── reports/
-│   │   ├── layouts/                 # Application layouts (Sidebar, Header, Main layout)
-│   │   ├── lib/                     # Axios instance & TanStack query client
-│   │   │   ├── api/
-│   │   │   └── query-client.js
-│   │   ├── routes/                  # Route definitions and protected route wrappers
-│   │   └── main.jsx                 # React DOM mount point
-│   │
-│   ├── Dockerfile                   # Frontend Docker container recipe
-│   ├── package.json                 # Node dependencies and scripts
-│   ├── vite.config.js               # Vite bundler configuration
-│   ├── eslint.config.js             # Modern ESLint configuration
-│   ├── .prettierrc                  # Code formatter configuration
-│   └── .env.example                 # Frontend environment variables template
-│
+│   │   ├── main.jsx                # Điểm khởi tạo React
+│   │   ├── app/                    # App và provider
+│   │   ├── components/             # Thành phần giao diện dùng chung
+│   │   ├── features/               # Giao diện theo nhóm nghiệp vụ
+│   │   ├── layouts/                # Bố cục trang
+│   │   ├── lib/                    # API client, query client và tiện ích
+│   │   └── routes/                 # Điều hướng và bảo vệ route
+│   ├── tests/                      # Kiểm thử logic và trình duyệt
+│   ├── Dockerfile
+│   ├── package.json                # Dependency JavaScript và script
+│   ├── package-lock.json
+│   ├── vite.config.js
+│   ├── playwright.config.js
+│   └── README.md                   # Tài liệu riêng cho frontend
 ├── infra/
-│   └── nginx/
-│       └── nginx.conf               # Nginx reverse proxy configuration
-│
+│   ├── postgres/
+│   │   ├── init.sql                # Schema bootstrap cho database mới/trống
+│   │   └── seed.sql                # Dữ liệu khởi tạo
+│   ├── nginx/nginx.conf            # Cấu hình reverse proxy
+│   └── docker-compose.yml
 ├── docs/
-│   ├── architecture.md              # Domain architecture & MRP logic design
-│   └── api-conventions.md           # REST conventions, response shapes & error codes
-│
-├── .env.example                     # Root Docker Compose environment variables
-├── .gitignore                       # Repository-wide ignore rules
-├── docker-compose.yml               # Multi-container local orchestration
-├── Makefile                         # Helpful dev CLI commands
-└── README.md                        # Project documentation
+│   ├── sequence/                  # Sequence diagram theo module backend
+│   ├── plans/                     # Kế hoạch và biên bản kiểm chứng
+│   ├── examples/                  # Ví dụ request/dữ liệu API
+│   ├── architecture.md
+│   ├── api-conventions.md
+│   └── api_contract_v3.md
+├── intent/                        # Ghi nhận ý định và phạm vi công việc
+├── .handoff/                      # Tài liệu bàn giao và kiểm chứng
+├── .env.example
+├── docker-compose.yml             # Điều phối PostgreSQL, backend, frontend, Nginx
+├── Makefile
+└── README.md
 ```
 
----
+## 4. Tech stack
 
-## 🚀 Quick Start
+| Thành phần | Công nghệ đang sử dụng |
+| --- | --- |
+| Backend | Python 3.11+, FastAPI, Uvicorn |
+| Validation | Pydantic 2 |
+| ORM và driver | SQLAlchemy 2 với AsyncSession, asyncpg |
+| Database | PostgreSQL 16 |
+| Xác thực và phân quyền | JWT qua python-jose, phân quyền theo vai trò; mật khẩu mới dùng Argon2id, hỗ trợ kiểm tra bcrypt cũ |
+| Frontend | React 18, JavaScript (`.jsx`/`.js`), Vite 5 |
+| Điều hướng | React Router 6 |
+| Dữ liệu phía frontend | TanStack Query 5, Axios |
+| Giao diện | CSS, Lucide React, clsx |
+| Quản lý dependency | Poetry cho backend; npm cho frontend |
+| Hạ tầng | Docker, Docker Compose, Nginx |
+| Kiểm thử và chất lượng | pytest, pytest-asyncio, HTTPX, Ruff, mypy; Node.js test runner, Playwright, ESLint, Prettier |
 
-### 1. Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/)
-- Alternatively for local dev: Python 3.11+, Node.js 20+, PostgreSQL 16+
-
-### 2. Environment Setup
-Copy the environment template files:
-```bash
-cp .env.example .env
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-### 3. Run with Docker Compose
-To build and start all containers (Postgres, Backend, Frontend, Nginx):
-```bash
-docker compose up --build -d
-```
-
-Access the services:
-- **Application Portal (via Nginx)**: [http://localhost](http://localhost)
-- **Frontend Directly**: [http://localhost:5173](http://localhost:5173)
-- **Backend API & Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **OpenAPI JSON**: [http://localhost:8000/api/v1/openapi.json](http://localhost:8000/api/v1/openapi.json)
-
----
-
-## 💻 Local Development Without Docker
-
-### Backend
-
-Install Poetry 2.4.1 first: `python -m pip install "poetry==2.4.1"`.
-Poetry manages the virtual environment outside this repository, using
-[`backend/poetry.toml`](backend/poetry.toml). Dependency versions are locked
-in `backend/poetry.lock`; include that file when committing dependency changes.
-
-```bash
-cd backend
-poetry env use python3.11
-poetry sync --with dev
-poetry run alembic upgrade head
-poetry run uvicorn app.main:app --reload --port 8000
-```
-
-On Windows, use `poetry env use python` if Python 3.11 is available as `python`.
-Use `poetry add <package>` for runtime dependencies and
-`poetry add --group dev <package>` for development tools.
-Use `poetry run pytest`, `poetry run ruff check .`, and
-`poetry run ruff format --check .` inside `backend` to verify changes.
-See [Poetry environment documentation](https://python-poetry.org/docs/managing-environments/).
-
-Docker installs only runtime dependencies by default. The development Compose
-configuration enables the `dev` group so container test/lint commands work.
-
-### Frontend
-
-Frontend source uses `.jsx` for React components and `.js` for application logic and configuration.
-See [frontend/README.md](frontend/README.md) for frontend setup and verification commands.
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 🧪 Testing & Quality Checks
-
-Run backend tests:
-```bash
-make test-backend
-```
-
-Run linter checks:
-```bash
-make lint
-```
-
----
-
-## 📄 License
-Proprietary / Internal project for **xBike Manufacturing Systems**.
+Tech stack được đối chiếu với [backend/pyproject.toml](backend/pyproject.toml), [frontend/package.json](frontend/package.json) và [docker-compose.yml](docker-compose.yml). Demo Docker hiện tại khởi tạo database mới/trống qua `init.sql` và `seed.sql`; chưa áp dụng migration.

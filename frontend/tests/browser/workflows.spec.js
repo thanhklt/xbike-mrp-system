@@ -100,8 +100,11 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
   });
   expect(creation.body.trang_thai).toBeUndefined();
   await page.getByRole("button", { name: "Hoàn tất nhập kho", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("Khung xe");
-  await page.getByRole("dialog").getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(page.locator("dialog.confirmation")).toContainText("Khung xe");
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Hủy", exact: true })
+    .click();
   expect(state.calls.some((call) => call.path.endsWith("/hoan_tat"))).toBeFalsy();
 });
 
@@ -120,19 +123,21 @@ test("confirming twice while a write is pending sends exactly one action with re
   });
   await page.goto("/kho/phieu-nhap/1");
   await page.getByRole("button", { name: "Hoàn tất nhập kho", exact: true }).click();
-  const confirm = page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true });
+  const confirm = page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true });
   await confirm.click();
   await expect(
-    page.getByRole("dialog").getByRole("button", { name: "Đang xử lý…" }),
+    page.locator("dialog.confirmation").getByRole("button", { name: "Đang xử lý…" }),
   ).toBeDisabled();
   await page
-    .getByRole("dialog")
+    .locator("dialog.confirmation")
     .locator("form")
     .evaluate((form) =>
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
   release();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   const writes = state.calls.filter((call) => call.path === "phieu_nhap/1/hoan_tat");
   expect(writes).toHaveLength(1);
   expect(writes[0].headers["if-match"]).toBe('"v1"');
@@ -153,8 +158,13 @@ test("stale approval stays failed without retries or a false success message", a
   });
   await page.goto("/kho/phieu-xuat/1");
   await page.getByRole("button", { name: "Duyệt phiếu xuất", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Tải lại chi tiết");
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
+  await expect(page.locator("dialog.confirmation").getByRole("alert")).toContainText(
+    "Tải lại chi tiết",
+  );
   expect(state.calls.filter((call) => call.path === "phieu_xuat/1/duyet")).toHaveLength(1);
   await expect(page.locator(".toast")).toHaveCount(0);
 });
@@ -166,8 +176,11 @@ test("planning is explicit and submitting the plan requires a confirmation", asy
   await expect(page.getByRole("heading", { name: "Cây lệnh dự kiến" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "yeu_cau_san_xuat/1/gui")).toBeFalsy();
   await page.getByRole("button", { name: "Gửi yêu cầu cho nhân viên" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   const send = state.calls.find((call) => call.path === "yeu_cau_san_xuat/1/gui");
   expect(send.body).toEqual({ ke_hoach_token: "plan-test-token" });
   expect(send.headers["if-match"]).toBe('"v1"');
@@ -181,7 +194,10 @@ test("changing password invalidates the local session and returns to login", asy
   await page.getByLabel("Mật khẩu mới", { exact: true }).fill("new-password");
   await page.getByLabel("Nhập lại mật khẩu mới", { exact: true }).fill("new-password");
   await page.getByRole("button", { name: "Đổi mật khẩu", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Đổi mật khẩu", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Đổi mật khẩu", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/dang-nhap$/);
   expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
   expect(state.calls.find((call) => call.path === "auth/doi_mat_khau").body).toEqual({
@@ -219,9 +235,12 @@ test("expired authenticated request closes the workflow and returns to login", a
   });
   await page.goto("/kho/phieu-xuat/1");
   await page.getByRole("button", { name: "Duyệt phiếu xuất", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/dang-nhap$/);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
 });
 
 const screens = {
@@ -306,9 +325,9 @@ test("mobile navigation and form stay within the viewport; confirmation supports
   await expect(page).toHaveURL(/\/kho\/phieu-nhap$/);
   await page.goto("/kho/phieu-nhap/1");
   await page.getByRole("button", { name: "Hoàn tất nhập kho", exact: true }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator("dialog.confirmation")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Hoàn tất nhập kho", exact: true })).toBeFocused();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

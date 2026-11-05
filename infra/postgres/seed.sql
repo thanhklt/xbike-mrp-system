@@ -3,6 +3,14 @@
 -- Theo docs/api_contract_v3.md: mọi số tiền là integer VND; mọi mặt hàng có don_gia;
 -- phiếu xuất do quản lý lập, giá xuất lấy từ MatHang.don_gia lúc duyệt.
 -- Giá là dữ liệu minh họa, không phải giá thật.
+-- Hồ sơ, liên hệ, màu sắc và mô tả bên dưới đều là dữ liệu minh họa.
+-- NULL được giữ khi có ý nghĩa nghiệp vụ:
+--   Bom.end_time: BOM đang có hiệu lực, chưa đóng phiên bản.
+--   LenhSanXuat.lenh_san_xuat_cha_id: lệnh gốc không có lệnh cha.
+--   LenhSanXuat.started_at/completed_at, YeuCauSanXuat.completed_at: chưa đến bước tương ứng.
+--   TicketLoiDieuChinh.nguoi_xu_ly_id/ket_qua_xu_ly/closed_at: ticket chưa được tiếp nhận/xử lý.
+--   PhieuXuat.yeu_cau_san_xuat_id và các FK nguồn GiaoDichKho: nguồn không áp dụng.
+--   LichSuThaoTac.du_lieu_truoc (kể cả JSON): chưa có đối tượng hoặc chưa chốt giá.
 -- Yêu cầu: init.sql đã chạy thành công và các bảng chưa có dữ liệu.
 -- Không chạy lại trên DB đã seed; không xóa/ghi đè dữ liệu có sẵn.
 -- 3 tài khoản demo dùng mật khẩu DemoXbike2026! (bcrypt cost 12).
@@ -23,33 +31,33 @@ INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro) VALUES
   (2, 'quan_ly', 'Quản lý'),
   (3, 'nhan_vien', 'Nhân viên');
 
-INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_vao_lam, trang_thai) VALUES
-  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '2026-10-01', 'hoat_dong'),
-  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '2026-10-01', 'hoat_dong'),
-  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '2026-10-01', 'hoat_dong');
+INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai) VALUES
+  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong'),
+  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong'),
+  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong');
 
 -- don_gia: giá danh mục (VND), dùng để tính tiền phiếu xuất.
-INSERT INTO public."MatHang" (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, don_gia, is_active) VALUES
-  (1, 'MH-000001', 'Xe Mountain Pro', 'XE-MOUNTAIN-PRO', 'thanh_pham', 'chiec', 12500000, true),
-  (2, 'MH-000002', 'Xe City Ride', 'XE-CITY-RIDE', 'thanh_pham', 'chiec', 8900000, true),
-  (3, 'MH-000003', 'Xe Speed Sport', 'XE-SPEED-SPORT', 'thanh_pham', 'chiec', 15800000, true),
-  (4, 'MH-000004', 'Xe Kids Fun', 'XE-KIDS-FUN', 'thanh_pham', 'chiec', 3200000, true),
-  (5, 'MH-000005', 'Cụm bánh xe', 'CUM-BANH-XE', 'ban_thanh_pham', 'chiec', 650000, true),
-  (6, 'MH-000006', 'Khung xe', 'KHUNG-XE', 'linh_kien', 'chiec', 1800000, true),
-  (7, 'MH-000007', 'Phuộc xe', 'PHUOC-XE', 'linh_kien', 'chiec', 950000, true),
-  (8, 'MH-000008', 'Lốp xe', 'LOP-XE', 'linh_kien', 'chiec', 180000, true),
-  (9, 'MH-000009', 'Xích xe', 'XICH-XE', 'linh_kien', 'chiec', 220000, true),
-  (10, 'MH-000010', 'Bàn đạp', 'BAN-DAP', 'linh_kien', 'chiec', 120000, true),
-  (11, 'MH-000011', 'Dây phanh', 'DAY-PHANH', 'linh_kien', 'chiec', 45000, true),
-  (12, 'MH-000012', 'Yên xe', 'YEN-XE', 'linh_kien', 'chiec', 250000, true),
-  (13, 'MH-000013', 'Đĩa xích', 'DIA-XICH', 'linh_kien', 'chiec', 320000, true),
-  (14, 'MH-000014', 'Bộ ốc vít', 'BO-OC-VIT', 'linh_kien', 'bo', 60000, true),
-  (15, 'MH-000015', 'Vành bánh xe', 'VANH-BANH-XE', 'linh_kien', 'chiec', 280000, true),
-  (16, 'MH-000016', 'Moay-ơ', 'MOAY-O', 'linh_kien', 'chiec', 210000, true),
-  (17, 'MH-000017', 'Nan hoa', 'NAN-HOA', 'linh_kien', 'chiec', 3000, true);
+INSERT INTO public."MatHang" (id, ma_mat_hang, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, mau_sac, mo_ta, don_gia, is_active) VALUES
+  (1, 'MH-000001', 'Xe Mountain Pro', 'XE-MOUNTAIN-PRO', 'thanh_pham', 'chiec', 'den', 'Xe đạp địa hình Mountain Pro, lắp ráp theo BOM demo.', 12500000, true),
+  (2, 'MH-000002', 'Xe City Ride', 'XE-CITY-RIDE', 'thanh_pham', 'chiec', 'xanh_duong', 'Xe đạp đô thị City Ride, lắp ráp theo BOM demo.', 8900000, true),
+  (3, 'MH-000003', 'Xe Speed Sport', 'XE-SPEED-SPORT', 'thanh_pham', 'chiec', 'do', 'Xe đạp thể thao Speed Sport, lắp ráp theo BOM demo.', 15800000, true),
+  (4, 'MH-000004', 'Xe Kids Fun', 'XE-KIDS-FUN', 'thanh_pham', 'chiec', 'vang', 'Xe đạp trẻ em Kids Fun, lắp ráp theo BOM demo.', 3200000, true),
+  (5, 'MH-000005', 'Cụm bánh xe', 'CUM-BANH-XE', 'ban_thanh_pham', 'chiec', 'bac', 'Cụm gồm một vành, một moay-ơ và 36 nan hoa.', 650000, true),
+  (6, 'MH-000006', 'Khung xe', 'KHUNG-XE', 'linh_kien', 'chiec', 'den', 'Khung xe dùng trong định mức lắp ráp xe demo.', 1800000, true),
+  (7, 'MH-000007', 'Phuộc xe', 'PHUOC-XE', 'linh_kien', 'chiec', 'den', 'Phuộc trước dùng trong định mức lắp ráp xe demo.', 950000, true),
+  (8, 'MH-000008', 'Lốp xe', 'LOP-XE', 'linh_kien', 'chiec', 'den', 'Lốp cao su, mỗi xe demo sử dụng hai chiếc.', 180000, true),
+  (9, 'MH-000009', 'Xích xe', 'XICH-XE', 'linh_kien', 'chiec', 'bac', 'Xích truyền động dùng trong định mức lắp ráp xe demo.', 220000, true),
+  (10, 'MH-000010', 'Bàn đạp', 'BAN-DAP', 'linh_kien', 'chiec', 'den', 'Bàn đạp tính theo chiếc, mỗi xe demo sử dụng hai chiếc.', 120000, true),
+  (11, 'MH-000011', 'Dây phanh', 'DAY-PHANH', 'linh_kien', 'chiec', 'den', 'Dây phanh trước và sau, mỗi xe demo sử dụng hai chiếc.', 45000, true),
+  (12, 'MH-000012', 'Yên xe', 'YEN-XE', 'linh_kien', 'chiec', 'den', 'Yên xe dùng trong định mức lắp ráp xe demo.', 250000, true),
+  (13, 'MH-000013', 'Đĩa xích', 'DIA-XICH', 'linh_kien', 'chiec', 'bac', 'Đĩa xích dùng trong hệ truyền động xe demo.', 320000, true),
+  (14, 'MH-000014', 'Bộ ốc vít', 'BO-OC-VIT', 'linh_kien', 'bo', 'bac', 'Bộ ốc vít phục vụ lắp ráp một xe demo.', 60000, true),
+  (15, 'MH-000015', 'Vành bánh xe', 'VANH-BANH-XE', 'linh_kien', 'chiec', 'bac', 'Vành bánh xe dùng để sản xuất cụm bánh xe demo.', 280000, true),
+  (16, 'MH-000016', 'Moay-ơ', 'MOAY-O', 'linh_kien', 'chiec', 'bac', 'Moay-ơ dùng để sản xuất cụm bánh xe demo.', 210000, true),
+  (17, 'MH-000017', 'Nan hoa', 'NAN-HOA', 'linh_kien', 'chiec', 'bac', 'Nan hoa tính theo chiếc, mỗi cụm bánh xe sử dụng 36 chiếc.', 3000, true);
 
-INSERT INTO public."NhaCungCap" (id, ma_ncc, ten_ncc, dia_chi, tinh) VALUES
-  (1, 'NCC-000001', 'Nhà cung cấp linh kiện xe đạp Minh Phát', 'Địa chỉ minh họa', 'Thành phố Hồ Chí Minh');
+INSERT INTO public."NhaCungCap" (id, ma_ncc, ten_ncc, so_dien_thoai, dia_chi, phuong, tinh) VALUES
+  (1, 'NCC-000001', 'Nhà cung cấp linh kiện xe đạp Minh Phát', '0900000010', '123 Đường Mẫu (địa chỉ minh họa)', 'Phường Minh Họa', 'Thành phố Hồ Chí Minh');
 
 -- Năm BOM riêng; bốn model xe cùng định mức minh họa, mỗi BOM đầu ra một đơn vị.
 
@@ -303,6 +311,18 @@ END $$;
 -- Tự kiểm tra các số liệu trọng yếu trước COMMIT.
 DO $$
 BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public."NhanVien"
+    WHERE num_nulls(ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong) > 0
+  ) THEN RAISE EXCEPTION 'Hồ sơ nhân viên demo phải đầy đủ, không được NULL'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."MatHang"
+    WHERE num_nulls(mau_sac, mo_ta, ton_kho_updated_at) > 0
+  ) THEN RAISE EXCEPTION 'Mặt hàng demo phải có màu sắc, mô tả và thời điểm cập nhật tồn'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."NhaCungCap"
+    WHERE num_nulls(ten_ncc, so_dien_thoai, dia_chi, phuong, tinh) > 0
+  ) THEN RAISE EXCEPTION 'Thông tin nhà cung cấp demo phải đầy đủ, không được NULL'; END IF;
   IF (SELECT count(*) FROM public."Bom") <> 5 OR (SELECT count(*) FROM public."ChiTietBom") <> 43 THEN
     RAISE EXCEPTION 'Seed phải có 5 BOM, 43 dòng định mức'; END IF;
   IF (SELECT so_luong_ton FROM public."MatHang" WHERE id=17) <> 265 THEN

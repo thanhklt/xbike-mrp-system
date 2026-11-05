@@ -41,7 +41,7 @@ export function BOMPage() {
           </Link>
         }
       />
-      <div className={id ? "split-view" : ""}>
+      <div>
         <Collection
           collection={collection}
           search={false}

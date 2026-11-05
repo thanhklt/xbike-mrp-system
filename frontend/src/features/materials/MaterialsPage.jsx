@@ -31,7 +31,7 @@ export function MaterialsPage({ readOnly = false }) {
           )
         }
       />
-      <div className={id ? "split-view" : ""}>
+      <div>
         <Collection
           collection={collection}
           filters={[

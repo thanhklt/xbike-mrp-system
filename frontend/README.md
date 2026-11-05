@@ -39,6 +39,9 @@ Nếu chủ động dùng API khác origin trong bản production, backend cần
 | Nhân viên     | `/nv`, `/nv/yeu-cau`, `/nv/lenh-sx`, `/nv/xuat-nvl`, `/nv/xuat-tp`, `/nv/hoan-thanh`, `/nv/phieu`, `/nv/ton-kho`                                                                                                                             |
 
 Các nhóm có chi tiết dùng `/:id`. Nhóm có quyền tạo dùng `/moi`; backend vẫn là nơi quyết định quyền và trạng thái hợp lệ.
+Các nút xem/sửa ở cột Thao tác và các form tạo mới mở trong popup chung, thay cho khung chi tiết bên dưới hoặc cạnh danh sách.
+Popup hỗ trợ Đóng, Escape, Tab/Shift+Tab, lịch sử Back/Forward và cuộn nội dung riêng trên mobile; đóng popup trả về danh sách.
+Hộp xác nhận nghiệp vụ mở phía trên popup chi tiết; hủy xác nhận giữ nguyên chi tiết đang xem.
 Nhân viên chỉ xem phiếu xuất; Quản lý kho lập/gửi/duyệt phiếu xuất. Nhân viên lập chứng từ hoàn thành cho lệnh của mình.
 
 Tồn hiện tại đọc từ mặt hàng. Ghi sổ phải qua xác nhận; sửa/action có phiên bản dùng ETag đã tải trong header If-Match. Không tự lấy ETag mới để vượt lỗi dữ liệu cũ, không tự retry thao tác ghi.
