@@ -17,8 +17,8 @@ from app.core.errors import (
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
-from app.modules.lenh_san_xuat.ports import AssigneeReader, LenhContext, LenhSanXuatRepository
-from app.modules.lenh_san_xuat.schemas import (
+from app.modules.san_xuat.ports import AssigneeReader, LenhContext, LenhSanXuatRepository
+from app.modules.san_xuat.schemas import (
     LenhListResponse,
     LenhPatch,
     LenhQuery,

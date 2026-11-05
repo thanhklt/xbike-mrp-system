@@ -17,8 +17,6 @@ from app.modules.bom.repository import SqlAlchemyBomRepository
 from app.modules.bom.service import BomPlanningReader, BomService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
-from app.modules.lenh_san_xuat.repository import SqlAlchemyLenhSanXuatRepository
-from app.modules.lenh_san_xuat.service import LenhSanXuatService
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
@@ -32,9 +30,14 @@ from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatService
 from app.modules.san_xuat.repository import (
     SqlAlchemyHoanThanhRepository,
+    SqlAlchemyLenhSanXuatRepository,
     SqlAlchemyYeuCauSanXuatRepository,
 )
-from app.modules.san_xuat.service import ChungTuHoanThanhService, YeuCauSanXuatService
+from app.modules.san_xuat.service import (
+    ChungTuHoanThanhService,
+    LenhSanXuatService,
+    YeuCauSanXuatService,
+)
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)

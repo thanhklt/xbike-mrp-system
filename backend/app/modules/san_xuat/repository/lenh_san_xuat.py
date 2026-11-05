@@ -6,11 +6,14 @@ from sqlalchemy import DateTime, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload
 
-from app.modules.lenh_san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat
-from app.modules.lenh_san_xuat.ports import LenhContext
-from app.modules.lenh_san_xuat.schemas import LenhQuery, LenhRead, NhuCauRead, VatTuLenhLine
-from app.modules.san_xuat.models import ChungTuHoanThanhSx, YeuCauSanXuat
-from app.modules.san_xuat.schemas import YeuCauRead
+from app.modules.san_xuat.models import (
+    ChiTietLenhSanXuat,
+    ChungTuHoanThanhSx,
+    LenhSanXuat,
+    YeuCauSanXuat,
+)
+from app.modules.san_xuat.ports import LenhContext
+from app.modules.san_xuat.schemas import LenhQuery, LenhRead, NhuCauRead, VatTuLenhLine, YeuCauRead
 from app.shared.records import RecordPage
 
 

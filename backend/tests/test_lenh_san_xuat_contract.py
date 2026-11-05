@@ -1,5 +1,6 @@
-"""Order module startup, ownership and request boundaries without a database."""
+"""Order startup, ownership inside san_xuat and request boundaries without a database."""
 
+import importlib.util
 from datetime import date, datetime, timezone
 
 import pytest
@@ -9,15 +10,24 @@ from sqlalchemy.orm import configure_mappers
 from app import models  # noqa: F401
 from app.core.database import Base
 from app.main import app
-from app.modules.lenh_san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat
-from app.modules.lenh_san_xuat.router import router
-from app.modules.lenh_san_xuat.schemas import LenhEmptyInput, LenhPatch, LenhQuery, LyDoInput
+from app.modules.san_xuat import router as san_xuat_router_module
+from app.modules.san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat
+from app.modules.san_xuat.router import lenh_sx_router as router
+from app.modules.san_xuat.schemas import (
+    KeHoachRead,
+    LenhEmptyInput,
+    LenhPatch,
+    LenhQuery,
+    LenhRead,
+    LenhResponse,
+    LyDoInput,
+)
 
 
 def test_order_models_register_once_and_resolve_their_foreign_keys():
     configure_mappers()
     for model in (LenhSanXuat, ChiTietLenhSanXuat):
-        assert model.__module__ == "app.modules.lenh_san_xuat.models"
+        assert model.__module__ == "app.modules.san_xuat.models"
         assert Base.metadata.tables[model.__tablename__] is model.__table__
         registered = [
             mapper
@@ -30,12 +40,10 @@ def test_order_models_register_once_and_resolve_their_foreign_keys():
     assert LenhSanXuat.chi_tiet.property.mapper.class_ is ChiTietLenhSanXuat
 
 
-def test_all_order_endpoints_use_the_new_module_and_owned_body_schemas():
+def test_all_order_endpoints_live_in_san_xuat_router():
     operations = router.routes
     assert len(operations) == 7
-    assert all(
-        route.endpoint.__module__ == "app.modules.lenh_san_xuat.router" for route in operations
-    )
+    assert all(route.endpoint.__module__ == "app.modules.san_xuat.router" for route in operations)
     paths = app.openapi()["paths"]
     assert (
         sum(
@@ -50,6 +58,35 @@ def test_all_order_endpoints_use_the_new_module_and_owned_body_schemas():
             "application/json"
         ]["schema"]
         assert schema["$ref"].endswith("LenhEmptyInput")
+
+
+def test_san_xuat_router_exposes_three_named_routers():
+    expected = {
+        "yeu_cau_sx_router": ("/yeu_cau_san_xuat", 9),
+        "lenh_sx_router": ("/lenh_san_xuat", 7),
+        "chung_tu_router": ("/chung_tu_hoan_thanh_sx", 9),
+    }
+    for name, (prefix, count) in expected.items():
+        named_router = getattr(san_xuat_router_module, name)
+        assert named_router.prefix == prefix
+        assert len(named_router.routes) == count
+    assert not hasattr(san_xuat_router_module, "router")
+    assert not hasattr(san_xuat_router_module, "hoan_thanh_router")
+
+
+def test_lenh_module_is_merged_into_san_xuat():
+    assert importlib.util.find_spec("app.modules.lenh_san_xuat") is None
+    assert LenhResponse.model_fields["data"].annotation is LenhRead
+    assert KeHoachRead.model_fields["lenh"].annotation == list[LenhRead]
+    components = app.openapi()["components"]["schemas"]
+    assert not [name for name in components if "app__modules__" in name]
+    assert components["LenhRead"]["properties"]["trang_thai"]["enum"] == [
+        "nhap",
+        "da_gui",
+        "dang_thuc_hien",
+        "hoan_thanh",
+        "da_huy",
+    ]
 
 
 @pytest.mark.parametrize("employee", [True, False, "3", 1.5, 0, -1, 2**31])

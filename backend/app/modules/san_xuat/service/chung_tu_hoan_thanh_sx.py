@@ -1,0 +1,399 @@
+"""Production completion document policy and atomic posting (contract v3 §11)."""
+
+from datetime import datetime, timezone
+
+from app.core.errors import (
+    ConflictException,
+    ForbiddenException,
+    InvalidInputException,
+    InvalidWorkflowState,
+    NotFoundException,
+    PreconditionFailedException,
+    PreconditionRequiredException,
+)
+from app.core.transactions import Transaction
+from app.modules.audit.ports import AuditWriter
+from app.modules.audit.schemas import CreationAudit
+from app.modules.mat_hang.service import InactiveMatHang
+from app.modules.san_xuat.ports import (
+    HoanThanhContext,
+    HoanThanhOrder,
+    HoanThanhOutput,
+    HoanThanhPosting,
+    HoanThanhRepository,
+)
+from app.modules.san_xuat.schemas import (
+    HoanThanhActionRead,
+    HoanThanhActionResponse,
+    HoanThanhCreate,
+    HoanThanhListResponse,
+    HoanThanhPatch,
+    HoanThanhQuery,
+    HoanThanhRead,
+    HoanThanhResponse,
+    ListResponseMeta,
+    ResponseMeta,
+)
+from app.modules.san_xuat.service.common import canonical_hash
+
+
+def generate_hoan_thanh_etag(record: HoanThanhRead) -> str:
+    return f'"{canonical_hash(record.model_dump(mode="json"))}"'
+
+
+def verify_hoan_thanh_if_match(if_match: str | None, record: HoanThanhRead) -> None:
+    if not if_match or not if_match.strip():
+        raise PreconditionRequiredException()
+    if if_match.strip() != generate_hoan_thanh_etag(record):
+        raise PreconditionFailedException()
+
+
+def check_hoan_thanh_time(
+    finish_time: datetime | None, started_at: datetime | None, *, submitting: bool
+) -> None:
+    if finish_time is None or started_at is None:
+        raise InvalidWorkflowState(message="Thiếu thời gian hoàn thành hoặc bắt đầu lệnh")
+    if finish_time < started_at:
+        raise InvalidInputException(message="finish_time không được trước started_at")
+    if submitting and finish_time > datetime.now(timezone.utc):
+        raise InvalidInputException(message="finish_time không được ở tương lai khi gửi/duyệt")
+
+
+class HoanThanhExceeded(ConflictException):
+    code = "vuot_so_luong_hoan_thanh"
+    default_message = "Tổng lượng hoàn thành vượt số lượng lệnh"
+
+
+class HoanThanhMissingMaterials(ConflictException):
+    code = "chua_du_vat_tu_da_cap"
+    default_message = "Lệnh chưa được cấp đủ vật tư"
+
+
+def check_hoan_thanh_quantities(
+    order_quantity: int,
+    approved: int,
+    submitted: int,
+    demand: dict[int, int],
+    supplied: dict[int, int],
+) -> int:
+    total = approved + submitted
+    if total > order_quantity:
+        raise HoanThanhExceeded()
+    if not demand or any(supplied.get(item_id, 0) < need for item_id, need in demand.items()):
+        raise HoanThanhMissingMaterials()
+    return total
+
+
+class ChungTuHoanThanhService:
+    def __init__(
+        self, repository: HoanThanhRepository, audit: AuditWriter, transaction: Transaction
+    ):
+        self.repository = repository
+        self.audit = audit
+        self.transaction = transaction
+
+    @staticmethod
+    def _role(actor: dict, allowed: set[str]) -> None:
+        if not allowed.intersection(actor.get("roles", [])):
+            raise ForbiddenException()
+
+    @staticmethod
+    def _scope(context: HoanThanhContext, actor: dict) -> None:
+        if "quan_ly" in actor.get("roles", []):
+            return
+        actor_id = int(actor["sub"])
+        if context.document.nhan_vien_id != actor_id or context.order.assignee_id != actor_id:
+            raise ForbiddenException()
+
+    async def _locked(self, document_id: int, actor: dict) -> HoanThanhContext:
+        if not 0 < document_id <= 2**31 - 1:
+            raise NotFoundException()
+        context = await self.repository.lock_context(document_id)
+        if context is None:
+            raise NotFoundException()
+        self._scope(context, actor)
+        return context
+
+    async def _unposted(self, record: HoanThanhRead, state: str) -> None:
+        if record.trang_thai != state:
+            raise InvalidWorkflowState()
+        if await self.repository.postings(record.id):
+            raise ConflictException(message="Chứng từ đã có giao dịch kho")
+
+    @staticmethod
+    def _running(order: HoanThanhOrder) -> None:
+        if order.state != "dang_thuc_hien":
+            raise InvalidWorkflowState(message="Lệnh phải đang thực hiện")
+
+    @staticmethod
+    def _output(item: HoanThanhOutput | None) -> HoanThanhOutput:
+        if item is None:
+            raise NotFoundException(message="Mặt hàng đầu ra không tồn tại")
+        if not item.is_active:
+            raise InactiveMatHang()
+        if item.type not in {"ban_thanh_pham", "thanh_pham"}:
+            raise ConflictException(message="Đầu ra phải là bán thành phẩm hoặc thành phẩm")
+        return item
+
+    @staticmethod
+    def _quantity(record_quantity: int, order: HoanThanhOrder) -> None:
+        if record_quantity > order.quantity:
+            raise HoanThanhExceeded()
+
+    @staticmethod
+    def _detail(record: HoanThanhRead, request_id: str) -> tuple[HoanThanhResponse, str]:
+        return (
+            HoanThanhResponse(data=record, meta=ResponseMeta(request_id=request_id)),
+            generate_hoan_thanh_etag(record),
+        )
+
+    @staticmethod
+    def _action(
+        record: HoanThanhRead, ids: list[int], replay: bool, request_id: str
+    ) -> tuple[HoanThanhActionResponse, str]:
+        action = HoanThanhActionRead(
+            **record.model_dump(), giao_dich_kho_ids=ids, da_ghi_so_truoc_do=replay
+        )
+        return (
+            HoanThanhActionResponse(data=action, meta=ResponseMeta(request_id=request_id)),
+            generate_hoan_thanh_etag(record),
+        )
+
+    async def _audit(
+        self,
+        operation: str,
+        actor: dict,
+        before: HoanThanhRead | None,
+        after: HoanThanhRead | None,
+        *,
+        reason: str | None = None,
+    ) -> None:
+        await self.audit.append(
+            CreationAudit(
+                nhan_vien_id=int(actor["sub"]),
+                loai_doi_tuong="chung_tu_hoan_thanh_san_xuat",
+                doi_tuong_id=(after or before).id,
+                thao_tac=operation,
+                du_lieu_truoc=before.model_dump(mode="json") if before else None,
+                du_lieu_sau=after.model_dump(mode="json") if after else None,
+                ly_do=reason,
+            )
+        )
+
+    async def list_entries(
+        self, params: HoanThanhQuery, actor: dict, request_id: str
+    ) -> HoanThanhListResponse:
+        self._role(actor, {"quan_ly", "nhan_vien"})
+        actor_id = None if "quan_ly" in actor["roles"] else int(actor["sub"])
+        page = await self.repository.list_entries(params, actor_id)
+        return HoanThanhListResponse(
+            data=page.items,
+            meta=ListResponseMeta(
+                request_id=request_id,
+                page=params.page,
+                page_size=params.page_size,
+                total=page.total,
+                total_pages=(page.total + params.page_size - 1) // params.page_size,
+            ),
+        )
+
+    async def get_entry(
+        self, document_id: int, actor: dict, request_id: str
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"quan_ly", "nhan_vien"})
+        if not 0 < document_id <= 2**31 - 1:
+            raise NotFoundException()
+        context = await self.repository.get_by_id(document_id)
+        if context is None:
+            raise NotFoundException()
+        self._scope(context, actor)
+        return self._detail(context.document, request_id)
+
+    async def create_entry(
+        self, payload: HoanThanhCreate, actor: dict, request_id: str
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"nhan_vien"})
+        async with self.transaction:
+            order = await self.repository.lock_for_create(payload.lenh_san_xuat_id)
+            if order is None:
+                raise NotFoundException()
+            if order.assignee_id != int(actor["sub"]):
+                raise ForbiddenException()
+            self._running(order)
+            self._output(await self.repository.read_output(order.mat_hang_id))
+            check_hoan_thanh_time(payload.finish_time, order.started_at, submitting=False)
+            self._quantity(payload.so_luong_hoan_thanh, order)
+            after = await self.repository.add(payload, int(actor["sub"]))
+            await self._audit("tao", actor, None, after)
+        return self._detail(after, request_id)
+
+    async def patch_entry(
+        self,
+        document_id: int,
+        payload: HoanThanhPatch,
+        actor: dict,
+        if_match: str | None,
+        request_id: str,
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"nhan_vien"})
+        async with self.transaction:
+            context = await self._locked(document_id, actor)
+            before = context.document
+            verify_hoan_thanh_if_match(if_match, before)
+            await self._unposted(before, "nhap")
+            changes = {
+                name: value
+                for name, value in payload.model_dump(exclude_unset=True).items()
+                if getattr(before, name) != value
+            }
+            if not changes:
+                return self._detail(before, request_id)
+            after = before.model_copy(update=changes)
+            self._quantity(after.so_luong_hoan_thanh, context.order)
+            check_hoan_thanh_time(after.finish_time, context.order.started_at, submitting=False)
+            self._output(await self.repository.read_output(after.mat_hang_id))
+            after = await self.repository.update(document_id, changes)
+            await self._audit("sua", actor, before, after)
+        return self._detail(after, request_id)
+
+    async def delete_entry(self, document_id: int, actor: dict, if_match: str | None) -> None:
+        self._role(actor, {"nhan_vien"})
+        async with self.transaction:
+            context = await self._locked(document_id, actor)
+            before = context.document
+            verify_hoan_thanh_if_match(if_match, before)
+            await self._unposted(before, "nhap")
+            await self.repository.delete(document_id)
+            await self._audit("xoa_nhap", actor, before, None)
+
+    async def gui(
+        self, document_id: int, actor: dict, if_match: str | None, request_id: str
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"nhan_vien"})
+        async with self.transaction:
+            context = await self._locked(document_id, actor)
+            before = context.document
+            verify_hoan_thanh_if_match(if_match, before)
+            await self._unposted(before, "nhap")
+            self._running(context.order)
+            self._output(await self.repository.read_output(before.mat_hang_id))
+            check_hoan_thanh_time(before.finish_time, context.order.started_at, submitting=True)
+            self._quantity(before.so_luong_hoan_thanh, context.order)
+            after = await self.repository.update(document_id, {"trang_thai": "cho_duyet"})
+            await self._audit("gui", actor, before, after)
+        return self._detail(after, request_id)
+
+    async def tu_choi(
+        self, document_id: int, reason: str, actor: dict, if_match: str | None, request_id: str
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"quan_ly"})
+        return await self._change_state(
+            document_id,
+            reason,
+            actor,
+            if_match,
+            request_id,
+            operation="tu_choi",
+            source="cho_duyet",
+            target="tu_choi",
+        )
+
+    async def ve_nhap(
+        self, document_id: int, reason: str, actor: dict, if_match: str | None, request_id: str
+    ) -> tuple[HoanThanhResponse, str]:
+        self._role(actor, {"nhan_vien"})
+        return await self._change_state(
+            document_id,
+            reason,
+            actor,
+            if_match,
+            request_id,
+            operation="ve_nhap",
+            source="tu_choi",
+            target="nhap",
+        )
+
+    async def _change_state(
+        self,
+        document_id: int,
+        reason: str,
+        actor: dict,
+        if_match: str | None,
+        request_id: str,
+        *,
+        operation: str,
+        source: str,
+        target: str,
+    ) -> tuple[HoanThanhResponse, str]:
+        if not reason or not reason.strip():
+            raise InvalidInputException(message="Lý do là bắt buộc")
+        async with self.transaction:
+            context = await self._locked(document_id, actor)
+            before = context.document
+            verify_hoan_thanh_if_match(if_match, before)
+            await self._unposted(before, source)
+            after = await self.repository.update(document_id, {"trang_thai": target})
+            await self._audit(operation, actor, before, after, reason=reason.strip())
+        return self._detail(after, request_id)
+
+    @staticmethod
+    def _replay(record: HoanThanhRead, postings: list[HoanThanhPosting]) -> list[int]:
+        if len(postings) != 1:
+            raise ConflictException(message="Chứng từ đã duyệt thiếu hoặc sai giao dịch kho")
+        posting = postings[0]
+        if (
+            posting.source_id != record.id
+            or posting.mat_hang_id != record.mat_hang_id
+            or posting.quantity != record.so_luong_hoan_thanh
+            or posting.quantity <= 0
+            or posting.type != "nhap_san_pham_san_xuat"
+        ):
+            raise ConflictException(message="Giao dịch kho không khớp chứng từ đã duyệt")
+        return [posting.id]
+
+    async def duyet(
+        self, document_id: int, actor: dict, if_match: str | None, request_id: str
+    ) -> tuple[HoanThanhActionResponse, str]:
+        self._role(actor, {"quan_ly"})
+        async with self.transaction:
+            context = await self._locked(document_id, actor)
+            before, order = context.document, context.order
+            if not if_match or not if_match.strip():
+                raise PreconditionRequiredException()
+            postings = await self.repository.postings(document_id)
+            if before.trang_thai == "da_duyet":
+                return self._action(before, self._replay(before, postings), True, request_id)
+            verify_hoan_thanh_if_match(if_match, before)
+            if before.trang_thai != "cho_duyet":
+                raise InvalidWorkflowState()
+            if postings:
+                raise ConflictException(message="Chứng từ chưa duyệt đã có giao dịch kho")
+            self._running(order)
+            check_hoan_thanh_time(before.finish_time, order.started_at, submitting=True)
+            output = self._output(await self.repository.lock_output(before.mat_hang_id))
+            if output.balance != output.ledger_total:
+                raise ConflictException(message="Số dư tồn không khớp sổ kho")
+            if output.balance + before.so_luong_hoan_thanh > 2**31 - 1:
+                raise ConflictException(message="Số dư tồn vượt giới hạn INT32")
+            approved = await self.repository.approved_quantity(order.id)
+            demand, supplied = await self.repository.material_quantities(order.id)
+            total = check_hoan_thanh_quantities(
+                order.quantity, approved, before.so_luong_hoan_thanh, demand, supplied
+            )
+            posted_at = datetime.now(timezone.utc)
+            after = await self.repository.update(document_id, {"trang_thai": "da_duyet"})
+            movement_id = await self.repository.post_output(after, int(actor["sub"]), posted_at)
+            if total == order.quantity:
+                old_order, new_order = await self.repository.complete_order(order.id, posted_at)
+                await self.audit.append(
+                    CreationAudit(
+                        nhan_vien_id=int(actor["sub"]),
+                        loai_doi_tuong="lenh_san_xuat",
+                        doi_tuong_id=order.id,
+                        thao_tac="hoan_tat",
+                        du_lieu_truoc=old_order.model_dump(mode="json"),
+                        du_lieu_sau=new_order.model_dump(mode="json"),
+                    )
+                )
+            await self._audit("duyet", actor, before, after)
+        return self._action(after, [movement_id], False, request_id)

@@ -18,18 +18,18 @@ Filter: `q`, `yeu_cau_san_xuat_id`, `lenh_san_xuat_cha_id`, `nhan_vien_id`, `mat
 
 GET chi tiết và vật tư dùng cùng strong ETag của lệnh, nguồn và snapshot vật tư. PATCH/actions so dưới khóa yêu cầu → lệnh: thiếu/blank 428, cũ/weak/wildcard/list 412. Quyền/phạm vi được kiểm tra trước so phiên bản. Hủy lưu lý do trong audit, giữ các chứng từ nháp/chờ duyệt liên quan; chúng vẫn chịu kiểm tra nguồn khi thao tác sau này. Phân công không thay đổi là no-op, không ghi audit trùng.
 
-Luồng: `lenh_san_xuat.router → LenhSanXuatService → SqlAlchemyLenhSanXuatRepository → PostgreSQL`; audit: `LenhSanXuatService → AuditService → SqlAlchemyAuditRepository`. Cùng `SqlAlchemyTransaction`, lỗi audit/commit rollback cả lệnh/yêu cầu/audit. Bắt đầu chỉ đưa yêu cầu `da_gui` sang `dang_thuc_hien`, giữ `cho_bo_sung_vat_tu`.
+Luồng: `san_xuat.router (lenh_sx_router) → LenhSanXuatService → SqlAlchemyLenhSanXuatRepository → PostgreSQL`; audit: `LenhSanXuatService → AuditService → SqlAlchemyAuditRepository`. Cùng `SqlAlchemyTransaction`, lỗi audit/commit rollback cả lệnh/yêu cầu/audit. Bắt đầu chỉ đưa yêu cầu `da_gui` sang `dang_thuc_hien`, giữ `cho_bo_sung_vat_tu`.
 
 ## File bổ sung và cập nhật
 
 | File | Vai trò |
 |---|---|
-| `backend/app/modules/lenh_san_xuat/router.py` | Bảy endpoint, role guard, validation, request_id và ETag |
-| `backend/app/modules/lenh_san_xuat/service.py` | Quyền/phạm vi, trạng thái, If-Match, điều kiện gửi/bắt đầu/hủy, audit |
-| `backend/app/modules/lenh_san_xuat/repository.py` | Query và snapshot, khóa yêu cầu/lệnh, tổng đã cấp/hoàn thành, truy cập DB |
-| `backend/app/modules/lenh_san_xuat/models.py` | Sở hữu ORM LenhSanXuat và ChiTietLenhSanXuat, FK/Identity/CHECK/index/relationship đúng bootstrap |
-| `backend/app/modules/lenh_san_xuat/ports.py` | LenhContext, port repository và kiểm tra nhân viên, không phụ thuộc ORM |
-| `backend/app/modules/lenh_san_xuat/schemas.py` | PATCH/query/read/vật tư/envelope/lỗi/action body và enum trạng thái |
+| `backend/app/modules/san_xuat/router.py` (`lenh_sx_router`) | Bảy endpoint, role guard, validation, request_id và ETag |
+| `backend/app/modules/san_xuat/service/lenh_san_xuat.py` | Quyền/phạm vi, trạng thái, If-Match, điều kiện gửi/bắt đầu/hủy, audit |
+| `backend/app/modules/san_xuat/repository/lenh_san_xuat.py` | Query và snapshot, khóa yêu cầu/lệnh, tổng đã cấp/hoàn thành, truy cập DB |
+| `backend/app/modules/san_xuat/models.py` | Sở hữu ORM LenhSanXuat và ChiTietLenhSanXuat, FK/Identity/CHECK/index/relationship đúng bootstrap |
+| `backend/app/modules/san_xuat/ports.py` | LenhContext, port repository và kiểm tra nhân viên, không phụ thuộc ORM |
+| `backend/app/modules/san_xuat/schemas.py` | PATCH/query/read/vật tư/envelope/lỗi/action body và enum trạng thái |
 | `backend/app/modules/san_xuat/models.py`, `schemas.py` | Bỏ khai báo ORM/LenhRead trùng; kế hoạch yêu cầu dùng LenhRead từ module lệnh |
 | `backend/app/modules/san_xuat/ports.py`, `repository.py`, `service.py` | Cập nhật import model/schema mới cho luồng sinh lệnh và hoàn thành |
 | `backend/app/modules/phieu_xuat/repository.py` | Dùng ORM lệnh từ module sở hữu mới khi kiểm tra nguồn/cấp vật tư |
@@ -39,8 +39,8 @@ Luồng: `lenh_san_xuat.router → LenhSanXuatService → SqlAlchemyLenhSanXuatR
 | `backend/app/core/exceptions.py` | Thêm lệnh vào envelope lỗi contract v3 |
 | `backend/tests/test_lenh_san_xuat_api.py` | Kiểm thử HTTP với PostgreSQL, dùng fixture schema tạm từ test phiếu xuất |
 | `backend/tests/test_lenh_san_xuat_contract.py` | Khởi động, đăng ký mapper/FK một lần, module/schema sở hữu endpoint và validation |
-| `docs/sequence/lenh_san_xuat.md` | Bảy sequence của module lệnh, sequence yêu cầu/hoàn thành giữ trong san_xuat.md |
-| `docs/sequence/assets/lenh_san_xuat/lenh-*.png` | Bảy ảnh PNG đã render Mermaid và xem lại |
+| `docs/sequence/san_xuat.md` (mục Lệnh sản xuất) | Bảy sequence của lệnh, cùng file với sequence yêu cầu/hoàn thành |
+| `docs/sequence/assets/san_xuat/lenh-*.png` | Bảy ảnh PNG đã render Mermaid và xem lại |
 | `docs/examples/lenh-san-xuat-http.json` | Tám request/response HTTP thực tế, không lưu JWT/mật khẩu |
 
 ## Kết quả thực chạy
@@ -68,10 +68,14 @@ Chạy backend bằng cấu hình DB hiện có rồi mở `/docs`, tìm tag `le
 
 Thay đổi request/response hiện có duy nhất: `LenhRead.trang_thai` được mô tả bằng enum chính xác của SQL thay vì string tự do, cả trong kế hoạch yêu cầu. Các giá trị JSON hợp lệ không đổi. Không thay frontend, dependency hay schema DB. Chưa commit/push.
 
-Kế hoạch quay lại nếu cần: bỏ đăng ký `lenh_san_xuat_router` và các thay đổi thuộc tác vụ này sau khi review diff. Không có migration xuống hoặc reset/seed lại DB. Các trạng thái đã ghi qua API mới đều thuộc enum hiện có của SQL; không tự hoàn tác dữ liệu nghiệp vụ đã được người dùng xác nhận.
+Kế hoạch quay lại nếu cần: bỏ đăng ký `lenh_sx_router` và các thay đổi thuộc tác vụ này sau khi review diff. Không có migration xuống hoặc reset/seed lại DB. Các trạng thái đã ghi qua API mới đều thuộc enum hiện có của SQL; không tự hoàn tác dữ liệu nghiệp vụ đã được người dùng xác nhận.
 
 ## Tách module theo yêu cầu
 
 Module `lenh_san_xuat` đã có đủ `__init__.py`, `models.py`, `ports.py`, `schemas.py`, `router.py`, `service.py`, `repository.py`. Ba file trước đây rỗng nay có triển khai thực sự, không chỉ re-export từ `san_xuat`. Sửa lỗi khởi động `ImportError: LenhContext` do import tới khai báo không còn tồn tại. Schema/port lệnh được đặt tại module sở hữu và router dùng `LenhEmptyInput`, `LyDoInput`, `LenhErrorResponse` của chính module.
 
 Yêu cầu/kế hoạch và chứng từ hoàn thành vẫn thuộc `san_xuat`. Các phần đó và phiếu xuất import model/schema lệnh từ `lenh_san_xuat`; chỉ có một khai báo ORM cho mỗi bảng. Không đổi URL hoặc dữ liệu JSON hợp lệ của bảy endpoint. Kế hoạch cũng dùng chung đúng LenhRead mới. Không còn import `san_xuat.lenh_*`. Ba lỗi baseline đã ghi ở trên vẫn ngoài phạm vi.
+
+## Gộp vào module `san_xuat` (05/11/2026)
+
+Module lệnh đã được gộp vào `san_xuat`, API không đổi (theo `.handoff/plan-gop-lenh-san-xuat.md`). Mục "Tách module theo yêu cầu" ở trên chỉ còn giá trị lịch sử. Hiện ORM lệnh chỉ khai báo trong `san_xuat/models.py`. Router lệnh là `lenh_sx_router` trong `san_xuat/router.py`, cạnh `yeu_cau_sx_router` và `chung_tu_router`. Service và repository tách theo chứng từ trong `san_xuat/service/` và `san_xuat/repository/`. Thay đổi duy nhất trên OpenAPI là `operationId` của bảy endpoint lệnh và tên component ngắn. Path, method, body và response giữ nguyên.

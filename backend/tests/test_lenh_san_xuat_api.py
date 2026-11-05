@@ -9,7 +9,7 @@ from test_phieu_xuat_api import context as issue_context  # noqa: F401
 
 from app.core.security import create_access_token, password_version
 from app.modules.audit.service import AuditService
-from app.modules.lenh_san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat
+from app.modules.san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat
 
 BASE = "/api/v1/lenh_san_xuat"
 
