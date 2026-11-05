@@ -38,6 +38,8 @@ for (const [width, height] of [
   [900, 1000],
   [390, 844],
   [375, 667],
+  [320, 568],
+  [844, 390],
 ]) {
   test(`login fits the viewport at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
@@ -70,7 +72,109 @@ for (const [width, height] of [
     await expect(page.getByRole("button", { name: "Đăng nhập", exact: true })).toBeInViewport();
     await expect(page.getByRole("link", { name: "0900 000 000" })).toBeInViewport();
   });
+
+  test(`failed login keeps the form in place without scrolling at ${width}x${height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await page.route("**/api/v1/auth/dang_nhap", (route) =>
+      route.fulfill({
+        status: 401,
+        json: {
+          error: { message: "Thông tin đăng nhập không hợp lệ" },
+          meta: { request_id: "12345678-1234-4321-9876-123456789abc" },
+        },
+      }),
+    );
+    const username = page.getByLabel("Tên đăng nhập", { exact: true });
+    const submit = page.getByRole("button", { name: "Đăng nhập", exact: true });
+    await username.fill("wrong");
+    await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
+    const before = { input: await username.boundingBox(), button: await submit.boundingBox() };
+    await submit.click();
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Thông tin đăng nhập không hợp lệ");
+    await expect(alert).not.toContainText("Mã yêu cầu");
+    await expect(alert).toHaveAttribute(
+      "title",
+      "Mã yêu cầu: 12345678-1234-4321-9876-123456789abc",
+    );
+    await expect(username).toHaveAttribute("aria-invalid", "true");
+    expect(await username.boundingBox()).toEqual(before.input);
+    expect(await submit.boundingBox()).toEqual(before.button);
+    const layout = await page.evaluate(() => {
+      const form = document.querySelector(".login-form");
+      const feedback = document.querySelector(".login-feedback").getBoundingClientRect();
+      const error = document.querySelector(".login-error").getBoundingClientRect();
+      const support = document.querySelector(".login-support").getBoundingClientRect();
+      return {
+        width: document.documentElement.scrollWidth,
+        height: document.documentElement.scrollHeight,
+        overflow: form.scrollHeight - form.clientHeight,
+        supportBottom: support.bottom,
+        formBottom: form.getBoundingClientRect().bottom,
+        errorBottom: error.bottom,
+        feedbackBottom: feedback.bottom,
+      };
+    });
+    expect(layout.width).toBeLessThanOrEqual(width);
+    expect(layout.height).toBeLessThanOrEqual(height);
+    expect(layout.overflow).toBeLessThanOrEqual(1);
+    expect(layout.supportBottom).toBeLessThanOrEqual(layout.formBottom);
+    expect(layout.errorBottom).toBeLessThanOrEqual(layout.feedbackBottom);
+    await page.locator(".login-form").hover();
+    await page.mouse.wheel(0, 500);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(page.locator(".login-form")).toHaveJSProperty("scrollTop", 0);
+  });
 }
+
+for (const [status, message] of [
+  [403, "Tài khoản bị khóa hoặc không có quyền đăng nhập."],
+  [422, "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại."],
+  [429, "Bạn thử quá nhiều lần. Vui lòng thử lại sau."],
+  [500, "Chưa thể đăng nhập. Vui lòng thử lại sau."],
+  [0, "Không kết nối được máy chủ. Vui lòng thử lại."],
+]) {
+  test(`login error ${status} stays compact on mobile`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.route("**/api/v1/auth/dang_nhap", (route) =>
+      status
+        ? route.fulfill({ status, json: { error: { message: "Server error" } } })
+        : route.abort(),
+    );
+    await page.getByLabel("Tên đăng nhập", { exact: true }).fill("wrong");
+    await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
+    await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText(message);
+    const dimensions = await page.locator(".login-form").evaluate((form) => ({
+      height: form.clientHeight,
+      scrollHeight: form.scrollHeight,
+    }));
+    expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.height + 1);
+    await expect(page.getByRole("link", { name: "0900 000 000" })).toBeInViewport();
+  });
+}
+
+test("autofilled credentials keep the dark input appearance while focused", async ({ page }) => {
+  const session = await page.context().newCDPSession(page);
+  await session.send("DOM.enable");
+  await session.send("CSS.enable");
+  const { root } = await session.send("DOM.getDocument");
+  for (const selector of [
+    'input[autocomplete="username"]',
+    'input[autocomplete="current-password"]',
+  ]) {
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    await session.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["autofill"] });
+    const input = page.locator(selector);
+    await input.focus();
+    await expect(input).toHaveCSS("-webkit-text-fill-color", "rgb(244, 237, 230)");
+    await expect(input).toHaveCSS("caret-color", "rgb(244, 237, 230)");
+    await expect(input).toHaveCSS("box-shadow", "rgb(36, 33, 31) 0px 0px 0px 1000px inset");
+  }
+  await session.detach();
+});
 
 test("carousel advances every five seconds and wraps to the first image", async ({ page }) => {
   await expect(thumbs(page).nth(0)).toHaveAttribute("aria-current", "true");

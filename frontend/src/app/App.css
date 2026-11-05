@@ -840,6 +840,7 @@ html:has(dialog[open]) {
   --login-accent-text: #fff4ea;
   position: relative;
   height: 100dvh;
+  overflow: clip;
   display: flex;
   flex-direction: column;
   font-family: var(--login-font-body);
@@ -1009,7 +1010,7 @@ html:has(dialog[open]) {
 .login-form {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: clip;
   padding: calc(88 * var(--login-unit)) calc(51 * var(--login-unit)) calc(60 * var(--login-unit))
     calc(82 * var(--login-unit));
   display: flex;
@@ -1057,6 +1058,11 @@ html:has(dialog[open]) {
 .login-form .field input::placeholder {
   color: var(--login-placeholder);
 }
+.login-page .field input:is(:autofill, :-webkit-autofill) {
+  box-shadow: 0 0 0 1000px var(--login-input-bg) inset;
+  -webkit-text-fill-color: var(--login-text);
+  caret-color: var(--login-text);
+}
 .login-form .password-field {
   position: relative;
   margin-top: clamp(16px, calc(30 * var(--login-unit)), 30px);
@@ -1078,7 +1084,7 @@ html:has(dialog[open]) {
   color: var(--login-muted);
 }
 .login-form .button-wrap {
-  margin-top: clamp(20px, calc(45 * var(--login-unit)), 45px);
+  margin-top: 0;
 }
 .login-form .btn-primary {
   height: clamp(44px, calc(74 * var(--login-unit)), 74px);
@@ -1098,17 +1104,34 @@ html:has(dialog[open]) {
 .login-page :focus-visible {
   outline-color: var(--login-accent);
 }
-.login-form .notice-error {
-  margin-top: 24px;
+.login-feedback {
+  /* Reserve room so every login result leaves the fields and button in place. */
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  line-height: 18px;
+}
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #7a3b31;
+  border-radius: 6px;
   background: #3a1e1a;
-  border-color: #7a3b31;
   color: #ffb9ad;
+}
+.login-error > svg {
+  flex-shrink: 0;
 }
 .login-support {
   display: flex;
   align-items: center;
   gap: clamp(18px, 1.77vw, 28px);
-  margin-top: clamp(24px, calc(89 * var(--login-unit)), 89px);
+  margin-top: clamp(16px, calc(73 * var(--login-unit)), 73px);
 }
 .login-support > svg {
   flex-shrink: 0;
@@ -1251,7 +1274,7 @@ html:has(dialog[open]) {
     font-size: clamp(28px, 4.44vw, 40px);
   }
   .login-support {
-    margin-top: 24px;
+    margin-top: 16px;
   }
 }
 @media (max-width: 600px) {
@@ -1274,6 +1297,9 @@ html:has(dialog[open]) {
   }
   .login-main {
     padding: 32px 16px;
+  }
+  .login-card {
+    grid-template-rows: clamp(100px, 20dvh, 200px) minmax(0, 1fr);
   }
   .login-tagline {
     font-size: clamp(18px, 3dvh, 22px);
@@ -1326,6 +1352,73 @@ html:has(dialog[open]) {
   .toast {
     bottom: 16px;
     right: 16px;
+  }
+}
+@media (max-width: 600px) and (max-height: 640px) {
+  .login-card {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .login-visual {
+    display: none;
+  }
+}
+@media (min-width: 601px) and (max-height: 600px) {
+  .login-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .login-visual {
+    display: none;
+  }
+  .login-form {
+    --login-input-height: 44px;
+    padding: 12px 24px;
+    justify-content: center;
+  }
+  .login-form .stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+  }
+  .login-form .stack > :is(h1, .muted, .login-feedback, .button-wrap) {
+    grid-column: 1 / -1;
+  }
+  .login-form h1 {
+    font-size: 26px;
+  }
+  .login-form .muted {
+    margin-top: 6px;
+    font-size: 14px;
+  }
+  .login-form .stack > .field,
+  .login-form .password-field {
+    margin-top: 10px;
+  }
+  .login-form .field {
+    gap: 6px;
+  }
+  .login-form .field label {
+    font-size: 13px;
+  }
+  .login-feedback {
+    height: 52px;
+  }
+  .login-form .btn-primary {
+    height: 44px;
+    font-size: 17px;
+  }
+  .login-support {
+    margin-top: 8px;
+    gap: 12px;
+  }
+  .login-support > svg {
+    width: 24px;
+    height: 24px;
+  }
+  .login-support > div {
+    min-height: 38px;
+    padding-left: 12px;
+    font-size: 13px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
