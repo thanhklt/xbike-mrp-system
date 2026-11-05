@@ -15,7 +15,7 @@
 - **Testing & Code Quality**: `pytest`, `httpx`, `ruff`.
 
 ### Frontend
-- **Framework**: [React 18+](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/).
+- **Framework**: [React 18+](https://react.dev/) + JavaScript (JSX) + [Vite](https://vitejs.dev/).
 - **State & Data Fetching**: [TanStack Query (React Query)](https://tanstack.com/query/latest) + [Axios](https://axios-http.com/).
 - **Styling**: Modular CSS / Modern UI tokens with sleek dark/light aesthetic.
 - **Icons**: [Lucide React](https://lucide.dev/).
@@ -25,7 +25,7 @@
 - **Database**: PostgreSQL 16
 - **Reverse Proxy**: Nginx
 - **Containerization**: Docker & Docker Compose
-- **CI/CD**: GitHub Actions (linting, type checking, unit tests)
+- **CI/CD**: GitHub Actions (linting, unit tests)
 
 ---
 
@@ -36,7 +36,7 @@ xbike-mrp-system/
 ├── .github/
 │   └── workflows/
 │       ├── backend-ci.yml           # Backend linting & automated test workflow
-│       └── frontend-ci.yml          # Frontend linting, typecheck & build workflow
+│       └── frontend-ci.yml          # Frontend linting & build workflow
 │
 ├── backend/
 │   ├── app/
@@ -92,16 +92,13 @@ xbike-mrp-system/
 │   │   ├── layouts/                 # Application layouts (Sidebar, Header, Main layout)
 │   │   ├── lib/                     # Axios instance & TanStack query client
 │   │   │   ├── api/
-│   │   │   └── query-client.ts
+│   │   │   └── query-client.js
 │   │   ├── routes/                  # Route definitions and protected route wrappers
-│   │   ├── types/                   # TypeScript interfaces & domain models
-│   │   ├── main.tsx                 # React DOM mount point
-│   │   └── vite-env.d.ts            # Vite client types
+│   │   └── main.jsx                 # React DOM mount point
 │   │
 │   ├── Dockerfile                   # Frontend Docker container recipe
 │   ├── package.json                 # Node dependencies and scripts
-│   ├── tsconfig.json                # TypeScript compiler configuration
-│   ├── vite.config.ts               # Vite bundler configuration
+│   ├── vite.config.js               # Vite bundler configuration
 │   ├── eslint.config.js             # Modern ESLint configuration
 │   ├── .prettierrc                  # Code formatter configuration
 │   └── .env.example                 # Frontend environment variables template
@@ -179,6 +176,10 @@ Docker installs only runtime dependencies by default. The development Compose
 configuration enables the `dev` group so container test/lint commands work.
 
 ### Frontend
+
+Frontend source uses `.jsx` for React components and `.js` for application logic and configuration.
+See [frontend/README.md](frontend/README.md) for frontend setup and verification commands.
+
 ```bash
 cd frontend
 npm install
