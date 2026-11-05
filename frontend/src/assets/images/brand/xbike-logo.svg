@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 62" fill="#fff">
+  <title>XBIKE MRP System</title>
+  <g transform="translate(10 2) scale(.94 1) skewX(-12)">
+    <path d="M0 0h11l8 10L29 0h12L25 17l11 17H24l-7-11L6 34H-6l17-18Z"/>
+    <path fill-rule="evenodd" d="M43 0h20c9 0 13 4 13 9 0 4-2 7-6 8 5 1 7 4 7 8 0 6-5 9-14 9H43Zm10 8v6h9c3 0 4-1 4-3s-1-3-4-3Zm0 13v6h10c3 0 4-1 4-3s-1-3-4-3Z"/>
+    <path d="M82 0h10v34H82Zm17 0h10v13L123 0h13l-18 16 18 18h-14l-13-14v14H99Zm42 0h30v8h-20v5h18v8h-18v5h20v8h-30Z"/>
+  </g>
+  <path d="M1 49c-4-7 7-14 20-18L8 43c-4 2-6 4-7 6Zm163 5c3-2 6-3 9-2-3 2-6 3-9 2Z"/>
+  <g transform="translate(12 48)">
+    <path d="M0 12V0h2l4 7 4-7h2v12h-2V4L6 10 2 4v8Z"/>
+    <path fill-rule="evenodd" d="M17 12V0h6c3 0 5 1 5 4 0 2-1 3-3 4l4 4h-3l-4-4h-3v4Zm2-10v4h4c2 0 3-1 3-2s-1-2-3-2Z"/>
+    <path fill-rule="evenodd" d="M34 12V0h6c3 0 5 2 5 4s-2 4-5 4h-4v4Zm2-10v4h4c2 0 3-1 3-2s-1-2-3-2Z"/>
+    <path d="M65 1l-1 2c-2-1-6-2-6 0 0 1 1 1 3 2 3 0 5 1 5 4 0 4-7 4-11 2l1-2c3 2 8 2 8 0 0-1-2-2-4-2-3-1-4-2-4-4 0-4 6-4 9-2Z"/>
+    <path d="M71 0h3l4 5 4-5h3l-6 7v5h-2V7Z"/>
+    <path d="M99 1l-1 2c-2-1-6-2-6 0 0 1 1 1 3 2 3 0 5 1 5 4 0 4-7 4-11 2l1-2c3 2 8 2 8 0 0-1-2-2-4-2-3-1-4-2-4-4 0-4 6-4 9-2Z"/>
+    <path d="M105 0h12v2h-5v10h-2V2h-5Z"/>
+    <path d="M122 0h10v2h-8v3h7v2h-7v3h8v2h-10Z"/>
+    <path d="M137 12V0h2l4 7 4-7h2v12h-2V4l-4 6-4-6v8Z"/>
+  </g>
+</svg>

@@ -1,10 +1,16 @@
 import { useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { ArrowRight, Eye, EyeOff, Phone } from "lucide-react";
 import { useAuth } from "./AuthProvider.jsx";
 import { homeFor } from "./permissions.js";
 import { Button } from "../../components/Button.jsx";
 import { Field } from "../../components/Field.jsx";
 import { ErrorNotice } from "../../components/QueryState.jsx";
+import { LoginCarousel } from "./LoginCarousel.jsx";
+import { LOGIN_SLIDES, LOGIN_SLIDE_INTERVAL_MS } from "./loginSlides.js";
+
+const SUPPORT_PHONE = { display: "0900 000 000", tel: "0900000000" };
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
@@ -34,29 +40,9 @@ export function LoginPage() {
   }
   return (
     <div className="login-page">
-      <header className="login-header">
-        <div className="brand">
-          XBIKE<small>Hệ thống quản lý kho & sản xuất</small>
-        </div>
-      </header>
       <main className="login-main">
         <div className="login-card">
-          <section className="login-intro">
-            <div className="brand">
-              XBIKE<small>MRP · Kho · Sản xuất</small>
-            </div>
-            <h2>
-              Kiểm soát kho.
-              <br />
-              Điều phối sản xuất.
-            </h2>
-            <p>
-              Quản lý nguyên vật liệu, BOM, phiếu nhập – xuất và chứng từ hoàn thành sản xuất trên
-              một hệ thống.
-            </p>
-            <hr />
-            <span>Dành cho quản trị viên, quản lý kho và nhân viên</span>
-          </section>
+          <LoginCarousel slides={LOGIN_SLIDES} interval={LOGIN_SLIDE_INTERVAL_MS} />
           <section className="login-form">
             <form className="stack" onSubmit={submit}>
               <h1>Đăng nhập</h1>
@@ -71,32 +57,43 @@ export function LoginPage() {
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder="Nhập tên đăng nhập"
               />
-              <div>
+              <div className="password-field">
                 <Field
                   label="Mật khẩu"
                   type={visible ? "text" : "password"}
                   autoComplete="current-password"
                   maxLength={1024}
                   required
+                  placeholder="Nhập mật khẩu"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 <button
                   type="button"
-                  className="text-button password-toggle"
+                  className="password-toggle"
+                  aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                   aria-pressed={visible}
                   onClick={() => setVisible(!visible)}
                 >
-                  {visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  {visible ? (
+                    <EyeOff aria-hidden="true" size={30} strokeWidth={1.75} />
+                  ) : (
+                    <Eye aria-hidden="true" size={30} strokeWidth={1.75} />
+                  )}
                 </button>
               </div>
               <Button type="submit" disabled={busy}>
                 {busy ? "Đang đăng nhập…" : "Đăng nhập"}
+                {!busy && <ArrowRight aria-hidden="true" size={26} strokeWidth={2.25} />}
               </Button>
-              <small className="muted">
-                Gặp sự cố đăng nhập? Liên hệ quản trị viên để được hỗ trợ.
-              </small>
             </form>
+            <div className="login-support">
+              <Phone aria-hidden="true" size={40} strokeWidth={1.5} />
+              <div>
+                <strong>Hỗ trợ Admin</strong>
+                <a href={`tel:${SUPPORT_PHONE.tel}`}>{SUPPORT_PHONE.display}</a>
+              </div>
+            </div>
           </section>
         </div>
       </main>

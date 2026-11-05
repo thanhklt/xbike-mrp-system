@@ -6,6 +6,8 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "");
   return {
     plugins: [react()],
+    // Keep the login logo and slide assets as versioned files in production.
+    build: { assetsInlineLimit: 0 },
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     server: {
       port: 5173,
