@@ -1,4 +1,4 @@
-"""Nine production-request endpoints from contract v3 §8."""
+"""Production endpoints: requests (§8), orders (§9) and completion documents (§11)."""
 
 from typing import Annotated
 
@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from app.core.request_context import get_if_match, get_request_id, reject_query
 from app.dependencies import (
     get_chung_tu_hoan_thanh_service,
+    get_lenh_san_xuat_service,
     get_yeu_cau_san_xuat_service,
     require_roles,
 )
@@ -23,16 +24,27 @@ from app.modules.san_xuat.schemas import (
     HoanThanhResponse,
     KeHoachPreviewResponse,
     KeHoachResponse,
+    LenhEmptyInput,
+    LenhErrorResponse,
+    LenhListResponse,
+    LenhPatch,
+    LenhQuery,
+    LenhResponse,
     LyDoInput,
     SanXuatErrorResponse,
     TinhKeHoachInput,
+    VatTuLenhResponse,
     YeuCauCreate,
     YeuCauDetailResponse,
     YeuCauListQuery,
     YeuCauListResponse,
     YeuCauPatch,
 )
-from app.modules.san_xuat.service import ChungTuHoanThanhService, YeuCauSanXuatService
+from app.modules.san_xuat.service import (
+    ChungTuHoanThanhService,
+    LenhSanXuatService,
+    YeuCauSanXuatService,
+)
 
 read_actor = require_roles(["quan_ly", "nhan_vien"])
 write_actor = require_roles(["quan_ly"])
@@ -45,7 +57,7 @@ IfMatch = Annotated[
     str | None, Header(alias="If-Match", description="Strong ETag; thiếu 428, cũ/weak/* 412")
 ]
 ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong ETag của yêu cầu"}
-router = APIRouter(
+yeu_cau_sx_router = APIRouter(
     prefix="/yeu_cau_san_xuat",
     tags=["san_xuat"],
     responses={
@@ -69,7 +81,7 @@ def reject_repeated_query(request: Request) -> None:
         )
 
 
-@router.get(
+@yeu_cau_sx_router.get(
     "",
     response_model=YeuCauListResponse,
     dependencies=[Depends(read_actor), Depends(reject_repeated_query)],
@@ -83,7 +95,7 @@ async def list_entries(
     return await service.list_entries(params, actor, request_id)
 
 
-@router.get(
+@yeu_cau_sx_router.get(
     "/{id}",
     response_model=YeuCauDetailResponse,
     dependencies=[Depends(read_actor), Depends(reject_query)],
@@ -101,7 +113,7 @@ async def get_entry(
     return result
 
 
-@router.post(
+@yeu_cau_sx_router.post(
     "",
     status_code=201,
     response_model=YeuCauDetailResponse,
@@ -122,7 +134,7 @@ async def create_entry(
     return result
 
 
-@router.patch(
+@yeu_cau_sx_router.patch(
     "/{id}",
     response_model=YeuCauDetailResponse,
     dependencies=[Depends(write_actor), Depends(reject_query)],
@@ -142,7 +154,7 @@ async def patch_entry(
     return result
 
 
-@router.delete("/{id}", status_code=204, dependencies=[Depends(write_actor), Depends(reject_query)])
+@yeu_cau_sx_router.delete("/{id}", status_code=204, dependencies=[Depends(write_actor), Depends(reject_query)])
 async def delete_entry(
     id: ResourceId,
     actor: WriteActor,
@@ -153,7 +165,7 @@ async def delete_entry(
     return Response(status_code=204)
 
 
-@router.post(
+@yeu_cau_sx_router.post(
     "/{id}/tinh_ke_hoach",
     response_model=KeHoachPreviewResponse,
     dependencies=[Depends(read_actor), Depends(reject_query)],
@@ -168,7 +180,7 @@ async def tinh_ke_hoach(
     return await service.tinh_ke_hoach(id, actor, request_id)
 
 
-@router.post(
+@yeu_cau_sx_router.post(
     "/{id}/gui",
     response_model=GuiYeuCauResponse,
     dependencies=[Depends(write_actor), Depends(reject_query)],
@@ -188,7 +200,7 @@ async def gui(
     return result
 
 
-@router.get(
+@yeu_cau_sx_router.get(
     "/{id}/ke_hoach",
     response_model=KeHoachResponse,
     dependencies=[Depends(read_actor), Depends(reject_query)],
@@ -202,7 +214,7 @@ async def ke_hoach(
     return await service.ke_hoach(id, actor, request_id)
 
 
-@router.post(
+@yeu_cau_sx_router.post(
     "/{id}/huy",
     response_model=YeuCauDetailResponse,
     dependencies=[Depends(write_actor), Depends(reject_query)],
@@ -222,7 +234,7 @@ async def huy(
     return result
 
 
-hoan_thanh_router = APIRouter(
+chung_tu_router = APIRouter(
     prefix="/chung_tu_hoan_thanh_sx",
     tags=["san_xuat"],
     responses={
@@ -238,7 +250,7 @@ HTId = Annotated[int, Path(gt=0)]
 HT_ETAG = {"schema": {"type": "string"}, "description": "Strong ETag chứng từ hoàn thành"}
 
 
-@hoan_thanh_router.get(
+@chung_tu_router.get(
     "",
     response_model=HoanThanhListResponse,
     dependencies=[Depends(read_actor), Depends(reject_repeated_query)],
@@ -252,7 +264,7 @@ async def list_hoan_thanh(
     return await service.list_entries(params, actor, request_id)
 
 
-@hoan_thanh_router.get(
+@chung_tu_router.get(
     "/{id}",
     response_model=HoanThanhResponse,
     dependencies=[Depends(read_actor), Depends(reject_query)],
@@ -270,7 +282,7 @@ async def get_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.post(
+@chung_tu_router.post(
     "",
     status_code=201,
     response_model=HoanThanhResponse,
@@ -291,7 +303,7 @@ async def create_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.patch(
+@chung_tu_router.patch(
     "/{id}",
     response_model=HoanThanhResponse,
     dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
@@ -311,7 +323,7 @@ async def patch_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.delete(
+@chung_tu_router.delete(
     "/{id}",
     status_code=204,
     response_class=Response,
@@ -327,7 +339,7 @@ async def delete_hoan_thanh(
     return Response(status_code=204)
 
 
-@hoan_thanh_router.post(
+@chung_tu_router.post(
     "/{id}/gui",
     response_model=HoanThanhResponse,
     dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
@@ -347,7 +359,7 @@ async def gui_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.post(
+@chung_tu_router.post(
     "/{id}/duyet",
     response_model=HoanThanhActionResponse,
     dependencies=[Depends(write_actor), Depends(reject_query)],
@@ -367,7 +379,7 @@ async def duyet_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.post(
+@chung_tu_router.post(
     "/{id}/tu_choi",
     response_model=HoanThanhResponse,
     dependencies=[Depends(write_actor), Depends(reject_query)],
@@ -387,7 +399,7 @@ async def tu_choi_hoan_thanh(
     return result
 
 
-@hoan_thanh_router.post(
+@chung_tu_router.post(
     "/{id}/ve_nhap",
     response_model=HoanThanhResponse,
     dependencies=[Depends(require_roles(["nhan_vien"])), Depends(reject_query)],
@@ -403,5 +415,153 @@ async def ve_nhap_hoan_thanh(
     response: Response,
 ) -> HoanThanhResponse:
     result, etag = await service.ve_nhap(id, payload.ly_do, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+# --- Lệnh sản xuất (contract v3 §9, API-045–051) ---
+
+lenh_start_actor = require_roles(["nhan_vien"])
+LenhNhanVien = Annotated[dict, Depends(lenh_start_actor)]
+LenhService = Annotated[LenhSanXuatService, Depends(get_lenh_san_xuat_service)]
+LenhId = Annotated[int, Path(gt=0, le=2**31 - 1)]
+LenhIfMatch = Annotated[str | None, Depends(get_if_match)]
+LENH_ETAG: dict[int | str, dict[str, object]] = {
+    200: {
+        "headers": {
+            "ETag": {
+                "schema": {"type": "string"},
+                "description": "Strong version of the order, source state and material snapshot",
+            }
+        }
+    }
+}
+lenh_sx_router = APIRouter(
+    prefix="/lenh_san_xuat",
+    tags=["lenh_san_xuat"],
+    responses={
+        code: {"model": LenhErrorResponse} for code in (401, 403, 404, 409, 412, 422, 428, 500)
+    },
+)
+
+
+@lenh_sx_router.get(
+    "",
+    response_model=LenhListResponse,
+    dependencies=[Depends(read_actor), Depends(reject_repeated_query)],
+)
+async def list_lenh(
+    actor: ReadActor,
+    params: Annotated[LenhQuery, Query()],
+    service: LenhService,
+    request_id: RequestId,
+) -> LenhListResponse:
+    return await service.list_entries(params, actor, request_id)
+
+
+@lenh_sx_router.get(
+    "/{id}",
+    response_model=LenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(read_actor), Depends(reject_query)],
+)
+async def get_lenh(
+    id: LenhId, actor: ReadActor, service: LenhService, request_id: RequestId, response: Response
+) -> LenhResponse:
+    result, etag = await service.get_entry(id, actor, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@lenh_sx_router.get(
+    "/{id}/vat_tu",
+    response_model=VatTuLenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(read_actor), Depends(reject_query)],
+)
+async def lenh_vat_tu(
+    id: LenhId, actor: ReadActor, service: LenhService, request_id: RequestId, response: Response
+) -> VatTuLenhResponse:
+    result, etag = await service.materials(id, actor, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@lenh_sx_router.patch(
+    "/{id}",
+    response_model=LenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+)
+async def patch_lenh(
+    id: LenhId,
+    payload: LenhPatch,
+    actor: WriteActor,
+    service: LenhService,
+    request_id: RequestId,
+    response: Response,
+    if_match: LenhIfMatch,
+) -> LenhResponse:
+    result, etag = await service.patch_entry(id, payload, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@lenh_sx_router.post(
+    "/{id}/gui",
+    response_model=LenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+)
+async def gui_lenh(
+    id: LenhId,
+    payload: LenhEmptyInput,
+    actor: WriteActor,
+    service: LenhService,
+    request_id: RequestId,
+    response: Response,
+    if_match: LenhIfMatch,
+) -> LenhResponse:
+    result, etag = await service.send(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@lenh_sx_router.post(
+    "/{id}/bat_dau",
+    response_model=LenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(lenh_start_actor), Depends(reject_query)],
+)
+async def bat_dau_lenh(
+    id: LenhId,
+    payload: LenhEmptyInput,
+    actor: LenhNhanVien,
+    service: LenhService,
+    request_id: RequestId,
+    response: Response,
+    if_match: LenhIfMatch,
+) -> LenhResponse:
+    result, etag = await service.start(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@lenh_sx_router.post(
+    "/{id}/huy",
+    response_model=LenhResponse,
+    responses=LENH_ETAG,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+)
+async def huy_lenh(
+    id: LenhId,
+    payload: LyDoInput,
+    actor: WriteActor,
+    service: LenhService,
+    request_id: RequestId,
+    response: Response,
+    if_match: LenhIfMatch,
+) -> LenhResponse:
+    result, etag = await service.cancel(id, payload.ly_do, actor, if_match, request_id)
     response.headers["ETag"] = etag
     return result

@@ -35,9 +35,14 @@ from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatService
 from app.modules.san_xuat.repository import (
     SqlAlchemyHoanThanhRepository,
+    SqlAlchemyLenhSanXuatRepository,
     SqlAlchemyYeuCauSanXuatRepository,
 )
-from app.modules.san_xuat.service import ChungTuHoanThanhService, YeuCauSanXuatService
+from app.modules.san_xuat.service import (
+    ChungTuHoanThanhService,
+    LenhSanXuatService,
+    YeuCauSanXuatService,
+)
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -166,6 +171,19 @@ def get_yeu_cau_san_xuat_service(
 
 def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
     return InventoryService(SqlAlchemyInventoryRepository(db))
+
+
+def get_lenh_san_xuat_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> LenhSanXuatService:
+    transaction = SqlAlchemyTransaction(db)
+    return LenhSanXuatService(
+        SqlAlchemyLenhSanXuatRepository(db),
+        audit,
+        transaction,
+        NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
+    )
 
 
 def get_chung_tu_hoan_thanh_service(
