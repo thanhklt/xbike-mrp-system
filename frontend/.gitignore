@@ -1,0 +1,7 @@
+.npm-cache/
+test-results/
+playwright-report/
+
+# The repository's Python lib/ rule must not hide the frontend API and hooks.
+!src/lib/
+!src/lib/**
