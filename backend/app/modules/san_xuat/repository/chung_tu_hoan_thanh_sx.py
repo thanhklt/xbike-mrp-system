@@ -19,6 +19,7 @@ from app.modules.san_xuat.ports import (
     HoanThanhOutput,
     HoanThanhPosting,
 )
+from app.modules.san_xuat.repository.yeu_cau_san_xuat import SqlAlchemyYeuCauSanXuatRepository
 from app.modules.san_xuat.schemas import (
     ChungTuRead,
     HoanThanhCreate,
