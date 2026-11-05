@@ -1,23 +1,17 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
 import { useFeedback } from "../components/FeedbackProvider.jsx";
-import { ROLE_LABELS, today } from "../lib/format.js";
-import { navigation } from "./navigation.js";
+import { ROLE_LABELS } from "../lib/format.js";
+import { navigationFor } from "./navigation.js";
+import { Sidebar } from "./Sidebar.jsx";
 export function MainLayout() {
   const { user, logout } = useAuth();
   const { confirm } = useFeedback();
   const [menuOpen, setMenuOpen] = useState(false);
-  const location = useLocation();
   const navigate = useNavigate();
-  const groups = navigation[user.ma_vai_tro] || [];
-  const current =
-    groups.flatMap((group) => group.items).find(([path]) => location.pathname === path) ||
-    groups
-      .flatMap((group) => group.items)
-      .filter(([path]) => location.pathname.startsWith(`${path}/`))
-      .sort((left, right) => right[0].length - left[0].length)[0];
+  const groups = navigationFor(user.ma_vai_tro);
   const name = user.ho_ten || user.ten_dang_nhap;
   function signOut() {
     confirm({
@@ -54,11 +48,6 @@ export function MainLayout() {
                 : "Hệ thống quản lý kho & sản xuất"}
             </small>
           </div>
-          <div className="breadcrumb">
-            {current?.[1] || "Hồ sơ"}
-            <span> / {ROLE_LABELS[user.ma_vai_tro]}</span>
-          </div>
-          <time className="header-date">{today().split("-").reverse().join("/")}</time>
         </div>
         <details className="user-menu">
           <summary>
@@ -87,37 +76,12 @@ export function MainLayout() {
         </details>
       </header>
       <div className="shell-body">
-        <aside id="main-navigation" className={`sidebar ${menuOpen ? "is-open" : ""}`}>
-          <nav aria-label="Điều hướng nghiệp vụ">
-            {groups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <div className="nav-group-title">{group.title}</div>
-                {group.items.map(([path, label]) => (
-                  <NavLink
-                    key={path}
-                    to={path}
-                    end={path === "/admin" || path === "/kho" || path === "/nv"}
-                    onClick={() => setMenuOpen(false)}
-                    className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-                  >
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            ))}
-            <div className="nav-account">
-              <NavLink to="/ho-so" className="nav-link" onClick={() => setMenuOpen(false)}>
-                Hồ sơ & đổi mật khẩu
-              </NavLink>
-              <button type="button" className="nav-link" onClick={signOut}>
-                Đăng xuất
-              </button>
-            </div>
-          </nav>
-          <div className="sidebar-footer">
-            XBIKE MRP<small>Một hệ thống · Ba vai trò</small>
-          </div>
-        </aside>
+        <Sidebar
+          groups={groups}
+          mobileOpen={menuOpen}
+          onNavigate={() => setMenuOpen(false)}
+          onSignOut={signOut}
+        />
         <main id="main-content" className="page-body" tabIndex={-1}>
           <Outlet />
         </main>

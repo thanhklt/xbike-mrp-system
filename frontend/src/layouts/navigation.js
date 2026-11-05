@@ -1,4 +1,6 @@
-export const navigation = {
+import { canAccessPath } from "../features/auth/permissions.js";
+
+const navigation = {
   quan_tri_vien: [
     { title: "Chung", items: [["/admin", "Tổng quan"]] },
     {
@@ -42,23 +44,27 @@ export const navigation = {
     },
   ],
   nhan_vien: [
-    { title: "Chung", items: [["/nv", "Việc được giao"]] },
+    { title: "Chung", items: [["/nv", "Tổng quan"]] },
     {
       title: "Sản xuất",
       items: [
-        ["/nv/yeu-cau", "Yêu cầu phụ trách"],
-        ["/nv/lenh-sx", "Lệnh của tôi"],
-        ["/nv/xuat-nvl", "Phiếu xuất NVL / BTP"],
-        ["/nv/xuat-tp", "Phiếu xuất thành phẩm"],
+        ["/nv/lenh-sx", "Việc được giao"],
         ["/nv/hoan-thanh", "Chứng từ hoàn thành SX"],
       ],
     },
     {
       title: "Theo dõi",
-      items: [
-        ["/nv/phieu", "Phiếu của tôi"],
-        ["/nv/ton-kho", "Tra cứu tồn kho"],
-      ],
+      items: [["/nv/ton-kho", "Tra cứu tồn kho"]],
     },
   ],
 };
+
+export function navigationFor(role) {
+  if (!Object.hasOwn(navigation, role)) return [];
+  return navigation[role]
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(([path]) => canAccessPath(role, path)),
+    }))
+    .filter((group) => group.items.length > 0);
+}

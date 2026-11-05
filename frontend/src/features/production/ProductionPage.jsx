@@ -34,7 +34,7 @@ export function ProductionPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Lệnh sản xuất" : "Lệnh của tôi"}
+        title={manager ? "Lệnh sản xuất" : "Việc được giao"}
         subtitle={
           manager
             ? "Lệnh gốc và lệnh con được tạo khi gửi yêu cầu thành phẩm. Gán người thực hiện trước khi giao lệnh."

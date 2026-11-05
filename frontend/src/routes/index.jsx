@@ -1,6 +1,6 @@
-import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
-import { homeFor, isAllowed } from "../features/auth/permissions.js";
+import { canAccessPath, homeFor } from "../features/auth/permissions.js";
 import { LoginPage } from "../features/auth/LoginPage.jsx";
 import { UsersPage } from "../features/auth/UsersPage.jsx";
 import { RolesPage } from "../features/auth/RolesPage.jsx";
@@ -52,9 +52,10 @@ function Protected() {
     );
   return user ? <Outlet /> : <Navigate to="/dang-nhap" replace />;
 }
-function RoleGate({ roles }) {
+function RoleGate() {
   const { user } = useAuth();
-  return isAllowed(user.ma_vai_tro, roles) ? <Outlet /> : <Navigate to="/403" replace />;
+  const { pathname } = useLocation();
+  return canAccessPath(user.ma_vai_tro, pathname) ? <Outlet /> : <Navigate to="/403" replace />;
 }
 function Home() {
   const { user } = useAuth();
@@ -93,13 +94,13 @@ export function AppRoutes() {
           <Route element={<MainLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/ho-so" element={<ProfilePage />} />
-            <Route element={<RoleGate roles={["quan_tri_vien"]} />}>
+            <Route element={<RoleGate />}>
               <Route path="/admin" element={<DashboardPage />} />
               <Route path="/admin/tai-khoan/:id?" element={<UsersPage />} />
               <Route path="/admin/vai-tro" element={<RolesPage />} />
               <Route path="/admin/lich-su" element={<AuditPage />} />
             </Route>
-            <Route element={<RoleGate roles={["quan_ly"]} />}>
+            <Route element={<RoleGate />}>
               <Route path="/kho" element={<DashboardPage />} />
               <Route path="/kho/mat-hang/:id?" element={<MaterialsPage />} />
               <Route path="/kho/nha-cung-cap/:id?" element={<SuppliersPage />} />
@@ -116,7 +117,7 @@ export function AppRoutes() {
               <Route path="/kho/thong-ke" element={<ReportsPage />} />
               <Route path="/kho/lich-su" element={<AuditPage />} />
             </Route>
-            <Route element={<RoleGate roles={["nhan_vien"]} />}>
+            <Route element={<RoleGate />}>
               <Route path="/nv" element={<DashboardPage />} />
               <Route path="/nv/yeu-cau/:id?" element={<RequestsPage />} />
               <Route path="/nv/lenh-sx/:id?" element={<ProductionPage />} />

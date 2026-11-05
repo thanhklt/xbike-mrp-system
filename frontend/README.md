@@ -39,10 +39,12 @@ Nếu chủ động dùng API khác origin trong bản production, backend cần
 | Nhân viên     | `/nv`, `/nv/yeu-cau`, `/nv/lenh-sx`, `/nv/xuat-nvl`, `/nv/xuat-tp`, `/nv/hoan-thanh`, `/nv/phieu`, `/nv/ton-kho`                                                                                                                             |
 
 Các nhóm có chi tiết dùng `/:id`. Nhóm có quyền tạo dùng `/moi`; backend vẫn là nơi quyết định quyền và trạng thái hợp lệ.
+Sidebar và kiểm tra đường dẫn dùng chung quy tắc tại `src/features/auth/permissions.js`, dựa trên `ma_vai_tro` từ `/auth/me`: Quản trị viên chỉ thấy khu vực `/admin`, Quản lý chỉ thấy `/kho`, Nhân viên chỉ thấy `/nv`. Mục không có quyền được loại khỏi sidebar; truy cập trực tiếp khu vực vai trò khác chuyển tới `/403`. Hồ sơ và đăng xuất dùng chung cho cả ba vai trò.
 Các nút xem/sửa ở cột Thao tác và các form tạo mới mở trong popup chung, thay cho khung chi tiết bên dưới hoặc cạnh danh sách.
 Popup hỗ trợ Đóng, Escape, Tab/Shift+Tab, lịch sử Back/Forward và cuộn nội dung riêng trên mobile; đóng popup trả về danh sách.
 Hộp xác nhận nghiệp vụ mở phía trên popup chi tiết; hủy xác nhận giữ nguyên chi tiết đang xem.
 Nhân viên chỉ xem phiếu xuất; Quản lý kho lập/gửi/duyệt phiếu xuất. Nhân viên lập chứng từ hoàn thành cho lệnh của mình.
+Sidebar Nhân viên tập trung vào Tổng quan, Việc được giao, Chứng từ hoàn thành SX và Tra cứu tồn kho, cùng Hồ sơ/Đăng xuất. Yêu cầu phụ trách, Phiếu xuất NVL/BTP, Phiếu xuất thành phẩm và Phiếu của tôi không là mục sidebar riêng; các trang đọc vẫn truy cập được từ liên kết theo công việc. Việc ẩn menu không thay đổi quyền đọc API theo contract v3 §8–11.
 
 Tồn hiện tại đọc từ mặt hàng. Ghi sổ phải qua xác nhận; sửa/action có phiên bản dùng ETag đã tải trong header If-Match. Không tự lấy ETag mới để vượt lỗi dữ liệu cũ, không tự retry thao tác ghi.
 Cache tài nguyên được tách theo ID/vai trò người dùng và được xóa khi kết thúc phiên.

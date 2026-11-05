@@ -190,7 +190,7 @@ function EmployeeDashboard() {
   return (
     <>
       <PageHeader
-        title="Việc được giao"
+        title="Tổng quan"
         subtitle="Yêu cầu phụ trách, lệnh của bạn và chứng từ cần theo dõi."
         action={
           <Link className="btn btn-primary" to="/nv/hoan-thanh/moi">
