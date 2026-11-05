@@ -22,10 +22,16 @@ test("locking an employee requires a reason and preserves DELETE body", async ({
   await page.goto("/admin/tai-khoan/3");
   await page.getByRole("button", { name: "Khóa tài khoản…" }).click();
   await expect(
-    page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }),
+    page.locator("dialog.confirmation").getByRole("button", { name: "Xác nhận", exact: true }),
   ).toBeDisabled();
-  await page.getByRole("dialog").getByLabel("Lý do", { exact: true }).fill("Tạm ngừng công việc");
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByLabel("Lý do", { exact: true })
+    .fill("Tạm ngừng công việc");
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Mở khóa tài khoản…" })).toBeVisible();
   expect(state.calls.find((call) => call.method === "DELETE").body).toEqual({
     ly_do: "Tạm ngừng công việc",
@@ -36,8 +42,11 @@ test("deactivating an item keeps its nonzero stock and historical record", async
   const state = await installApi(page);
   await page.goto("/kho/mat-hang/1");
   await page.getByRole("button", { name: "Ngừng sử dụng…" }).click();
-  await expect(page.getByRole("dialog")).toContainText("Giữ nguyên mặt hàng, số dư tồn");
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(page.locator("dialog.confirmation")).toContainText("Giữ nguyên mặt hàng, số dư tồn");
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Ngừng sử dụng…" })).toBeDisabled();
   expect(state.resources.mat_hang[0].so_luong_ton).toBe(120);
   expect(
@@ -56,11 +65,14 @@ test("BOM creation explicitly confirms activation and sends no state or version 
   await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("3");
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("2");
   await page.getByRole("button", { name: "Tạo và kích hoạt phiên bản", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("ngừng phiên bản hiện hành");
+  await expect(page.locator("dialog.confirmation")).toContainText("ngừng phiên bản hiện hành");
   expect(state.calls.filter((call) => call.path === "bom" && call.method === "POST")).toHaveLength(
     0,
   );
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/kho\/bom\/2$/);
   expect(state.calls.find((call) => call.path === "bom" && call.method === "POST").body).toEqual({
     mat_hang_id: 4,
@@ -72,7 +84,10 @@ test("assigned employee starts an order only after checking issued materials", a
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/lenh-sx/1");
   await page.getByRole("button", { name: "Bắt đầu sản xuất", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(
     page.getByRole("link", { name: "Tạo chứng từ hoàn thành SX", exact: true }),
   ).toBeVisible();
@@ -128,13 +143,19 @@ test("ticket can be claimed and resolved with a required result without writing 
   const state = await installApi(page);
   await page.goto("/kho/ticket/1");
   await page.getByRole("button", { name: "Nhận xử lý", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await page.getByRole("button", { name: "Giải quyết", exact: true }).click();
   await page
-    .getByRole("dialog")
+    .locator("dialog.confirmation")
     .getByLabel("Kết quả xử lý", { exact: true })
     .fill("Đã đối chiếu phiếu nhập, chờ lập điều chỉnh mới");
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
   await expect(page.getByText("Kết quả xử lý:", { exact: true })).toBeVisible();
   const writes = state.calls.filter((call) => call.method !== "GET");
   expect(writes.map((call) => call.path)).toEqual([
@@ -168,10 +189,13 @@ test("committed shortage ticket opens from error and closes the failed confirmat
   });
   await page.goto("/kho/dieu-chinh/1");
   await page.getByRole("button", { name: "Xác nhận điều chỉnh", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await page.getByRole("dialog").getByRole("link", { name: "#1", exact: true }).click();
+  await page
+    .locator("dialog.confirmation")
+    .getByRole("button", { name: "Xác nhận", exact: true })
+    .click();
+  await page.locator("dialog.confirmation").getByRole("link", { name: "#1", exact: true }).click();
   await expect(page).toHaveURL(/\/kho\/ticket\/1$/);
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Chi tiết ticket" })).toBeVisible();
 });
 

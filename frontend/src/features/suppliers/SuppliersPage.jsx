@@ -26,7 +26,7 @@ export function SuppliersPage() {
           </Link>
         }
       />
-      <div className={id ? "split-view" : ""}>
+      <div>
         <Collection
           collection={collection}
           filters={[

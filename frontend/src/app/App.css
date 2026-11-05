@@ -400,12 +400,6 @@ hr {
 .card .card {
   margin-top: 8px;
 }
-.split-view {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 1fr);
-  gap: 20px;
-  align-items: start;
-}
 .dashboard-columns {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
@@ -742,7 +736,8 @@ td .btn {
     transform: rotate(360deg);
   }
 }
-.confirmation {
+.confirmation,
+.record-dialog {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0;
@@ -752,8 +747,30 @@ td .btn {
   color: #192d40;
   box-shadow: 0 16px 64px #192d4030;
 }
-.confirmation::backdrop {
+.confirmation::backdrop,
+.record-dialog::backdrop {
   background: #14263888;
+}
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+.record-dialog {
+  width: min(1100px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+.record-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.record-dialog .dialog-header {
+  flex-shrink: 0;
+  gap: 16px;
+}
+.record-dialog .dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .dialog-header {
   display: flex;
@@ -953,9 +970,6 @@ td .btn {
   }
   .header-date {
     display: none;
-  }
-  .split-view {
-    grid-template-columns: 1fr;
   }
   .dashboard-columns {
     grid-template-columns: 1fr;
