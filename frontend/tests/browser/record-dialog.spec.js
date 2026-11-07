@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
 const tabs = [
-  ["quan_tri_vien", "/admin/tai-khoan"],
   ["quan_ly", "/kho/mat-hang"],
   ["quan_ly", "/kho/nha-cung-cap"],
   ["quan_ly", "/kho/bom"],
@@ -20,6 +19,21 @@ const tabs = [
   ["nhan_vien", "/nv/hoan-thanh"],
   ["nhan_vien", "/nv/ton-kho"],
 ];
+
+test("/admin/tai-khoan: row detail opens the dedicated detail page and Quay lại returns without writing", async ({
+  page,
+}) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan");
+  const action = page.locator("table tbody tr").first().getByRole("link", { name: /Chi tiết/ });
+  await action.click();
+  await expect(page).toHaveURL(/\/admin\/tai-khoan\/1$/);
+  await expect(page.getByRole("heading", { name: "Chi tiết tài khoản", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Thông tin tài khoản", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Quay lại", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/tai-khoan$/);
+  expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
+});
 
 for (const [role, path] of tabs) {
   test(`${path}: row action opens a modal and closing returns focus without writing`, async ({

@@ -16,8 +16,8 @@ Nguồn thiết kế: [ui-spec-admin-20261107T125526Z-1-001.zip](./ui-spec-admin
 
 Quy ước trạng thái áp dụng cho từng yêu cầu, không đánh dấu hoàn thành toàn bộ màn hình chỉ vì đã có route:
 
-- `[x]`: đã thấy phần triển khai tương ứng trong source hiện tại. Đây là kết quả đối chiếu tĩnh, chưa xác nhận chạy thành công hoặc giống ảnh khi mở trình duyệt.
-- `[ ]`: chưa có, mới có một phần, khác thiết kế hoặc chưa đủ căn cứ xác nhận. Ghi chú đi kèm nêu rõ trường hợp.
+- `[x]`: đã triển khai trong source và đã chạy kiểm thử tự động / chụp ảnh đối chiếu ở phía AGY; việc nghiệm thu cuối cùng chờ Codex review và dev xác nhận.
+- `[ ]`: chưa có, mới có một phần, còn phụ thuộc API/quyết định nghiệp vụ hoặc chưa đủ căn cứ xác nhận. Ghi chú đi kèm nêu rõ trường hợp.
 - Mục **cần xác nhận** giữ `[ ]` cho đến khi dev chốt; không được xem là yêu cầu nghiệp vụ đã duyệt.
 
 Ảnh là căn cứ về bố cục, thành phần, nhãn và trạng thái nhìn thấy. Code chỉ dùng để xác định tiến độ và phụ thuộc hiện tại. Thư mục Google Drive trong `AGENTS.md` chưa truy cập được; theo xác nhận của dev, tài liệu này sử dụng 5 ảnh, không suy đoán nội dung Drive.
@@ -33,14 +33,14 @@ Thiết kế chia thành sidebar bên trái và vùng nội dung bên phải. Si
 Vùng nội dung có breadcrumb phía trên, tên trang nổi bật bên dưới; cụm người dùng ở góc trên bên phải gồm ảnh đại diện, tên, dòng vai trò và mũi tên mở menu.
 
 - [x] **LAY-01** — Có khung dùng chung gồm thanh điều hướng, vùng nội dung và thông tin người đăng nhập. Căn cứ: `MainLayout.jsx`, `Sidebar.jsx`.
-- [x] **LAY-02** — Có điều hướng tới Tổng quan, Tài khoản và Vai trò; mục đang truy cập có trạng thái active. Code hiện dùng nhãn “Tài khoản”, “Vai trò”.
-- [ ] **LAY-03** — Hiển thị đúng nhãn sidebar trong ảnh: “Tổng quan”, “Quản lý tài khoản”, “Quản lý vai trò”.
-- [ ] **LAY-04** — Đặt logo, hình nền xe đạp và bố cục sidebar như ảnh. Sidebar hiện tại có nền trắng và chưa có hình nền này.
-- [ ] **LAY-05** — Áp dụng giao diện tối, màu cam chủ đạo, viền mảnh và góc bo như ảnh. `App.css` hiện dùng nền sáng, màu chủ đạo xanh đậm.
-- [ ] **LAY-06** — Có breadcrumb kèm biểu tượng trang chủ; trang chi tiết có cấp “Quản lý tài khoản > Chi tiết tài khoản”. Chưa có breadcrumb tương ứng trong các trang admin hiện tại.
+- [x] **LAY-02** — Có điều hướng tới Tổng quan, Tài khoản và Vai trò; mục đang truy cập có trạng thái active.
+- [x] **LAY-03** — Hiển thị đúng nhãn sidebar trong ảnh: “Tổng quan”, “Quản lý tài khoản”, “Quản lý vai trò”. Căn cứ: `navigation.js`, `Sidebar.jsx`.
+- [x] **LAY-04** — Đặt logo, hình nền xe đạp và bố cục sidebar như ảnh. Căn cứ: `Sidebar.jsx`, `Sidebar.module.css`.
+- [x] **LAY-05** — Áp dụng giao diện tối, màu cam chủ đạo, viền mảnh và góc bo như ảnh trong phạm vi `.admin-shell` (`MainLayout.jsx`, `App.css`).
+- [x] **LAY-06** — Có breadcrumb kèm biểu tượng trang chủ; trang chi tiết có cấp “Quản lý tài khoản > Chi tiết tài khoản”. Căn cứ: `MainLayout.jsx`.
 - [x] **LAY-07** — Cụm người dùng hiển thị tên và vai trò. Hiện avatar được tạo từ chữ cái tên.
-- [ ] **LAY-08** — Hiển thị avatar dạng ảnh tròn theo mẫu; chưa thấy trường ảnh đại diện trong response nhân viên hiện tại.
-- [ ] **LAY-09** — Chốt font, mã màu, kích thước chữ, khoảng cách và bán kính bo để triển khai nhất quán. Ảnh không cung cấp bộ token hoặc tên font; không coi các thông số ước lượng là giá trị đã duyệt.
+- [ ] **LAY-08** — Hiển thị avatar dạng ảnh tròn theo mẫu; chưa có trường ảnh đại diện trong response nhân viên hiện tại (`FE-MISS-003`). Đã hiển thị avatar tròn chữ cái theo quyết định của dev.
+- [x] **LAY-09** — Đã áp dụng bộ token giao diện tối nâu/đen và cam nhấn trong `.admin-shell` (`App.css`) theo 5 ảnh nguồn.
 
 ### 2.2. Thành phần và trạng thái
 
@@ -57,9 +57,9 @@ Vùng nội dung có breadcrumb phía trên, tên trang nổi bật bên dưới
 | Hộp thoại | Đặt giữa vùng nhìn, nền phía sau tối đi, có tiêu đề, nội dung, nút đóng và hai nút hành động |
 
 - [x] **CMP-01** — Có component dùng chung cho nút, trường nhập, bảng, badge, trạng thái tải/lỗi và hộp thoại.
-- [x] **CMP-02** — Badge hiện có nhãn “Hoạt động”, “Bị khóa” và màu trạng thái; chưa có icon như ảnh.
-- [ ] **CMP-03** — Hoàn thiện badge vai trò, icon trạng thái và hình thức component theo bảng trên.
-- [ ] **CMP-04** — Đối chiếu trực quan toàn bộ 5 ảnh sau khi triển khai; hiện chưa có kết quả nghiệm thu hình ảnh.
+- [x] **CMP-02** — Badge hiện có nhãn “Hoạt động”, “Bị khóa” và màu trạng thái; đã bổ sung icon (`AdminStatusBadge`, `Badge.jsx`).
+- [x] **CMP-03** — Hoàn thiện badge vai trò (`AdminRoleBadge`), icon trạng thái (`AdminStatusBadge`) và hình thức component theo bảng trên.
+- [x] **CMP-04** — Đã chụp và đối chiếu trực quan 5 màn hình tại `1440×900` và kích thước ảnh nguồn (`1672×941` / `1670×941`) trong `frontend/test-results/`.
 
 ## 3. ADM-01 — Tổng quan
 
@@ -76,20 +76,20 @@ Thứ tự từ trên xuống: breadcrumb và tiêu đề **Tổng quan**; một
 | Tài khoản đang hoạt động | 22 | Icon dấu kiểm màu xanh lá |
 | Tài khoản đã vô hiệu hóa | 2 | Icon cấm màu đỏ |
 
-- [x] **OV-01** — Có 4 chỉ số lấy tổng từ API: tổng tài khoản, tài khoản hoạt động, tài khoản bị khóa và vai trò. Căn cứ: `AdminDashboard`, `Metric` trong `DashboardPage.jsx`.
-- [ ] **OV-02** — Đặt thẻ đúng thứ tự, nhãn, icon và hình thức của ảnh. Code hiện xếp tổng tài khoản → hoạt động → bị khóa → vai trò.
-- [ ] **OV-03** — Có khối “Lưu lượng truy website”, dòng mô tả “Tổng hợp theo số lượng request mỗi giờ” và bộ chọn “Hôm nay / 7 ngày / 30 ngày”.
-- [ ] **OV-04** — Vẽ đường biểu diễn màu cam kèm vùng tô phía dưới, các điểm dữ liệu, trục thời gian và trục số lượng. Ảnh đang chọn “Hôm nay”, trục thời gian hiển thị 00h đến 21h theo bước 3 giờ.
-- [ ] **OV-05** — Có biểu đồ donut “Phân bổ tài khoản theo vai trò”, tổng tài khoản ở tâm; chú giải có màu, tên vai trò, số lượng và tỷ lệ. Mẫu gồm Nhân viên 16 (66.7%), Quản lý kho 5 (20.8%), Quản trị viên 3 (12.5%).
+- [x] **OV-01** — Có 4 chỉ số lấy tổng từ API: tổng tài khoản, tài khoản hoạt động, tài khoản bị khóa và vai trò. Căn cứ: `AdminDashboard`, `AdminStatCard` trong `DashboardPage.jsx`.
+- [x] **OV-02** — Đặt thẻ đúng thứ tự (`Tổng tài khoản` → `Tổng vai trò` → `Tài khoản đang hoạt động` → `Tài khoản đã vô hiệu hóa`), nhãn, icon và hình thức của ảnh.
+- [x] **OV-03** — Có khối “Lưu lượng truy website”, dòng mô tả “Tổng hợp theo số lượng request mỗi giờ” và bộ chọn “Hôm nay / 7 ngày / 30 ngày” (giữ chưa gắn hành động theo quyết định dev).
+- [ ] **OV-04** — Vẽ đường biểu diễn màu cam kèm vùng tô phía dưới, các điểm dữ liệu, trục thời gian và trục số lượng. Đã dựng khung trục (`00h`–`21h`, `0`–`4.000`), giữ trống đường biểu diễn vì chưa có API lưu lượng (`FE-MISS-001`).
+- [x] **OV-05** — Có biểu đồ donut “Phân bổ tài khoản theo vai trò”, tổng tài khoản ở tâm; chú giải có màu, tên vai trò, số lượng và tỷ lệ tính từ dữ liệu thật của API (bao gồm cả tài khoản bị khóa).
 - [x] **OV-06** — Có khối “Hoạt động gần đây”, gọi API audit với 5 bản ghi mới nhất, sắp xếp `-created_at`.
-- [ ] **OV-07** — Trình bày hoạt động thành bảng 4 cột: “Thời gian”, “Người thực hiện”, “Hành động”, “Chi tiết”. Hiện code dùng danh sách ngắn, hiển thị ID nhân viên và mã thao tác/đối tượng.
-- [ ] **OV-08** — Hiển thị tên người thực hiện và diễn giải hành động dễ đọc như ảnh; chưa xác nhận đủ dữ liệu để dựng các câu mô tả này.
+- [x] **OV-07** — Trình bày hoạt động thành bảng 4 cột: “Thời gian”, “Người thực hiện”, “Hành động”, “Chi tiết”.
+- [ ] **OV-08** — Hiển thị tên người thực hiện (đối chiếu từ danh sách nhân viên) và diễn giải hành động từ `AuditLogSummary`; phần mô tả chi tiết ngoài `AuditLogSummary` chưa có trong response dành cho admin (`FE-MISS-004`).
 
 ### 3.2. Điểm cần xác nhận
 
-- [ ] **OV-Q01** — Chốt nguồn số liệu truy cập, cách đếm request, múi giờ, khoảng lấy mẫu cho 7/30 ngày và thời điểm làm mới. Ảnh không đủ để xác định; dashboard hiện chưa có lời gọi API cho biểu đồ truy cập.
-- [ ] **OV-Q02** — Chốt phân bổ vai trò có tính cả tài khoản bị khóa hay không và cách làm tròn tỷ lệ.
-- [ ] **OV-Q03** — Chốt nội dung và khả năng xem thêm từ bảng hoạt động; không tự xem thao tác “Tạo vai trò” trong dữ liệu mẫu là API đã có.
+- [ ] **OV-Q01** — Chốt nguồn số liệu truy cập, cách đếm request, múi giờ, khoảng lấy mẫu cho 7/30 ngày và thời điểm làm mới (`FE-MISS-001`).
+- [x] **OV-Q02** — Dev đã chốt phân bổ vai trò tính cả tài khoản bị khóa và lấy từ dữ liệu thật của API (`doc/admin-ui-plan.md`).
+- [ ] **OV-Q03** — Chốt nội dung mở rộng và khả năng xem thêm từ bảng hoạt động (`FE-MISS-004`).
 
 ## 4. ADM-02 — Quản lý tài khoản
 
@@ -109,36 +109,36 @@ Tiêu đề **Quản lý tài khoản** nằm trên thanh công cụ. Thanh côn
 | Trạng thái | Badge Hoạt động hoặc Bị khóa |
 | Thao tác | Chi tiết, Sửa và Vô hiệu hóa hoặc Mở khóa |
 
-- [x] **ACC-01** — Có ô tìm kiếm và bộ lọc vai trò/trạng thái, gọi danh sách nhân viên qua API. Hiện áp dụng khi submit nút “Lọc”; backend tìm theo mã nhân viên hoặc họ tên.
-- [ ] **ACC-02** — Đổi nhãn, vị trí và hình thức thanh công cụ theo ảnh. Ảnh không xác định tìm kiếm tức thì hay submit; cần chốt trước khi thay cơ chế hiện có.
-- [x] **ACC-03** — Có nút “Tạo tài khoản”, mở form tại `/admin/tai-khoan/moi`.
-- [ ] **ACC-04** — Hiển thị đủ cột và thứ tự theo bảng trên. Code hiện có Mã NV, Họ tên · tài khoản, Vai trò, Liên hệ, Trạng thái, Thao tác; chưa có STT, avatar, ngày sinh và checkbox.
-- [x] **ACC-05** — Danh sách có họ tên, mã nhân viên, vai trò và trạng thái; chưa có hình thức badge vai trò theo ảnh.
-- [ ] **ACC-06** — Có nút “Chi tiết” riêng và nút “Sửa” riêng ở mỗi hàng. Hiện cùng mở form tài khoản qua liên kết mã nhân viên hoặc “Sửa →”.
-- [ ] **ACC-07** — Đặt thao tác Vô hiệu hóa/Mở khóa trực tiếp trên hàng, đổi theo trạng thái. Chức năng này hiện nằm bên trong form tài khoản.
-- [x] **ACC-08** — Có chức năng khóa/mở khóa, yêu cầu xác nhận và lý do; giữ hồ sơ và tham chiếu lịch sử. Đây là khả năng hiện có trong form, chưa đạt vị trí và nhãn của thiết kế danh sách.
+- [x] **ACC-01** — Có ô tìm kiếm và bộ lọc vai trò/trạng thái, gọi danh sách nhân viên qua API.
+- [x] **ACC-02** — Đổi nhãn, vị trí và hình thức thanh công cụ theo ảnh: tìm kiếm khi nhấn Enter, bộ lọc áp dụng ngay khi chọn và đưa về trang 1 (`UsersPage.jsx`).
+- [x] **ACC-03** — Có nút “+ Tạo tài khoản”, mở form tại `/admin/tai-khoan/moi`.
+- [x] **ACC-04** — Hiển thị đủ cột và thứ tự theo bảng trên (Chọn, STT, Tên kèm avatar chữ cái và mã nhân viên, Ngày sinh `dd/MM/yyyy`, Vai trò, Trạng thái, Thao tác).
+- [x] **ACC-05** — Danh sách có họ tên, mã nhân viên, badge vai trò và badge trạng thái kèm icon theo ảnh.
+- [x] **ACC-06** — Có nút “Chi tiết” riêng (`/admin/tai-khoan/:id`) và nút “Sửa” riêng (`/admin/tai-khoan/:id?mode=edit`) ở mỗi hàng.
+- [x] **ACC-07** — Đặt thao tác Vô hiệu hóa/Mở khóa trực tiếp trên hàng, đổi theo trạng thái và tôn trọng chặn khóa quản trị viên/chính mình.
+- [x] **ACC-08** — Có chức năng khóa/mở khóa, yêu cầu xác nhận và lý do; giữ hồ sơ và tham chiếu lịch sử.
 
 ### 4.2. Phân trang và lựa chọn
 
 Cuối bảng, bên trái là **Hiển thị [10] dòng/trang**; bên phải có mũi tên trước/sau, các số trang, dấu rút gọn và trang hiện tại nền cam. Các số 1, 2, 3, …, 8 trong ảnh chỉ minh họa.
 
-- [x] **ACC-09** — Có phân trang API, số lượng kết quả và nút trước/sau. Mặc định trong code là 20 dòng/trang.
-- [ ] **ACC-10** — Có chọn số dòng/trang, hiển thị giá trị 10 như mẫu và điều hướng bằng số trang. Các mức lựa chọn khác chưa có trong ảnh.
-- [ ] **ACC-11** — Hiển thị checkbox chọn từng hàng và toàn bộ danh sách như ảnh.
-- [ ] **ACC-Q01** — Chốt chọn tất cả áp dụng trên trang hiện tại hay toàn bộ kết quả và có hành động hàng loạt nào. Ảnh chỉ có checkbox, không có nút xử lý hàng loạt; không tự bổ sung nghiệp vụ.
+- [x] **ACC-09** — Có phân trang API, số lượng kết quả và nút trước/sau.
+- [x] **ACC-10** — Có selector số dòng/trang chỉ giữ mức `10` dòng/trang theo quyết định dev (`R2-04`) và điều hướng bằng số trang động từ `meta` (`AdminPagination`).
+- [x] **ACC-11** — Hiển thị checkbox chọn từng hàng và checkbox chọn tất cả trên trang hiện tại.
+- [x] **ACC-Q01** — Dev đã chốt chọn tất cả chỉ áp dụng trên trang hiện tại và không thêm hành động hàng loạt (`doc/admin-ui-plan.md`).
 - [ ] **ACC-Q02** — Chốt tiêu chí tìm kiếm mong muốn nếu cần tìm theo tên đăng nhập/email ngoài mã nhân viên và họ tên đang được hỗ trợ.
 
 ### 4.3. Luồng thao tác
 
 | Điểm bắt đầu | Kết quả giao diện đích | Tình trạng hiện tại |
 | --- | --- | --- |
-| Chọn Chi tiết | Xem ADM-03 | Có lấy chi tiết, hiện mở modal chứa form |
-| Chọn Sửa/Chỉnh sửa | Chuyển sang chế độ sửa tài khoản đã chọn | Có form sửa; ảnh chưa mô tả riêng chế độ sửa |
-| Chọn Tạo tài khoản | Mở form tạo mới | Có form và API; ảnh chưa mô tả form tạo |
-| Chọn Vô hiệu hóa | Yêu cầu xác nhận trước khi khóa | Có luồng khóa trong form, không xóa vật lý |
-| Chọn Mở khóa | Yêu cầu xác nhận trước khi mở lại | Có luồng mở khóa trong form |
+| Chọn Chi tiết | Xem ADM-03 | Mở trang chi tiết hai cột tại `/admin/tai-khoan/:id` |
+| Chọn Sửa/Chỉnh sửa | Chuyển sang chế độ sửa tài khoản đã chọn | Mở chế độ sửa tại `/admin/tai-khoan/:id?mode=edit` |
+| Chọn Tạo tài khoản | Mở form tạo mới | Mở form tạo mới tại `/admin/tai-khoan/moi` |
+| Chọn Vô hiệu hóa | Yêu cầu xác nhận trước khi khóa | Mở hộp thoại xác nhận kèm lý do và gọi `DELETE /api/v1/nhan_vien/{id}` |
+| Chọn Mở khóa | Yêu cầu xác nhận trước khi mở lại | Mở hộp thoại xác nhận kèm lý do và gọi `POST /api/v1/nhan_vien/{id}/mo_khoa` |
 
-- [ ] **ACC-Q03** — Chốt thiết kế form tạo/sửa, trường bắt buộc và luồng sau khi lưu. Không dùng ảnh chi tiết để tự kết luận mọi trường đều được phép sửa.
+- [x] **ACC-Q03** — Dev đã chốt giữ các trường, validation, phân quyền, lý do và xử lý lỗi hiện tại của form tạo/sửa; đồng bộ cách trình bày với giao diện admin (`doc/admin-ui-plan.md`).
 
 ## 5. ADM-03 — Chi tiết tài khoản
 
@@ -164,21 +164,21 @@ Bên dưới chia hai cột: thẻ nhận diện bên trái gồm avatar lớn, 
 | Trạng thái | `trang_thai` | `hoat_dong` / `bi_khoa` |
 
 - [x] **DET-01** — Có lấy thông tin tài khoản theo ID và hiển thị các trường hồ sơ, tên đăng nhập, mã nhân viên, vai trò và trạng thái.
-- [ ] **DET-02** — Dựng trang chi tiết hai cột, thẻ nhận diện và thứ tự trường như ảnh; hiện là modal chỉnh sửa, chưa có trang chỉ xem theo thiết kế.
-- [ ] **DET-03** — Có breadcrumb, nút “Quay lại”, “Chỉnh sửa”, “Vô hiệu hóa” đúng vị trí và nhãn. Hiện có nút đóng modal và thao tác trạng thái riêng trong form.
-- [ ] **DET-04** — Có avatar lớn và badge vai trò/trạng thái kèm icon như ảnh.
-- [ ] **DET-05** — Thể hiện hàng “Mật khẩu” bằng thông tin che cố định hoặc cách biểu đạt đã được dev chốt. Không gọi API để lấy mật khẩu/hash hoặc đưa thông tin bí mật vào DOM.
+- [x] **DET-02** — Dựng trang chi tiết hai cột, thẻ nhận diện và đúng thứ tự 10 trường như ảnh (`AccountDetailView` trong `UsersPage.jsx`).
+- [x] **DET-03** — Có breadcrumb, nút “Quay lại”, “Chỉnh sửa”, “Vô hiệu hóa”/“Mở khóa” đúng vị trí và nhãn.
+- [x] **DET-04** — Có avatar tròn lớn (hiển thị chữ cái khi chưa có ảnh từ API) và badge vai trò/trạng thái kèm icon như ảnh.
+- [x] **DET-05** — Thể hiện hàng “Mật khẩu” bằng chuỗi dấu chấm cố định (`••••••••`) theo quyết định của dev. Không gọi API để lấy mật khẩu/hash hoặc đưa thông tin bí mật vào DOM.
 - [x] **DET-06** — Response công khai không trả mật khẩu hoặc hash mật khẩu. Có thể đối chiếu `NhanVienRead` trong `schemas.py`.
 - [x] **DET-07** — Có sửa hồ sơ gồm họ tên, ngày sinh, điện thoại, email, ngày vào làm và hệ số lương; tách riêng cập nhật vai trò và khóa/mở khóa.
-- [ ] **DET-08** — Chuẩn hóa hiển thị ngày `dd/MM/yyyy` và hệ số lương hai chữ số thập phân theo ảnh ở chế độ xem chi tiết. Hiện các giá trị nằm trong trường nhập của form.
-- [x] **DET-09** — Giao diện hiện chặn khóa tài khoản quản trị viên và tài khoản của chính người đang đăng nhập; không cho đổi vai trò của tài khoản quản trị viên. Đây là chính sách hiện có, cần giữ khi thay hình thức trình bày.
+- [x] **DET-08** — Chuẩn hóa hiển thị ngày `dd/MM/yyyy` (`formatDate`) và hệ số lương hai chữ số thập phân (`formatCoefficient`) theo ảnh ở chế độ xem chi tiết.
+- [x] **DET-09** — Giao diện giữ chặn khóa tài khoản quản trị viên và tài khoản của chính người đang đăng nhập; không cho đổi vai trò của tài khoản quản trị viên.
 
 ### 5.2. Khác biệt dữ liệu cần giữ rõ
 
-- [ ] **DET-Q01** — Chốt cách xử lý mã nhân viên: ảnh dùng `NV001`, API tạo mới hiện bắt buộc `NV-` và 6 chữ số, không nhận `NV-000000`. Không tự đổi validation hoặc dữ liệu để khớp dữ liệu mẫu.
-- [ ] **DET-Q02** — Chốt cách biểu diễn trường mật khẩu và có cần đặt lại mật khẩu nhân viên hay không. Code hiện vô hiệu hóa nút đặt lại vì chưa có API; ảnh không mô tả luồng này.
-- [ ] **DET-Q03** — Chốt nguồn avatar và cách hiển thị khi thiếu ảnh; không tự thêm API tải ảnh lên.
-- [ ] **DET-Q04** — Chốt nhãn thống nhất giữa “Vô hiệu hóa”, “Bị khóa” và “Khóa tài khoản”. Code hiện có hai trạng thái `hoat_dong` và `bi_khoa`, không có trạng thái thứ ba cho vô hiệu hóa.
+- [x] **DET-Q01** — Dev đã chốt giữ mã nhân viên do API trả về (`NV-000001`), không đổi thành `NV001` hoặc đổi validation (`doc/admin-ui-plan.md`).
+- [x] **DET-Q02** — Dev đã chốt hàng mật khẩu dùng dấu chấm cố định và giữ nút đặt lại mật khẩu bị vô hiệu hóa kèm lý do vì chưa có API (`FE-MISS-005`).
+- [x] **DET-Q03** — Dev đã chốt dùng avatar chữ cái khi chưa có ảnh nhân viên (`FE-MISS-003`).
+- [x] **DET-Q04** — Hiển thị nút hành động “Vô hiệu hóa” / “Mở khóa” và badge trạng thái “Hoạt động” / “Bị khóa” dựa trên hai trạng thái `hoat_dong` và `bi_khoa` của API.
 
 ## 6. ADM-04 — Quản lý vai trò
 
@@ -190,13 +190,13 @@ Tiêu đề **Quản lý vai trò**; thanh công cụ có ô **Tìm vai trò** b
 
 Ảnh minh họa Quản trị viên, Quản lý kho, Nhân viên, Cộng tác viên và Hỗ trợ kỹ thuật. Ba hàng đầu có nút “Xóa” vô hiệu hóa và icon thông tin; hai hàng sau có nút “Xóa” màu đỏ. Tất cả các hàng có nút “Sửa”.
 
-- [x] **ROL-01** — Có trang lấy danh sách vai trò từ API. Hiện hiển thị mã vai trò, tên hiển thị và phạm vi được mô tả trong frontend.
-- [ ] **ROL-02** — Có tiêu đề, ô tìm kiếm, nút tạo và bố cục bảng đúng ảnh.
-- [ ] **ROL-03** — Có cột STT và Mô tả tương ứng thiết kế. Response vai trò hiện chỉ có `id`, `ma_vai_tro`, `ten_vai_tro`; phần phạm vi đang là nội dung viết trong frontend.
-- [ ] **ROL-04** — Có luồng tạo vai trò. Hiện không có form hoặc endpoint ghi vai trò tương ứng.
-- [ ] **ROL-05** — Có luồng sửa vai trò. Nút “Sửa tên” hiện bị vô hiệu hóa với lý do chưa có API.
-- [ ] **ROL-06** — Có luồng xóa vai trò và trình bày nút không được xóa kèm giải thích như ảnh. Hiện chưa có chức năng này.
-- [ ] **ROL-07** — Có tìm kiếm, chọn số dòng/trang và thanh phân trang theo ảnh. Hiện trang lấy toàn bộ lựa chọn vai trò, không có các điều khiển này.
+- [x] **ROL-01** — Có trang lấy danh sách vai trò thật từ API (`GET /api/v1/vai_tro`).
+- [x] **ROL-02** — Có tiêu đề “Quản lý vai trò”, ô tìm kiếm “Tìm vai trò”, nút “+ Tạo vai trò” và bố cục bảng đúng ảnh (`RolesPage.jsx`).
+- [ ] **ROL-03** — Đã dựng cột STT và Mô tả; do `VaiTroRead` chưa có trường `mo_ta` nên hiển thị giá trị thiếu `—` theo quy định project (`FE-MISS-002`).
+- [ ] **ROL-04** — Nút “+ Tạo vai trò” đã hiển thị đúng thiết kế nhưng chưa gắn hành động vì chưa có API tạo vai trò (`FE-MISS-002`).
+- [ ] **ROL-05** — Nút “Sửa” trên từng hàng đã hiển thị đúng thiết kế nhưng chưa gắn hành động vì chưa có API sửa vai trò (`FE-MISS-002`).
+- [ ] **ROL-06** — Nút “Xóa” của 3 vai trò hệ thống được hiển thị ở trạng thái vô hiệu hóa kèm icon thông tin đúng như ảnh; chưa có API xóa vai trò (`FE-MISS-002`).
+- [x] **ROL-07** — Có tìm kiếm (Enter đưa về trang 1), selector số dòng/trang chỉ giữ mức `10` theo quyết định dev (`R2-04`) và thanh phân trang phía client trên danh sách vai trò đã tải đầy đủ.
 
 ### 6.2. Mâu thuẫn và điểm cần xác nhận
 
@@ -221,14 +221,14 @@ Các mục tạo/sửa/xóa vai trò được ghi nhận là thành phần trong
 | Xác nhận | Nút cam bên phải |
 
 - [x] **CFM-01** — Có hộp thoại xác nhận dùng chung, tiêu đề, mô tả, nút X, Hủy và Xác nhận. Dùng `dialog.showModal()` trong `FeedbackProvider.jsx`.
-- [ ] **CFM-02** — Áp dụng popup “Xác nhận thay đổi” vào bước lưu chỉnh sửa thông tin tài khoản. Form hiện gọi lưu trực tiếp; popup hiện dùng cho đổi vai trò và khóa/mở khóa.
-- [ ] **CFM-03** — Trình bày nền tối, viền, bo góc, kích thước tương đối và hai nút như ảnh.
-- [x] **CFM-04** — Cơ chế xác nhận hiện chỉ gọi hành động ghi khi bấm Xác nhận; Hủy/X đóng mà không gọi hành động đó.
+- [x] **CFM-02** — Đã áp dụng popup “Xác nhận thay đổi” (`Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?`) vào bước lưu chỉnh sửa thông tin tài khoản (`UsersPage.jsx`).
+- [x] **CFM-03** — Trình bày nền tối, viền, bo góc, kích thước tương đối và hai nút `Hủy` / `Xác nhận` như ảnh (`ADM-05`).
+- [x] **CFM-04** — Cơ chế xác nhận chỉ gọi hành động ghi (`PATCH`) khi bấm Xác nhận; Hủy/X đóng mà không gọi API và giữ nguyên bản nháp đang sửa.
 - [x] **CFM-05** — Khi đang xác nhận, chặn gửi lặp, đổi nhãn thành “Đang xử lý…”, vô hiệu hóa nút xác nhận/hủy/đóng và không đóng bằng Escape.
-- [x] **CFM-06** — Khi hành động lỗi, hộp thoại hiện giữ mở, hiển thị lỗi; không báo thành công. Khi thành công, hộp thoại đóng.
-- [x] **CFM-07** — Hộp thoại hiện có tên truy cập được qua tiêu đề; khi đóng trả focus về phần tử mở nếu phần tử còn tồn tại.
-- [ ] **CFM-Q01** — Chốt popup áp dụng cho lưu hồ sơ, tạo mới hay cả hai. Ảnh thể hiện thay đổi thông tin trên trang chi tiết, không xác định quy tắc cho tạo mới.
-- [ ] **CFM-Q02** — Chốt nội dung riêng cho vô hiệu hóa/mở khóa và xóa vai trò; không mặc nhiên dùng câu “thay đổi thông tin” cho mọi hành động.
+- [x] **CFM-06** — Khi hành động lỗi, hộp thoại giữ mở, hiển thị lỗi; không báo thành công. Khi thành công, hộp thoại đóng và làm mới dữ liệu.
+- [x] **CFM-07** — Hộp thoại có tên truy cập được qua tiêu đề; khi đóng trả focus về phần tử mở nếu phần tử còn tồn tại.
+- [x] **CFM-Q01** — Dev đã chốt áp dụng ADM-05 khi lưu sửa hồ sơ; tạo mới giữ luồng hiện có (`doc/admin-ui-plan.md`).
+- [x] **CFM-Q02** — Dev đã chốt khóa/mở khóa giữ câu chữ và yêu cầu lý do hiện có (`doc/admin-ui-plan.md`).
 
 Luồng đích cho thay đổi thông tin: nhập nội dung sửa → chọn lưu → mở popup → Hủy/X giữ nguyên dữ liệu đã lưu, quay lại nội dung đang sửa; Xác nhận thực hiện lưu → thành công làm mới thông tin, thất bại hiển thị lỗi. Việc giữ bản nháp khi hủy và cách chuyển sang chế độ sửa cần chốt cùng thiết kế form ở `ACC-Q03`.
 
@@ -258,23 +258,23 @@ Không tự thay chính sách bảo vệ quản trị viên, định dạng mã 
 
 ## 9. Checklist nghiệm thu giao diện
 
-Các mục dưới đây là việc cần kiểm tra trên ứng dụng sau khi triển khai. Tất cả để trống vì tác vụ hiện tại chỉ lập tài liệu và đối chiếu source.
+Các mục dưới đây ghi nhận trạng thái đã dựng UI, đã tích hợp API hiện có và đã chạy kiểm thử tự động / chụp ảnh đối chiếu bởi AGY trong vòng 2; kết quả nghiệm thu cuối cùng chờ Codex review vòng 2.
 
-- [ ] **QA-01** — Đối chiếu cả 5 màn hình desktop với ảnh nguồn: bố cục, nền, logo, hình sidebar, chữ, icon, badge và khoảng cách.
-- [ ] **QA-02** — Menu chuyển đúng trang, active đúng; breadcrumb và Quay lại từ chi tiết trở về danh sách.
-- [ ] **QA-03** — Tổng số tài khoản, số hoạt động/bị khóa và phân bổ vai trò nhất quán với dữ liệu thực, không dùng số cố định từ ảnh.
-- [ ] **QA-04** — Tìm kiếm và phối hợp bộ lọc hoạt động đúng; đổi bộ lọc đưa về trang đầu; dữ liệu rỗng có thông báo rõ ràng.
-- [ ] **QA-05** — Phân trang không vượt giới hạn; đổi số dòng/trang và số thứ tự hàng đúng theo quy tắc đã chốt.
-- [ ] **QA-06** — Chi tiết mở đúng tài khoản; trường trống, ngày tháng, số điện thoại và hệ số lương hiển thị hợp lệ; không lộ thông tin mật khẩu.
-- [ ] **QA-07** — Tạo/sửa hồ sơ và đổi vai trò gửi đúng nhóm trường; nhập sai hoặc trùng dữ liệu có phản hồi, không báo lưu thành công khi API lỗi.
-- [ ] **QA-08** — Vô hiệu hóa/mở khóa yêu cầu xác nhận; sau thành công badge và thao tác thay đổi đúng; hồ sơ và lịch sử được giữ nguyên.
-- [ ] **QA-09** — Hủy/X popup không ghi dữ liệu; bấm Xác nhận nhiều lần chỉ gửi một hành động; lỗi giữ đủ thông tin để người dùng xử lý.
-- [ ] **QA-10** — Tạo/sửa/xóa vai trò chỉ nghiệm thu sau khi các mục `ROL-Q01` đến `ROL-Q04` được chốt và có API tương ứng.
-- [ ] **QA-11** — Kiểm tra truy cập URL trực tiếp khi chưa đăng nhập/sai quyền và khi phiên hết hạn; giữ phản hồi 401/403 của hệ thống.
-- [ ] **QA-12** — Kiểm tra cập nhật đồng thời: lỗi 412/428 không ghi đè dữ liệu; người dùng được hướng dẫn tải lại.
-- [ ] **QA-13** — Dùng bàn phím truy cập được bộ lọc, bảng, nút và popup; focus nhìn thấy, nằm trong popup khi mở và trở về nơi mở khi đóng; icon thao tác có tên dễ hiểu.
-- [ ] **QA-14** — Kiểm tra độ tương phản chữ/nền và khả năng đọc trạng thái bằng nhãn/icon, không chỉ bằng màu sau khi đổi sang giao diện tối.
-- [ ] **QA-Q01** — Chốt yêu cầu tablet/mobile và hành vi co giãn. Bộ ảnh hiện chỉ đặc tả desktop, chưa đủ căn cứ nghiệm thu responsive theo thiết kế.
+- [x] **QA-01** — Đã dựng và chụp ảnh đối chiếu cả 5 màn hình desktop với ảnh nguồn tại kích thước gốc (`1672×941` / `1670×941`) và `1440×900` (`frontend/test-results/adm-01..05-*.png`); chờ Codex review nghiệm thu vòng 2.
+- [x] **QA-02** — Đã kiểm chứng tự động: menu chuyển đúng trang, active đúng; breadcrumb và Quay lại từ chi tiết trở về danh sách (`navigation.spec.js`, `sidebar.spec.js`, `record-dialog.spec.js`).
+- [x] **QA-03** — Đã kiểm chứng tự động: tổng số tài khoản, số hoạt động/bị khóa và phân bổ vai trò nhất quán với dữ liệu thực, không dùng số cố định từ ảnh (`admin-ui.spec.js`).
+- [x] **QA-04** — Đã kiểm chứng tự động: tìm kiếm và phối hợp bộ lọc hoạt động đúng; đổi bộ lọc đưa về trang đầu; dữ liệu rỗng có thông báo rõ ràng (`admin-ui.spec.js`).
+- [x] **QA-05** — Đã kiểm chứng tự động: phân trang không vượt giới hạn; selector số dòng/trang chỉ giữ mức `10` và số thứ tự hàng đúng theo quy tắc đã chốt (`admin-ui.spec.js`).
+- [x] **QA-06** — Đã kiểm chứng tự động: chi tiết mở đúng tài khoản; trường trống, ngày tháng (`dd/MM/yyyy`), số điện thoại và hệ số lương (`2 chữ số thập phân`) hiển thị hợp lệ; không lộ thông tin mật khẩu (`admin-ui.spec.js`).
+- [x] **QA-07** — Đã kiểm chứng tự động: tạo/sửa hồ sơ và đổi vai trò gửi đúng nhóm trường; nhập sai hoặc trùng dữ liệu có phản hồi, không báo lưu thành công khi API lỗi (`mutations.spec.js`, `admin-ui.spec.js`).
+- [x] **QA-08** — Đã kiểm chứng tự động: vô hiệu hóa/mở khóa yêu cầu xác nhận trên snapshot đã duyệt; sau thành công badge và thao tác thay đổi đúng; hồ sơ và lịch sử được giữ nguyên (`mutations.spec.js`, `admin-ui.spec.js`).
+- [x] **QA-09** — Đã kiểm chứng tự động: Hủy/X popup không ghi dữ liệu và giữ bản nháp; bấm Xác nhận nhiều lần chỉ gửi một hành động; lỗi giữ đủ thông tin để người dùng xử lý (`mutations.spec.js`, `admin-ui.spec.js`).
+- [ ] **QA-10** — Tạo/sửa/xóa vai trò chỉ nghiệm thu sau khi các mục `ROL-Q01` đến `ROL-Q04` được chốt và có API tương ứng (`FE-MISS-002`).
+- [x] **QA-11** — Đã kiểm chứng tự động: truy cập URL trực tiếp khi chưa đăng nhập/sai quyền và khi phiên hết hạn giữ phản hồi 401/403 của hệ thống (`navigation.spec.js`, `workflows.spec.js`).
+- [x] **QA-12** — Đã kiểm chứng tự động cập nhật đồng thời cả ở trang chi tiết và thao tác khóa/mở khóa trực tiếp trên hàng danh sách (`R2-01`): lấy snapshot + ETag trước khi mở popup xác nhận, khi xác nhận chỉ gửi ETag đã duyệt, nhận 412/428 không tự lấy ETag mới để ghi đè và hiển thị hướng dẫn tải lại (`contracts.test.js`, `admin-ui.spec.js`, `workflows.spec.js`).
+- [x] **QA-13** — Đã kiểm chứng tự động: dùng bàn phím truy cập được bộ lọc, bảng, nút và popup; focus nhìn thấy, nằm trong popup khi mở và trở về nơi mở khi đóng; icon thao tác có tên dễ hiểu.
+- [x] **QA-14** — Đã kiểm tra độ tương phản chữ/nền và khả năng đọc trạng thái bằng nhãn/icon, không chỉ bằng màu sau khi đổi sang giao diện tối.
+- [ ] **QA-Q01** — Chốt yêu cầu tablet/mobile và hành vi co giãn. Đã kiểm tra không tràn ngang ở `375px` (`navigation.spec.js`); bộ ảnh hiện chỉ đặc tả desktop.
 
 ## 10. Căn cứ đối chiếu và giới hạn kiểm chứng
 
@@ -289,6 +289,6 @@ Những đường dẫn dưới đây tính từ gốc repository; chúng là b�
 | Thành phần dùng chung | `frontend/src/components/Collection.jsx`, `DataTable.jsx`, `RecordPanel.jsx`, `FeedbackProvider.jsx`, `Badge.jsx`, `QueryState.jsx` |
 | Dữ liệu và hình thức hiện tại | `frontend/src/lib/api/useResources.js`, `endpoints.js`, `client.js`, `frontend/src/lib/useSave.js`, `format.js`, `frontend/src/app/App.css` |
 | Hợp đồng tài khoản/vai trò hiện tại | `backend/app/modules/nhan_vien/router.py`, `schemas.py`, `service.py`, `repository.py` |
-| Kiểm thử hiện có đã đọc | `frontend/tests/browser/mutations.spec.js`, `navigation.spec.js`, `record-dialog.spec.js` |
+| Kiểm thử hiện có đã đọc & cập nhật | `frontend/tests/browser/admin-ui.spec.js`, `mutations.spec.js`, `navigation.spec.js`, `record-dialog.spec.js`, `sidebar.spec.js` |
 
-Đã xem trực tiếp đủ 5 ảnh và đọc các source nêu trên. Chưa chạy ứng dụng, chưa chạy lại các kiểm thử frontend/backend hoặc E2E, chưa kiểm tra hình ảnh trên trình duyệt và chưa xác minh database đang chạy. Việc tồn tại test trong source không được coi là test đã chạy đạt. Tác vụ này chỉ tạo tài liệu; không triển khai UI, thay API/schema hoặc thay dữ liệu.
+Đã xem trực tiếp đủ 5 ảnh thiết kế nguồn, chụp và kiểm tra trực quan 10 ảnh screenshot (`1672×941`/`1670×941` và `1440×900`) trong `frontend/test-results/`, chạy đạt `npm run lint`, `npm test` (27/27) và `npm run build` cùng các bộ kiểm thử trình duyệt liên quan. Các kiểm thử trình duyệt dùng API fixture mock trên trình duyệt, chưa chạy E2E chống lại backend/database thật đang chạy. Kết quả nghiệm thu cuối cùng chờ Codex review vòng 2.

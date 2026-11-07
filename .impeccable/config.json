@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "frontend/src/layouts/Sidebar.module.css"
+        ],
+        "createdAt": "2026-11-07T16:22:09.075Z",
+        "reason": "user confirmed: task plan section 1 and step 1 explicitly forbid modifying non-admin warehouse/employee sidebar styling (.link.active::before predates this session)"
+      }
+    ]
+  }
+}

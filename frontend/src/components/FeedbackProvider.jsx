@@ -66,7 +66,7 @@ function Confirmation({ options, onClose }) {
   return (
     <dialog
       ref={dialog}
-      className="confirmation"
+      className={`confirmation ${options.variant ? `confirmation-${options.variant}` : ""}`.trim()}
       aria-labelledby="confirmation-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -89,9 +89,11 @@ function Confirmation({ options, onClose }) {
         <div className="dialog-body stack">
           <p>{options.description}</p>
           {options.content}
-          <div className={`notice ${options.danger ? "notice-warning" : "notice-info"}`}>
-            {options.impact || "Thao tác này không thay đổi tồn kho."}
-          </div>
+          {!options.hideImpact && (
+            <div className={`notice ${options.danger ? "notice-warning" : "notice-info"}`}>
+              {options.impact || "Thao tác này không thay đổi tồn kho."}
+            </div>
+          )}
           {options.reason && (
             <Field
               as="textarea"

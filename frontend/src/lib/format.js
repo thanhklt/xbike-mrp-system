@@ -66,3 +66,57 @@ export const employeeName = (employees, id) =>
   id === null || id === undefined
     ? "Chưa giao"
     : employees?.find((employee) => employee.id === Number(id))?.ho_ten || `Nhân viên #${id}`;
+
+export function initials(name = "") {
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(-2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "NV";
+}
+
+export function formatDate(value) {
+  if (!value) return "—";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  const instant = new Date(value);
+  return Number.isNaN(instant.valueOf())
+    ? "—"
+    : new Intl.DateTimeFormat("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "Asia/Ho_Chi_Minh",
+      }).format(instant);
+}
+
+export function formatCoefficient(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? String(value) : parsed.toFixed(2);
+}
+
+export function formatAuditTime(value) {
+  if (!value) return "—";
+  const instant = new Date(value);
+  if (Number.isNaN(instant.valueOf())) return "—";
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.hour}:${parts.minute} - ${parts.day}/${parts.month}/${parts.year}`;
+}

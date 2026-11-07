@@ -1,13 +1,25 @@
 import { test, expect } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
-test("employee profile save sends profile fields separately from role and account state", async ({
+test("employee profile save confirms via ADM-05 popup and sends profile fields separately from role and account state", async ({
   page,
 }) => {
   const state = await installApi(page, { role: "quan_tri_vien" });
   await page.goto("/admin/tai-khoan/3");
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
   await page.getByLabel("Họ tên", { exact: true }).fill("Nhân viên cập nhật");
-  await page.getByRole("button", { name: "Lưu hồ sơ" }).click();
+  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  const dialog = page.locator("dialog.confirmation");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Xác nhận thay đổi", exact: true })).toBeVisible();
+  await expect(dialog).toContainText("Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?");
+  await dialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("Họ tên", { exact: true })).toHaveValue("Nhân viên cập nhật");
+  expect(state.calls.filter((call) => call.method === "PATCH")).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
   await expect(page.locator(".toast")).toContainText("Đã lưu");
   const patch = state.calls.find((call) => call.method === "PATCH" && call.path === "nhan_vien/3");
   expect(patch.body.ho_ten).toBe("Nhân viên cập nhật");
@@ -20,7 +32,7 @@ test("employee profile save sends profile fields separately from role and accoun
 test("locking an employee requires a reason and preserves DELETE body", async ({ page }) => {
   const state = await installApi(page, { role: "quan_tri_vien" });
   await page.goto("/admin/tai-khoan/3");
-  await page.getByRole("button", { name: "Khóa tài khoản…" }).click();
+  await page.getByRole("button", { name: "Vô hiệu hóa", exact: true }).click();
   await expect(
     page.locator("dialog.confirmation").getByRole("button", { name: "Xác nhận", exact: true }),
   ).toBeDisabled();
@@ -32,7 +44,7 @@ test("locking an employee requires a reason and preserves DELETE body", async ({
     .locator("dialog.confirmation")
     .getByRole("button", { name: "Xác nhận", exact: true })
     .click();
-  await expect(page.getByRole("button", { name: "Mở khóa tài khoản…" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mở khóa", exact: true })).toBeVisible();
   expect(state.calls.find((call) => call.method === "DELETE").body).toEqual({
     ly_do: "Tạm ngừng công việc",
   });

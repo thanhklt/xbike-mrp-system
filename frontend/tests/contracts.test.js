@@ -8,7 +8,15 @@ import {
   versionHeaders,
 } from "../src/lib/api/contract.js";
 import { documentPermissions, homeFor, isAllowed } from "../src/features/auth/permissions.js";
-import { dateTime, localDateTime, money } from "../src/lib/format.js";
+import {
+  dateTime,
+  formatAuditTime,
+  formatCoefficient,
+  formatDate,
+  initials,
+  localDateTime,
+  money,
+} from "../src/lib/format.js";
 
 test("query preserves zero and false while omitting absent filters", () => {
   assert.deepEqual(
@@ -102,4 +110,14 @@ test("timestamps display in Vietnam time independently of browser or runner time
   assert.match(dateTime("2026-11-04T18:05:00Z"), /01:05/);
   assert.equal(money(null), "Chưa chốt");
   assert.match(money(0), /0/);
+});
+
+test("admin formatters format dates as dd/MM/yyyy, salary coefficients to 2 decimals, and audit timestamps", () => {
+  assert.equal(formatDate("2026-01-05"), "05/01/2026");
+  assert.equal(formatDate(null), "—");
+  assert.equal(formatCoefficient("3.5"), "3.50");
+  assert.equal(formatCoefficient("1.50"), "1.50");
+  assert.equal(formatCoefficient(null), "—");
+  assert.equal(initials("Lê Văn Thành"), "VT");
+  assert.equal(formatAuditTime("2026-11-04T18:05:00Z"), "01:05 - 05/11/2026");
 });

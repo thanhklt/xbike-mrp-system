@@ -1,10 +1,26 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Ban,
+  BarChart3,
+  CircleCheck,
+  Info,
+  Layers,
+  PieChart,
+  Users,
+} from "lucide-react";
 import { API } from "../../lib/api/endpoints.js";
-import { useResource } from "../../lib/api/useResources.js";
+import { useChoices, useResource } from "../../lib/api/useResources.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
-import { itemName, dateTime, number } from "../../lib/format.js";
+import {
+  ROLE_LABELS,
+  dateTime,
+  employeeName,
+  formatAuditTime,
+  itemName,
+  number,
+} from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Card } from "../../components/Card.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
@@ -12,12 +28,14 @@ import { Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
 import { Field } from "../../components/Field.jsx";
 import { QueryState } from "../../components/QueryState.jsx";
+
 export function DashboardPage() {
   const { user } = useAuth();
   if (user.ma_vai_tro === "quan_tri_vien") return <AdminDashboard />;
   if (user.ma_vai_tro === "quan_ly") return <WarehouseDashboard />;
   return <EmployeeDashboard />;
 }
+
 function Metric({ label, path, params, href }) {
   const query = useResource(path, { page: 1, page_size: 1, ...params });
   return (
@@ -28,74 +46,312 @@ function Metric({ label, path, params, href }) {
     </Link>
   );
 }
-function AdminDashboard() {
-  const attention = useResource(API.employees, { page: 1, page_size: 5, trang_thai: "bi_khoa" });
+
+const AUDIT_ACTION_LABELS = {
+  tao: "Tạo",
+  sua: "Cập nhật",
+  xoa_nhap: "Xóa nháp",
+  gui: "Gửi",
+  bat_dau: "Bắt đầu",
+  duyet: "Duyệt",
+  tu_choi: "Từ chối",
+  ve_nhap: "Chuyển về nháp",
+  hoan_tat: "Hoàn tất",
+  cap_quyen: "Cấp quyền",
+  thu_hoi_quyen: "Thu hồi quyền",
+  vo_hieu_hoa: "Vô hiệu hóa",
+  huy: "Hủy",
+  ghi_nhan_loi: "Ghi nhận lỗi",
+  nhan_xu_ly: "Nhận xử lý",
+  giai_quyet: "Giải quyết",
+  xac_nhan: "Xác nhận",
+};
+
+const AUDIT_OBJECT_LABELS = {
+  nhan_vien: "tài khoản",
+  vai_tro: "vai trò",
+  mat_hang: "mặt hàng",
+  nha_cung_cap: "nhà cung cấp",
+  cong_thuc: "BOM",
+  phieu_nhap: "phiếu nhập",
+  phieu_xuat: "phiếu xuất",
+  yeu_cau_san_xuat: "yêu cầu sản xuất",
+  lenh_san_xuat: "lệnh sản xuất",
+  chung_tu_hoan_thanh_san_xuat: "chứng từ hoàn thành SX",
+  phieu_dieu_chinh_kho: "phiếu điều chỉnh kho",
+  ticket_loi_dieu_chinh: "ticket lỗi điều chỉnh",
+};
+
+function formatAuditAction(entry) {
+  const verb = AUDIT_ACTION_LABELS[entry.thao_tac] || entry.thao_tac;
+  const noun = AUDIT_OBJECT_LABELS[entry.loai_doi_tuong] || entry.loai_doi_tuong;
+  return `${verb} ${noun}`;
+}
+
+function formatAuditDetail(entry, employees = []) {
+  const objectLabel = AUDIT_OBJECT_LABELS[entry.loai_doi_tuong] || entry.loai_doi_tuong;
+  let target = `${objectLabel} #${entry.doi_tuong_id}`;
+  if (entry.loai_doi_tuong === "nhan_vien") {
+    const matched = employees.find((item) => item.id === Number(entry.doi_tuong_id));
+    if (matched) {
+      target = `${matched.ma_nhan_vien}${matched.ho_ten ? ` (${matched.ho_ten})` : ""}`;
+    }
+  }
+  return entry.ly_do ? `${target} · ${entry.ly_do}` : target;
+}
+
+function AdminStatCard({ label, icon, tone, path, params, href }) {
+  const IconComponent = icon;
+  const query = useResource(path, { page: 1, page_size: 1, ...params });
+  const value = query.isError || query.isPending ? "—" : number(query.data?.meta.total);
   return (
-    <>
-      <PageHeader
-        title="Tổng quan quản trị"
-        subtitle="Quản lý tài khoản, vai trò và dấu vết thao tác của hệ thống."
-        action={
-          <>
-            <Link className="btn btn-secondary" to="/admin/lich-su">
-              Xem lịch sử thao tác
-            </Link>
-            <Link className="btn btn-primary" to="/admin/tai-khoan/moi">
-              Tạo tài khoản
-            </Link>
-          </>
-        }
-      />
-      <div className="metrics">
-        <Metric label="Tổng tài khoản" path={API.employees} href="/admin/tai-khoan" />
-        <Metric
-          label="Đang hoạt động"
+    <Link className="admin-stat-card" to={href}>
+      <span className={`admin-stat-icon admin-stat-${tone}`} aria-hidden="true">
+        <IconComponent size={28} strokeWidth={2.15} />
+      </span>
+      <div className="admin-stat-copy">
+        <span className="admin-stat-label">{label}</span>
+        <strong className="admin-stat-value">{value}</strong>
+        {query.isError && <small className="admin-stat-error">Không tải được số liệu</small>}
+      </div>
+    </Link>
+  );
+}
+
+const ROLE_CHART_CONFIG = [
+  { code: "nhan_vien", label: "Nhân viên", color: "#e86a19" },
+  { code: "quan_ly", label: "Quản lý kho", color: "#fda965" },
+  { code: "quan_tri_vien", label: "Quản trị viên", color: "#feddbe" },
+];
+
+const TRAFFIC_TICKS_Y = ["4.000", "3.500", "3.000", "2.500", "2.000", "1.000", "500", "0"];
+const TRAFFIC_TICKS_X = ["00h", "03h", "06h", "09h", "12h", "15h", "18h", "21h"];
+
+function AdminDashboard() {
+  const employees = useChoices(API.employees);
+  const logs = useResource(API.audit, auditParams({ page: 1, page_size: 5, sort: "-created_at" }));
+
+  const employeeRows = employees.data || [];
+  const totalAccounts = employeeRows.length;
+  const radius = 84;
+  const circumference = 2 * Math.PI * radius;
+
+  let cumulativeOffset = 0;
+  const distribution = ROLE_CHART_CONFIG.map((item) => {
+    const count = employeeRows.filter((person) => person.ma_vai_tro === item.code).length;
+    const ratio = totalAccounts > 0 ? count / totalAccounts : 0;
+    const percentage = (ratio * 100).toFixed(1);
+    const dashLength = ratio * circumference;
+    const segment = {
+      ...item,
+      count,
+      percentage,
+      dashArray: `${dashLength} ${Math.max(circumference - dashLength, 0)}`,
+      dashOffset: -cumulativeOffset,
+    };
+    cumulativeOffset += dashLength;
+    return segment;
+  });
+
+  return (
+    <div className="admin-screen">
+      <div className="admin-page-heading">
+        <h1>Tổng quan</h1>
+      </div>
+
+      <div className="admin-stats-grid">
+        <AdminStatCard
+          label="Tổng tài khoản"
+          icon={Users}
+          tone="amber"
+          path={API.employees}
+          href="/admin/tai-khoan"
+        />
+        <AdminStatCard
+          label="Tổng vai trò"
+          icon={Layers}
+          tone="blue"
+          path={API.roles}
+          href="/admin/vai-tro"
+        />
+        <AdminStatCard
+          label="Tài khoản đang hoạt động"
+          icon={CircleCheck}
+          tone="green"
           path={API.employees}
           params={{ trang_thai: "hoat_dong" }}
           href="/admin/tai-khoan"
         />
-        <Metric
-          label="Đang bị khóa"
+        <AdminStatCard
+          label="Tài khoản đã vô hiệu hóa"
+          icon={Ban}
+          tone="red"
           path={API.employees}
           params={{ trang_thai: "bi_khoa" }}
           href="/admin/tai-khoan"
         />
-        <Metric label="Vai trò" path={API.roles} href="/admin/vai-tro" />
       </div>
-      <div className="dashboard-columns">
-        <Card title="Tài khoản cần chú ý" action={<Link to="/admin/tai-khoan">Xem tất cả →</Link>}>
-          <QueryState query={attention}>
-            <DataTable
-              rows={attention.data?.data}
-              empty="Không có tài khoản bị khóa."
-              columns={[
-                {
-                  key: "ho_ten",
-                  label: "Nhân viên",
-                  render: (row) => (
-                    <>
-                      <strong>{row.ho_ten || row.ten_dang_nhap}</strong>
-                      <small>{row.ma_nhan_vien}</small>
-                    </>
-                  ),
-                },
-                {
-                  key: "trang_thai",
-                  label: "Trạng thái",
-                  render: (row) => <Badge status={row.trang_thai} />,
-                },
-                {
-                  key: "action",
-                  label: "Thao tác",
-                  render: (row) => <Link to={`/admin/tai-khoan/${row.id}`}>Mở →</Link>,
-                },
-              ]}
-            />
+
+      <div className="admin-charts-row">
+        <section className="admin-surface admin-traffic-card">
+          <div className="admin-traffic-header">
+            <div>
+              <div className="admin-card-title">
+                <BarChart3 size={18} className="admin-title-icon" aria-hidden="true" />
+                <h2>Lưu lượng truy website</h2>
+              </div>
+              <p className="admin-card-subtitle">Tổng hợp theo số lượng request mỗi giờ</p>
+            </div>
+            <div className="admin-range-tabs" role="group" aria-label="Khoảng thời gian lưu lượng">
+              <button type="button" className="admin-range-tab is-active">
+                Hôm nay
+              </button>
+              <button type="button" className="admin-range-tab">
+                7 ngày
+              </button>
+              <button type="button" className="admin-range-tab">
+                30 ngày
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="admin-traffic-plot"
+            role="img"
+            aria-label="Khung biểu đồ lưu lượng truy cập theo giờ"
+          >
+            <div className="admin-traffic-yaxis" aria-hidden="true">
+              {TRAFFIC_TICKS_Y.map((tick) => (
+                <span key={tick}>{tick}</span>
+              ))}
+            </div>
+            <div className="admin-traffic-canvas">
+              <div className="admin-traffic-gridlines" aria-hidden="true">
+                {TRAFFIC_TICKS_Y.map((tick) => (
+                  <div key={tick} className="admin-traffic-gridline" />
+                ))}
+              </div>
+              <div className="admin-traffic-xaxis" aria-hidden="true">
+                {TRAFFIC_TICKS_X.map((tick) => (
+                  <span key={tick}>{tick}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-surface admin-donut-card">
+          <div className="admin-card-title">
+            <PieChart size={18} className="admin-title-icon" aria-hidden="true" />
+            <h2>Phân bổ tài khoản theo vai trò</h2>
+          </div>
+
+          <QueryState query={employees}>
+            <div className="admin-donut-layout">
+              <div className="admin-donut-figure">
+                <svg
+                  viewBox="0 0 216 216"
+                  className="admin-donut-svg"
+                  role="img"
+                  aria-label="Biểu đồ phân bổ tài khoản theo vai trò"
+                >
+                  <circle
+                    cx="108"
+                    cy="108"
+                    r={radius}
+                    fill="none"
+                    stroke="#2d2621"
+                    strokeWidth="30"
+                  />
+                  {distribution.map(
+                    (segment) =>
+                      segment.count > 0 && (
+                        <circle
+                          key={segment.code}
+                          cx="108"
+                          cy="108"
+                          r={radius}
+                          fill="none"
+                          stroke={segment.color}
+                          strokeWidth="30"
+                          strokeDasharray={segment.dashArray}
+                          strokeDashoffset={segment.dashOffset}
+                          transform="rotate(-90 108 108)"
+                        />
+                      ),
+                  )}
+                </svg>
+                <div className="admin-donut-center">
+                  <strong>{number(totalAccounts)}</strong>
+                  <span>Tài khoản</span>
+                </div>
+              </div>
+
+              <ul className="admin-donut-legend">
+                {distribution.map((segment) => (
+                  <li key={segment.code}>
+                    <span
+                      className="admin-legend-swatch"
+                      style={{ backgroundColor: segment.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="admin-legend-text">
+                      {ROLE_LABELS[segment.code] || segment.label}:{" "}
+                      <strong>
+                        {number(segment.count)} ({segment.percentage}%)
+                      </strong>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </QueryState>
-        </Card>
-        <RecentAudit />
+        </section>
       </div>
-    </>
+
+      <section className="admin-surface admin-activity-card">
+        <div className="admin-card-title">
+          <Info size={18} className="admin-title-icon" aria-hidden="true" />
+          <h2>Hoạt động gần đây</h2>
+        </div>
+
+        <QueryState query={logs}>
+          <div className="table-scroll admin-table-wrap">
+            <table className="admin-table">
+              <caption className="sr-only">Hoạt động gần đây</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Thời gian</th>
+                  <th scope="col">Người thực hiện</th>
+                  <th scope="col">Hành động</th>
+                  <th scope="col">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.data?.data?.length ? (
+                  logs.data.data.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{formatAuditTime(entry.created_at)}</td>
+                      <td>
+                        <strong>{employeeName(employeeRows, entry.nhan_vien_id)}</strong>
+                      </td>
+                      <td>{formatAuditAction(entry)}</td>
+                      <td>{formatAuditDetail(entry, employeeRows)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="empty-state">
+                      Chưa có lịch sử thao tác.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </QueryState>
+      </section>
+    </div>
   );
 }
 function WarehouseDashboard() {
