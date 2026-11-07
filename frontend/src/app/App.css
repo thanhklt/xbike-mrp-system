@@ -1070,6 +1070,9 @@ html:has(dialog[open]) {
 .login-form .password-field input {
   padding-right: 72px;
 }
+.login-form .password-field input::-ms-reveal {
+  display: none;
+}
 .login-form .password-toggle {
   position: absolute;
   right: 20px;
