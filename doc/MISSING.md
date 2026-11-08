@@ -23,9 +23,9 @@ File được khởi tạo cùng quy tắc frontend và được cập nhật tr
   - Thiết kế yêu cầu: Hiển thị mô tả chi tiết cho từng vai trò, cho phép tạo vai trò mới, sửa thông tin vai trò và xóa các vai trò không phải mặc định.
   - API hiện đáp ứng / còn thiếu: `GET /api/v1/vai_tro` chỉ trả về `VaiTroRead` gồm `id`, `ma_vai_tro` (`Literal["nhan_vien", "quan_ly", "quan_tri_vien"]`), `ten_vai_tro` (không có trường `mo_ta`); `vai_tro_router` chỉ có `GET ""` và chưa có `POST`, `PATCH`/`PUT`, `DELETE` cho `/api/v1/vai_tro`.
   - Bằng chứng: `backend/app/modules/nhan_vien/schemas.py` (`RoleCode`, `VaiTroRead`, dòng 32 & 191–197), `backend/app/modules/nhan_vien/router.py` (`vai_tro_router`, dòng 28 & 247–254).
-  - Ảnh hưởng và phần vẫn tiếp tục làm được: Đã dựng trang ADM-04 lấy danh sách vai trò thật từ `GET /api/v1/vai_tro`, hiển thị giá trị thiếu `—` cho cột “Mô tả” khi response chưa có `mo_ta`, giữ nút `+ Tạo vai trò` và `Sửa` đúng hình thức thiết kế nhưng chưa gắn hành động, và giữ trạng thái `disabled` kèm biểu tượng thông tin cho nút `Xóa` của 3 vai trò hệ thống.
+  - Ảnh hưởng và phần vẫn tiếp tục làm được: Đã dựng trang ADM-04 lấy danh sách vai trò thật từ `GET /api/v1/vai_tro`, hiển thị giá trị thiếu `—` cho cột “Mô tả” khi response chưa có `mo_ta`, giữ nút `+ Tạo vai trò` đúng hình thức thiết kế nhưng chưa gắn hành động, và vô hiệu hóa (`disabled` + `admin-action-muted`) cả nút `Sửa` lẫn nút `Xóa` của 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) theo quyết định dev trong `doc/admin-ui-inline-edit-plan.md`.
   - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung trường `mo_ta` vào bảng `"VaiTro"`/`VaiTroRead` và mở rộng CRUD vai trò động hay giữ cố định 3 vai trò hệ thống.
-  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` chỉ hiển thị danh sách vai trò thật từ API, dùng cách hiển thị giá trị thiếu của project cho cột mô tả, giữ các nút thiếu API đúng hình thức và chưa gắn hành động.
+  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` và `doc/admin-ui-inline-edit-plan.md` chỉ hiển thị danh sách vai trò thật từ API, dùng cách hiển thị giá trị thiếu của project cho cột mô tả, giữ nút `+ Tạo vai trò` chưa gắn hành động và vô hiệu hóa cả nút `Sửa` lẫn `Xóa` cho 3 vai trò hệ thống.
   - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Đã dựng UI ADM-04 và kiểm tra bằng Playwright (`frontend/tests/browser/admin-ui.spec.js`); giữ `[ ]` vì backend chưa có trường `mo_ta` và endpoint ghi vai trò.
 
 - [ ] FE-MISS-003 — Ảnh đại diện (avatar) nhân viên
@@ -52,14 +52,14 @@ File được khởi tạo cùng quy tắc frontend và được cập nhật tr
 
 - [ ] FE-MISS-005 — Đặt lại mật khẩu nhân viên dành cho Quản trị viên
   - Màn hình / mã yêu cầu / ảnh thiết kế: ADM-03 Chi tiết tài khoản / Chế độ chỉnh sửa (`DET-Q02`).
-  - Thành phần hoặc thao tác bị ảnh hưởng: Nút “Đặt lại mật khẩu…” trong phần trạng thái tài khoản của form chỉnh sửa.
-  - Thiết kế yêu cầu: Bộ 5 ảnh thiết kế không yêu cầu chức năng đặt lại mật khẩu; đây là nút đã tồn tại sẵn trong form chỉnh sửa của project được dev đồng ý giữ nguyên trạng thái disabled và hành vi bảo vệ hiện có (backend hiện chỉ có `/api/v1/auth/doi_mat_khau` yêu cầu mật khẩu hiện tại của chính người đang đăng nhập).
+  - Thành phần hoặc thao tác bị ảnh hưởng: Hàng “Mật khẩu” ở trang chi tiết tài khoản khi ở chế độ xem và chế độ chỉnh sửa trực tiếp.
+  - Thiết kế yêu cầu: Bộ ảnh thiết kế (`chi_tiet_tai_khoan.png`, `01-chinh-sua-truc-tiep.png`) hiển thị hàng “Mật khẩu” chỉ đọc bằng dấu chấm cố định (`••••••••`) và không có chức năng đặt lại mật khẩu nhân viên (backend hiện chỉ có `/api/v1/auth/doi_mat_khau` yêu cầu mật khẩu hiện tại của chính người đang đăng nhập).
   - API hiện đáp ứng / còn thiếu: `backend/app/modules/nhan_vien/router.py` chưa có endpoint đặt lại mật khẩu nhân viên theo `{id}`.
   - Bằng chứng: `backend/app/modules/nhan_vien/router.py`, `frontend/src/features/auth/UsersPage.jsx`.
-  - Ảnh hưởng và phần vẫn tiếp tục làm được: Giữ nguyên nút `Đặt lại mật khẩu…` ở trạng thái vô hiệu hóa kèm lý do rõ ràng như logic bảo vệ sẵn có của project.
+  - Ảnh hưởng và phần vẫn tiếp tục làm được: Theo thiết kế chỉnh sửa trực tiếp (`doc/admin-ui-inline-edit-plan.md`), đã bỏ khối form phụ bên dưới và giữ hàng `Mật khẩu` ở trạng thái chỉ đọc (`••••••••`) trong cả chế độ xem lẫn chỉnh sửa trực tiếp, không tạo thao tác đặt lại mật khẩu khi chưa có API.
   - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung API đặt lại mật khẩu cho admin trong đợt sau hay không.
-  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` giữ các trạng thái disabled và chặn an toàn hiện có.
-  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ nguyên trạng thái bảo vệ hiện có; giữ `[ ]` vì chưa có API.
+  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` và `doc/admin-ui-inline-edit-plan.md` giữ hàng mật khẩu chỉ đọc `••••••••` và thay khối form phụ bằng chỉnh sửa trực tiếp trên 10 hàng chi tiết.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Đã kiểm tra bằng Playwright (`frontend/tests/browser/admin-ui.spec.js`); giữ `[ ]` vì chưa có API đặt lại mật khẩu nhân viên cho admin.
 
 ## Mẫu ghi nhận
 

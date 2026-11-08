@@ -2486,6 +2486,54 @@ html[data-admin-theme="true"] {
   padding-left: 0;
 }
 
+.admin-detail-row dd.is-readonly {
+  background: #231d18;
+  border-color: #362c24;
+  color: #a99e92;
+  user-select: text;
+}
+
+.admin-detail-row dd.is-input {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.admin-inline-input,
+.admin-inline-select {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 16px;
+  border-radius: 10px;
+  background: #2b241e;
+  border: 1px solid #d68a59;
+  color: #fff;
+  font-size: 16px;
+  font-family: inherit;
+  line-height: 1.4;
+  color-scheme: dark;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.admin-inline-input:focus-visible,
+.admin-inline-select:focus-visible {
+  outline: none;
+  border-color: #f06d1a;
+  box-shadow: 0 0 0 2px rgb(240 109 26 / 0.28);
+}
+
+.admin-inline-input:disabled,
+.admin-inline-select:disabled {
+  background: #231d18;
+  border-color: #3a3028;
+  color: #8f8479;
+  cursor: not-allowed;
+}
+
+.admin-detail-row dt label {
+  cursor: pointer;
+}
+
 /* Admin Forms, Modals & Dialogs (ADM-05) */
 .admin-shell .field label {
   color: #d6cbc0;
@@ -2673,6 +2721,148 @@ html[data-admin-theme="true"] .confirmation.confirmation-profile-save .dialog-fo
 html[data-admin-theme="true"] .confirmation.confirmation-profile-save .dialog-footer .btn-primary {
   background: #f06d1a;
   color: #fff;
+}
+
+/* ADM-05 Logout Confirmation Popup (03-xac-nhan-dang-xuat.png) */
+html[data-admin-theme="true"] .confirmation.confirmation-logout {
+  position: relative;
+  width: min(460px, calc(100vw - 32px));
+  border: 1.5px solid #5a493c;
+  border-radius: 18px;
+  background: #241b16;
+  padding: 0;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.65);
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px 8px;
+  border-bottom: 0;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: left;
+  color: #fff;
+  margin: 0;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-header .icon-button {
+  position: static;
+  color: #d6cbc0;
+  font-size: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  line-height: 1;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-body {
+  padding: 8px 28px 24px;
+  text-align: left;
+  align-items: flex-start;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-body p {
+  max-width: none;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #f0e7de;
+  text-align: left;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center;
+  gap: 12px;
+  padding: 0 28px 24px;
+  background: transparent;
+  border-top: 0;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-footer .button-wrap {
+  width: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-footer .btn {
+  width: auto;
+  min-width: 96px;
+  min-height: 44px;
+  padding: 8px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-footer .btn-secondary {
+  background: #271f1a;
+  border: 1px solid #4d3f35;
+  color: #fff;
+}
+
+html[data-admin-theme="true"] .confirmation.confirmation-logout .dialog-footer .btn-primary {
+  background: #df6d27;
+  color: #fff;
+}
+
+/* ADM-05 Save Success Popup (02-luu-thanh-cong.png) */
+html[data-admin-theme="true"] .confirmation.confirmation-save-success {
+  width: min(440px, calc(100vw - 32px));
+  border: 1.5px solid #5a493c;
+  border-radius: 18px;
+  background: #241b16;
+  padding: 0;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.65);
+}
+
+.confirmation-save-success .save-success-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 38px 28px 34px;
+  gap: 20px;
+}
+
+.confirmation-save-success .save-success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4ade80;
+  line-height: 0;
+}
+
+.confirmation-save-success h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.confirmation-save-success .save-success-btn {
+  min-width: 164px;
+  min-height: 48px;
+  padding: 8px 36px;
+  border-radius: 12px;
+  background: #df6d27;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 4px;
+  transition: background-color 140ms ease;
+}
+
+.confirmation-save-success .save-success-btn:hover:not(:disabled) {
+  background: #eb7a34;
 }
 
 html[data-admin-theme="true"] .toast {

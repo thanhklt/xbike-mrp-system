@@ -101,7 +101,10 @@ export function RolesPage() {
                           <div className="admin-row-actions">
                             <button
                               type="button"
-                              className="admin-action-btn"
+                              className={`admin-action-btn ${
+                                isSystemRole ? "admin-action-muted" : ""
+                              }`.trim()}
+                              disabled={isSystemRole}
                               aria-label={`Sửa ${role.ten_vai_tro}`}
                             >
                               <Pencil size={15} aria-hidden="true" />

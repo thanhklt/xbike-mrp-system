@@ -487,7 +487,15 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         412,
       );
     state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
-    if (method === "PATCH" || method === "PUT") Object.assign(record, body);
+    if (method === "PATCH" || method === "PUT") {
+      Object.assign(record, body);
+      if (resource === "nhan_vien" && action === "vai_tro" && body.vai_tro_id !== undefined) {
+        const matchedRole = state.resources.vai_tro.find(
+          (entry) => entry.id === Number(body.vai_tro_id),
+        );
+        if (matchedRole) record.ma_vai_tro = matchedRole.ma_vai_tro;
+      }
+    }
     if (method === "DELETE" && resource === "mat_hang") {
       record.is_active = false;
       return respond(null, 204);

@@ -169,14 +169,14 @@ Bên dưới chia hai cột: thẻ nhận diện bên trái gồm avatar lớn, 
 - [x] **DET-04** — Có avatar tròn lớn (hiển thị chữ cái khi chưa có ảnh từ API) và badge vai trò/trạng thái kèm icon như ảnh.
 - [x] **DET-05** — Thể hiện hàng “Mật khẩu” bằng chuỗi dấu chấm cố định (`••••••••`) theo quyết định của dev. Không gọi API để lấy mật khẩu/hash hoặc đưa thông tin bí mật vào DOM.
 - [x] **DET-06** — Response công khai không trả mật khẩu hoặc hash mật khẩu. Có thể đối chiếu `NhanVienRead` trong `schemas.py`.
-- [x] **DET-07** — Có sửa hồ sơ gồm họ tên, ngày sinh, điện thoại, email, ngày vào làm và hệ số lương; tách riêng cập nhật vai trò và khóa/mở khóa.
+- [x] **DET-07** — Có chỉnh sửa trực tiếp (inline edit) ngay trên 10 hàng của thẻ “Thông tin tài khoản” (`01-chinh-sua-truc-tiep.png`): sửa họ tên, ngày sinh, điện thoại, email, vai trò, ngày vào làm và hệ số lương; giữ chỉ đọc tên đăng nhập, mật khẩu (`••••••••`) và trạng thái; khi bấm `Lưu` và xác nhận ở popup `Xác nhận thay đổi`, frontend gọi các API riêng sẵn có (`PATCH /api/v1/nhan_vien/{id}` với ETag đã xem và `PUT /api/v1/nhan_vien/{id}/vai_tro` nối tiếp với ETag trả về từ request đầu) rồi mở popup `Lưu thành công` (`02-luu-thanh-cong.png`).
 - [x] **DET-08** — Chuẩn hóa hiển thị ngày `dd/MM/yyyy` (`formatDate`) và hệ số lương hai chữ số thập phân (`formatCoefficient`) theo ảnh ở chế độ xem chi tiết.
 - [x] **DET-09** — Giao diện giữ chặn khóa tài khoản quản trị viên và tài khoản của chính người đang đăng nhập; không cho đổi vai trò của tài khoản quản trị viên.
 
 ### 5.2. Khác biệt dữ liệu cần giữ rõ
 
 - [x] **DET-Q01** — Dev đã chốt giữ mã nhân viên do API trả về (`NV-000001`), không đổi thành `NV001` hoặc đổi validation (`doc/admin-ui-plan.md`).
-- [x] **DET-Q02** — Dev đã chốt hàng mật khẩu dùng dấu chấm cố định và giữ nút đặt lại mật khẩu bị vô hiệu hóa kèm lý do vì chưa có API (`FE-MISS-005`).
+- [x] **DET-Q02** — Dev đã chốt hàng mật khẩu dùng dấu chấm cố định chỉ đọc (`••••••••`) trong cả chế độ xem lẫn chỉnh sửa trực tiếp (`FE-MISS-005`, `doc/admin-ui-inline-edit-plan.md`).
 - [x] **DET-Q03** — Dev đã chốt dùng avatar chữ cái khi chưa có ảnh nhân viên (`FE-MISS-003`).
 - [x] **DET-Q04** — Hiển thị nút hành động “Vô hiệu hóa” / “Mở khóa” và badge trạng thái “Hoạt động” / “Bị khóa” dựa trên hai trạng thái `hoat_dong` và `bi_khoa` của API.
 
@@ -188,13 +188,13 @@ Bên dưới chia hai cột: thẻ nhận diện bên trái gồm avatar lớn, 
 
 Tiêu đề **Quản lý vai trò**; thanh công cụ có ô **Tìm vai trò** bên trái và nút **+ Tạo vai trò** bên phải. Bảng gồm **STT**, **Tên vai trò**, **Mô tả**, **Thao tác**. Cuối bảng có chọn số dòng/trang và dãy số trang như danh sách tài khoản.
 
-Ảnh minh họa Quản trị viên, Quản lý kho, Nhân viên, Cộng tác viên và Hỗ trợ kỹ thuật. Ba hàng đầu có nút “Xóa” vô hiệu hóa và icon thông tin; hai hàng sau có nút “Xóa” màu đỏ. Tất cả các hàng có nút “Sửa”.
+Ảnh minh họa Quản trị viên, Quản lý kho, Nhân viên, Cộng tác viên và Hỗ trợ kỹ thuật. Theo ảnh đối chiếu mới của dev (`doc/admin-ui-inline-edit-plan.md`), cả 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) đều có nút “Sửa” và nút “Xóa” ở trạng thái vô hiệu hóa (`disabled` + mờ).
 
 - [x] **ROL-01** — Có trang lấy danh sách vai trò thật từ API (`GET /api/v1/vai_tro`).
 - [x] **ROL-02** — Có tiêu đề “Quản lý vai trò”, ô tìm kiếm “Tìm vai trò”, nút “+ Tạo vai trò” và bố cục bảng đúng ảnh (`RolesPage.jsx`).
 - [ ] **ROL-03** — Đã dựng cột STT và Mô tả; do `VaiTroRead` chưa có trường `mo_ta` nên hiển thị giá trị thiếu `—` theo quy định project (`FE-MISS-002`).
 - [ ] **ROL-04** — Nút “+ Tạo vai trò” đã hiển thị đúng thiết kế nhưng chưa gắn hành động vì chưa có API tạo vai trò (`FE-MISS-002`).
-- [ ] **ROL-05** — Nút “Sửa” trên từng hàng đã hiển thị đúng thiết kế nhưng chưa gắn hành động vì chưa có API sửa vai trò (`FE-MISS-002`).
+- [x] **ROL-05** — Nút “Sửa” của 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) được vô hiệu hóa (`disabled` + `admin-action-muted`) theo mã vai trò đúng quyết định của dev (`doc/admin-ui-inline-edit-plan.md`); chưa có API sửa vai trò (`FE-MISS-002`).
 - [ ] **ROL-06** — Nút “Xóa” của 3 vai trò hệ thống được hiển thị ở trạng thái vô hiệu hóa kèm icon thông tin đúng như ảnh; chưa có API xóa vai trò (`FE-MISS-002`).
 - [x] **ROL-07** — Có tìm kiếm (Enter đưa về trang 1), selector số dòng/trang chỉ giữ mức `10` theo quyết định dev (`R2-04`) và thanh phân trang phía client trên danh sách vai trò đã tải đầy đủ.
 
@@ -221,7 +221,7 @@ Các mục tạo/sửa/xóa vai trò được ghi nhận là thành phần trong
 | Xác nhận | Nút cam bên phải |
 
 - [x] **CFM-01** — Có hộp thoại xác nhận dùng chung, tiêu đề, mô tả, nút X, Hủy và Xác nhận. Dùng `dialog.showModal()` trong `FeedbackProvider.jsx`.
-- [x] **CFM-02** — Đã áp dụng popup “Xác nhận thay đổi” (`Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?`) vào bước lưu chỉnh sửa thông tin tài khoản (`UsersPage.jsx`).
+- [x] **CFM-02** — Đã áp dụng popup “Xác nhận thay đổi” (`Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?`) trước khi gửi lưu chỉnh sửa trực tiếp, popup “Lưu thành công” (`02-luu-thanh-cong.png`, chỉ có nút `Đóng`) sau khi mọi request cập nhật thành công, và popup “Đăng xuất” rút gọn (`03-xac-nhan-dang-xuat.png`, `Bạn có muốn kết thúc phiên làm việc?`, ẩn thông báo tồn kho) khi bấm Đăng xuất.
 - [x] **CFM-03** — Trình bày nền tối, viền, bo góc, kích thước tương đối và hai nút `Hủy` / `Xác nhận` như ảnh (`ADM-05`).
 - [x] **CFM-04** — Cơ chế xác nhận chỉ gọi hành động ghi (`PATCH`) khi bấm Xác nhận; Hủy/X đóng mà không gọi API và giữ nguyên bản nháp đang sửa.
 - [x] **CFM-05** — Khi đang xác nhận, chặn gửi lặp, đổi nhãn thành “Đang xử lý…”, vô hiệu hóa nút xác nhận/hủy/đóng và không đóng bằng Escape.

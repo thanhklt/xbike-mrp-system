@@ -8,8 +8,8 @@ test("employee profile save confirms via ADM-05 popup and sends profile fields s
   await page.goto("/admin/tai-khoan/3");
   await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
   await page.getByLabel("Họ tên", { exact: true }).fill("Nhân viên cập nhật");
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
-  const dialog = page.locator("dialog.confirmation");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const dialog = page.locator("dialog.confirmation.confirmation-profile-save");
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Xác nhận thay đổi", exact: true })).toBeVisible();
   await expect(dialog).toContainText("Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?");
@@ -18,9 +18,15 @@ test("employee profile save confirms via ADM-05 popup and sends profile fields s
   await expect(page.getByLabel("Họ tên", { exact: true })).toHaveValue("Nhân viên cập nhật");
   expect(state.calls.filter((call) => call.method === "PATCH")).toHaveLength(0);
 
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect(page.locator(".toast")).toContainText("Đã lưu");
+  const successDialog = page.locator("dialog.confirmation-save-success");
+  await expect(successDialog).toBeVisible();
+  await expect(
+    successDialog.getByRole("heading", { name: "Lưu thành công", exact: true }),
+  ).toBeVisible();
+  await successDialog.getByRole("button", { name: "Đóng", exact: true }).click();
+  await expect(successDialog).toHaveCount(0);
   const patch = state.calls.find((call) => call.method === "PATCH" && call.path === "nhan_vien/3");
   expect(patch.body.ho_ten).toBe("Nhân viên cập nhật");
   expect(Object.keys(patch.body).sort()).toEqual(

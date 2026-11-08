@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Activity,
@@ -15,13 +15,16 @@ import {
   Pencil,
   Phone,
   Plus,
+  Save,
   Search,
   UserRound,
+  X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { API } from "../../lib/api/endpoints.js";
+import { ApiError } from "../../lib/api/contract.js";
 import { readResource, writeResource } from "../../lib/api/client.js";
-import { useChoices, useCollection, useDetail, useWrite } from "../../lib/api/useResources.js";
+import { useChoices, useCollection, useDetail } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
 import {
   ROLE_LABELS,
@@ -34,13 +37,42 @@ import {
 import { useAuth } from "./AuthProvider.jsx";
 import { AdminPagination } from "../../components/DataTable.jsx";
 import { RecordPanel } from "../../components/RecordPanel.jsx";
-import { AdminRoleBadge, AdminStatusBadge, Badge } from "../../components/Badge.jsx";
+import { AdminRoleBadge, AdminStatusBadge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
 import { Field } from "../../components/Field.jsx";
-import { ErrorNotice, QueryState, Notice } from "../../components/QueryState.jsx";
+import { ErrorNotice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
 
 const base = "/admin/tai-khoan";
+const PROFILE_FIELDS = [
+  "ho_ten",
+  "email",
+  "so_dien_thoai",
+  "ngay_sinh",
+  "ngay_vao_lam",
+  "he_so_luong",
+];
+
+function extractProfileDraft(record) {
+  return Object.fromEntries(PROFILE_FIELDS.map((field) => [field, record?.[field] ?? ""]));
+}
+
+function normalizeProfileField(field, value) {
+  const normalized = nullable(String(value ?? ""));
+  if (field === "he_so_luong" && normalized !== null) {
+    const num = Number(normalized);
+    return Number.isNaN(num) ? normalized : num;
+  }
+  return normalized;
+}
+
+function isProfileChanged(record, values) {
+  return PROFILE_FIELDS.some((field) => {
+    const left = normalizeProfileField(field, record?.[field]);
+    const right = normalizeProfileField(field, values[field]);
+    return left !== right;
+  });
+}
 
 function promptAccountStateChange({ record, etag, currentUserId, confirm, notify, queryClient, onError }) {
   if (!record) return;
@@ -48,9 +80,12 @@ function promptAccountStateChange({ record, etag, currentUserId, confirm, notify
     return;
   }
   if (!etag) {
-    onError?.({
-      message: "Chưa tải được phiên bản dữ liệu để xác nhận. Vui lòng tải lại.",
-    });
+    onError?.(
+      new ApiError("Chưa tải được phiên bản dữ liệu để xác nhận. Vui lòng tải lại.", {
+        status: 428,
+        code: "PRECONDITION_REQUIRED",
+      }),
+    );
     return;
   }
   const unlock = record.trang_thai === "bi_khoa";
@@ -369,26 +404,268 @@ function AccountListView({ id, roles }) {
 
 function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) {
   const { user } = useAuth();
-  const { confirm, notify } = useFeedback();
+  const { confirm, notify, showSuccess } = useFeedback();
   const queryClient = useQueryClient();
   const detail = useDetail(API.employees, id);
   const snapshot = detail.data;
   const record = snapshot?.data;
-  const lockedAdmin = record?.ma_vai_tro === "quan_tri_vien";
-  const canChangeState = record && !lockedAdmin && record.id !== user.id;
-  const isLocked = record?.trang_thai === "bi_khoa";
+
+  const currentIdRef = useRef(id);
+  const editBaselineRef = useRef(null);
+  const editInitializedRef = useRef(false);
+
+  if (currentIdRef.current !== id) {
+    currentIdRef.current = id;
+    editBaselineRef.current = null;
+    editInitializedRef.current = false;
+  }
+
+  if (!isEditing) {
+    editBaselineRef.current = snapshot;
+  } else if (!editBaselineRef.current && snapshot) {
+    editBaselineRef.current = snapshot;
+  }
+
+  const activeBaselineRecord = editBaselineRef.current?.data || record;
+  const lockedAdmin = activeBaselineRecord?.ma_vai_tro === "quan_tri_vien";
+  const canChangeState = activeBaselineRecord && !lockedAdmin && activeBaselineRecord.id !== user.id;
+  const isLocked = activeBaselineRecord?.trang_thai === "bi_khoa";
+
+  const [values, setValues] = useState(() => extractProfileDraft(activeBaselineRecord));
+  const [roleId, setRoleId] = useState(() => String(activeBaselineRecord?.vai_tro_id ?? ""));
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+
+  useEffect(() => {
+    if (!activeBaselineRecord) return;
+    if (!isEditing) {
+      editInitializedRef.current = false;
+      setValues(extractProfileDraft(activeBaselineRecord));
+      setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setSaveError(null);
+      return;
+    }
+    if (!editInitializedRef.current) {
+      editInitializedRef.current = true;
+      setValues(extractProfileDraft(activeBaselineRecord));
+      setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setSaveError(null);
+    }
+  }, [isEditing, activeBaselineRecord, id]);
+
+  function handleStartEdit() {
+    const base = editBaselineRef.current?.data || record;
+    if (base) {
+      setValues(extractProfileDraft(base));
+      setRoleId(String(base.vai_tro_id ?? ""));
+    }
+    setSaveError(null);
+    editInitializedRef.current = true;
+    onStartEdit();
+  }
+
+  function handleCancelEdit() {
+    const base = editBaselineRef.current?.data || record;
+    if (base) {
+      setValues(extractProfileDraft(base));
+      setRoleId(String(base.vai_tro_id ?? ""));
+    }
+    setSaveError(null);
+    editInitializedRef.current = false;
+    onCancelEdit();
+  }
 
   function handleToggleState() {
-    if (!record) return;
+    const target = editBaselineRef.current?.data || record;
+    if (!target) return;
     promptAccountStateChange({
-      record,
-      etag: snapshot?.etag,
+      record: target,
+      etag: editBaselineRef.current?.etag || snapshot?.etag,
       currentUserId: user.id,
       confirm,
       notify,
       queryClient,
+      onError: setSaveError,
     });
   }
+
+  function updateField(name) {
+    return (event) => {
+      setValues((previous) => ({ ...previous, [name]: event.target.value }));
+    };
+  }
+
+  function handleInlineSubmit(event) {
+    event.preventDefault();
+    const baseSnapshot = editBaselineRef.current || snapshot;
+    const baseRecord = baseSnapshot?.data;
+    if (!baseRecord || busy) return;
+
+    const profileDirty = isProfileChanged(baseRecord, values);
+    const parsedRoleId = Number(roleId);
+    const roleDirty =
+      !lockedAdmin &&
+      Boolean(roleId) &&
+      !Number.isNaN(parsedRoleId) &&
+      parsedRoleId !== Number(baseRecord.vai_tro_id);
+
+    if (!profileDirty && !roleDirty) {
+      setSaveError(null);
+      editInitializedRef.current = false;
+      onCancelEdit();
+      return;
+    }
+
+    const submission = {
+      id: baseRecord.id,
+      reviewedEtag: baseSnapshot.etag,
+      baselineRecord: baseRecord,
+      values: { ...values },
+      targetRoleId: parsedRoleId,
+      needProfileWrite: profileDirty,
+      needRoleWrite: roleDirty,
+    };
+
+    confirm({
+      title: "Xác nhận thay đổi",
+      description: "Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?",
+      label: "Xác nhận",
+      hideImpact: true,
+      variant: "profile-save",
+      onConfirm: async () => {
+        if (busy) return;
+        if (!submission.reviewedEtag) {
+          const missingEtagError = new ApiError(
+            "Chưa tải được phiên bản dữ liệu để xác nhận. Vui lòng tải lại.",
+            { status: 428, code: "PRECONDITION_REQUIRED" },
+          );
+          setSaveError(missingEtagError);
+          throw missingEtagError;
+        }
+
+        setBusy(true);
+        setSaveError(null);
+        let profileSavedInThisAttempt = false;
+        let workingRecord = submission.baselineRecord;
+        let currentEtag = submission.reviewedEtag;
+
+        const profilePayload = Object.fromEntries(
+          PROFILE_FIELDS.map((name) => [name, nullable(String(submission.values[name] ?? ""))]),
+        );
+
+        const updateCache = (nextSnap) => {
+          editBaselineRef.current = nextSnap;
+          const detailKey = [
+            "resources",
+            user?.id,
+            user?.ma_vai_tro,
+            `${API.employees}/${id}`,
+            {},
+          ];
+          queryClient.setQueryData(detailKey, nextSnap);
+        };
+
+        try {
+          if (submission.needProfileWrite) {
+            const profileRes = await writeResource({
+              path: `${API.employees}/${submission.id}`,
+              method: "patch",
+              body: profilePayload,
+              etag: currentEtag,
+            });
+            profileSavedInThisAttempt = true;
+            workingRecord = {
+              ...workingRecord,
+              ...(profileRes?.data || profilePayload),
+            };
+            currentEtag = profileRes?.etag;
+            const nextSnap = {
+              data: workingRecord,
+              meta: profileRes?.meta || baseSnapshot?.meta,
+              etag: currentEtag,
+            };
+            updateCache(nextSnap);
+            submission.needProfileWrite = false;
+            submission.reviewedEtag = currentEtag;
+            submission.baselineRecord = workingRecord;
+          }
+
+          if (submission.needRoleWrite) {
+            if (!currentEtag) {
+              throw new ApiError(
+                "Phản hồi lưu hồ sơ không trả về ETag mới để tiếp tục cập nhật vai trò.",
+                { status: 428, code: "PRECONDITION_REQUIRED" },
+              );
+            }
+            const roleRes = await writeResource({
+              path: `${API.employees}/${submission.id}/vai_tro`,
+              method: "put",
+              body: { vai_tro_id: submission.targetRoleId },
+              etag: currentEtag,
+            });
+            const matchedRole = (roles.data || []).find(
+              (item) => Number(item.id) === submission.targetRoleId,
+            );
+            workingRecord = {
+              ...workingRecord,
+              ...(roleRes?.data || {}),
+              vai_tro_id: submission.targetRoleId,
+              ma_vai_tro:
+                roleRes?.data?.ma_vai_tro ||
+                matchedRole?.ma_vai_tro ||
+                workingRecord.ma_vai_tro,
+            };
+            currentEtag = roleRes?.etag || currentEtag;
+            const nextSnap = {
+              data: workingRecord,
+              meta: roleRes?.meta || baseSnapshot?.meta,
+              etag: currentEtag,
+            };
+            updateCache(nextSnap);
+            submission.needRoleWrite = false;
+            submission.reviewedEtag = currentEtag;
+            submission.baselineRecord = workingRecord;
+          }
+
+          await queryClient.invalidateQueries({
+            queryKey: ["resources"],
+          });
+          editInitializedRef.current = false;
+          onCancelEdit();
+          showSuccess({ title: "Lưu thành công" });
+        } catch (failure) {
+          if (profileSavedInThisAttempt) {
+            await queryClient.invalidateQueries({
+              queryKey: ["resources", user?.id, user?.ma_vai_tro, API.employees],
+            });
+            const partialError = new ApiError(
+              `Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại: ${
+                failure?.message || "Không thể cập nhật vai trò."
+              }`,
+              {
+                status: failure?.status || 500,
+                code: failure?.code || "PARTIAL_SAVE_FAILED",
+                details: failure?.details || [],
+                requestId: failure?.requestId,
+                ticketId: failure?.ticketId,
+                uncertain: Boolean(failure?.uncertain),
+              },
+            );
+            setSaveError(partialError);
+            throw partialError;
+          }
+          setSaveError(failure);
+          throw failure;
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
+  }
+
+  const roleChoices = (roles.data || []).filter(
+    (role) => role.ma_vai_tro !== "quan_tri_vien" || lockedAdmin,
+  );
 
   return (
     <div className="admin-screen">
@@ -401,17 +678,34 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
           <ArrowLeft size={16} aria-hidden="true" />
           <span>Quay lại</span>
         </Link>
-        {record && (
+        {activeBaselineRecord && (
           <div className="admin-detail-actions">
             {isEditing ? (
-              <button type="button" className="admin-subbar-btn" onClick={onCancelEdit}>
-                <span>Xem chi tiết</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="admin-subbar-btn"
+                  onClick={handleCancelEdit}
+                  disabled={busy}
+                >
+                  <X size={15} aria-hidden="true" />
+                  <span>Hủy</span>
+                </button>
+                <button
+                  type="submit"
+                  form="account-inline-edit-form"
+                  className="btn btn-primary admin-primary-cta"
+                  disabled={busy}
+                >
+                  <Save size={15} aria-hidden="true" />
+                  <span>{busy ? "Đang lưu…" : "Lưu"}</span>
+                </button>
+              </>
             ) : (
               <button
                 type="button"
                 className="btn btn-primary admin-primary-cta"
-                onClick={onStartEdit}
+                onClick={handleStartEdit}
               >
                 <Pencil size={15} aria-hidden="true" />
                 <span>Chỉnh sửa</span>
@@ -422,7 +716,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
               className={`admin-subbar-btn ${
                 isLocked ? "admin-action-unlock" : "admin-action-danger"
               }`}
-              disabled={!canChangeState}
+              disabled={!canChangeState || busy}
               onClick={handleToggleState}
             >
               {isLocked ? (
@@ -437,18 +731,18 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       </div>
 
       <QueryState query={detail}>
-        {record && (
-          <div className="admin-detail-grid" key={`${id}-${snapshot.etag || "read"}`}>
+        {activeBaselineRecord && (
+          <div className="admin-detail-grid" key={id}>
             <section className="admin-surface admin-identity-card">
               <div className="admin-identity-avatar" aria-hidden="true">
-                {initials(record.ho_ten || record.ten_dang_nhap)}
+                {initials(activeBaselineRecord.ho_ten || activeBaselineRecord.ten_dang_nhap)}
               </div>
-              <h2 className="admin-identity-name">{record.ho_ten || "Chưa có họ tên"}</h2>
-              <p className="admin-identity-code">{record.ma_nhan_vien}</p>
+              <h2 className="admin-identity-name">{activeBaselineRecord.ho_ten || "Chưa có họ tên"}</h2>
+              <p className="admin-identity-code">{activeBaselineRecord.ma_nhan_vien}</p>
               <hr className="admin-identity-divider" />
               <div className="admin-identity-badges">
-                <AdminRoleBadge role={record.ma_vai_tro} />
-                <AdminStatusBadge status={record.trang_thai} />
+                <AdminRoleBadge role={activeBaselineRecord.ma_vai_tro} />
+                <AdminStatusBadge status={activeBaselineRecord.trang_thai} />
               </div>
             </section>
 
@@ -458,54 +752,161 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
                 <h2>Thông tin tài khoản</h2>
               </div>
 
+              <ErrorNotice error={saveError} />
+
               {isEditing ? (
-                <QueryState query={roles}>
-                  <EmployeeForm
-                    snapshot={snapshot}
-                    roles={roles.data || []}
-                    onCancel={onCancelEdit}
-                    onSaved={onCancelEdit}
-                  />
-                </QueryState>
+                <form id="account-inline-edit-form" onSubmit={handleInlineSubmit}>
+                  <dl className="admin-detail-rows is-editing">
+                    <InlineEditRow icon={UserRound} label="Họ tên" htmlFor="inline-ho-ten">
+                      <input
+                        id="inline-ho-ten"
+                        className="admin-inline-input"
+                        type="text"
+                        value={values.ho_ten}
+                        onChange={updateField("ho_ten")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <InlineEditRow icon={Calendar} label="Ngày sinh" htmlFor="inline-ngay-sinh">
+                      <input
+                        id="inline-ngay-sinh"
+                        className="admin-inline-input"
+                        type="date"
+                        value={values.ngay_sinh}
+                        onChange={updateField("ngay_sinh")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <InlineEditRow
+                      icon={Phone}
+                      label="Số điện thoại"
+                      htmlFor="inline-so-dien-thoai"
+                    >
+                      <input
+                        id="inline-so-dien-thoai"
+                        className="admin-inline-input"
+                        type="tel"
+                        value={values.so_dien_thoai}
+                        onChange={updateField("so_dien_thoai")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <InlineEditRow icon={Mail} label="Email" htmlFor="inline-email">
+                      <input
+                        id="inline-email"
+                        className="admin-inline-input"
+                        type="email"
+                        value={values.email}
+                        onChange={updateField("email")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <DetailRow
+                      icon={UserRound}
+                      label="Tên đăng nhập"
+                      value={activeBaselineRecord.ten_dang_nhap || "—"}
+                      readOnly
+                    />
+                    <DetailRow icon={KeyRound} label="Mật khẩu" value="••••••••" readOnly />
+                    <InlineEditRow icon={Layers} label="Vai trò" htmlFor="inline-vai-tro">
+                      <select
+                        id="inline-vai-tro"
+                        className="admin-inline-select"
+                        value={roleId}
+                        onChange={(event) => setRoleId(event.target.value)}
+                        disabled={lockedAdmin || busy || roles.isLoading}
+                      >
+                        {roleChoices.length ? (
+                          roleChoices.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {ROLE_LABELS[role.ma_vai_tro] || role.ten_vai_tro}
+                            </option>
+                          ))
+                        ) : (
+                          <option value={activeBaselineRecord.vai_tro_id ?? ""}>
+                            {ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"}
+                          </option>
+                        )}
+                      </select>
+                    </InlineEditRow>
+                    <InlineEditRow
+                      icon={Calendar}
+                      label="Ngày vào làm"
+                      htmlFor="inline-ngay-vao-lam"
+                    >
+                      <input
+                        id="inline-ngay-vao-lam"
+                        className="admin-inline-input"
+                        type="date"
+                        value={values.ngay_vao_lam}
+                        onChange={updateField("ngay_vao_lam")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <InlineEditRow
+                      icon={CirclePercent}
+                      label="Hệ số lương"
+                      htmlFor="inline-he-so-luong"
+                    >
+                      <input
+                        id="inline-he-so-luong"
+                        className="admin-inline-input"
+                        type="number"
+                        min="0"
+                        max="999.99"
+                        step="0.01"
+                        value={values.he_so_luong}
+                        onChange={updateField("he_so_luong")}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
+                    <DetailRow
+                      icon={Activity}
+                      label="Trạng thái"
+                      value={<AdminStatusBadge status={activeBaselineRecord.trang_thai} />}
+                      plain
+                    />
+                  </dl>
+                </form>
               ) : (
                 <dl className="admin-detail-rows">
-                  <DetailRow icon={UserRound} label="Họ tên" value={record.ho_ten || "—"} />
+                  <DetailRow icon={UserRound} label="Họ tên" value={activeBaselineRecord.ho_ten || "—"} />
                   <DetailRow
                     icon={Calendar}
                     label="Ngày sinh"
-                    value={formatDate(record.ngay_sinh)}
+                    value={formatDate(activeBaselineRecord.ngay_sinh)}
                   />
                   <DetailRow
                     icon={Phone}
                     label="Số điện thoại"
-                    value={record.so_dien_thoai || "—"}
+                    value={activeBaselineRecord.so_dien_thoai || "—"}
                   />
-                  <DetailRow icon={Mail} label="Email" value={record.email || "—"} />
+                  <DetailRow icon={Mail} label="Email" value={activeBaselineRecord.email || "—"} />
                   <DetailRow
                     icon={UserRound}
                     label="Tên đăng nhập"
-                    value={record.ten_dang_nhap || "—"}
+                    value={activeBaselineRecord.ten_dang_nhap || "—"}
                   />
                   <DetailRow icon={KeyRound} label="Mật khẩu" value="••••••••" />
                   <DetailRow
                     icon={Layers}
                     label="Vai trò"
-                    value={ROLE_LABELS[record.ma_vai_tro] || record.ma_vai_tro || "—"}
+                    value={ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"}
                   />
                   <DetailRow
                     icon={Calendar}
                     label="Ngày vào làm"
-                    value={formatDate(record.ngay_vao_lam)}
+                    value={formatDate(activeBaselineRecord.ngay_vao_lam)}
                   />
                   <DetailRow
                     icon={CirclePercent}
                     label="Hệ số lương"
-                    value={formatCoefficient(record.he_so_luong)}
+                    value={formatCoefficient(activeBaselineRecord.he_so_luong)}
                   />
                   <DetailRow
                     icon={Activity}
                     label="Trạng thái"
-                    value={<AdminStatusBadge status={record.trang_thai} />}
+                    value={<AdminStatusBadge status={activeBaselineRecord.trang_thai} />}
                     plain
                   />
                 </dl>
@@ -518,41 +919,50 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   );
 }
 
-function DetailRow({ icon, label, value, plain = false }) {
+function DetailRow({ icon, label, value, plain = false, readOnly = false }) {
   const IconComponent = icon;
+  const ddClass = [plain ? "is-plain" : "", readOnly ? "is-readonly" : ""]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div className="admin-detail-row">
       <dt>
         <IconComponent size={18} aria-hidden="true" />
         <span>{label}</span>
       </dt>
-      <dd className={plain ? "is-plain" : ""}>{value}</dd>
+      <dd className={ddClass}>{value}</dd>
     </div>
   );
 }
 
-function EmployeeForm({ snapshot, roles, onCancel, onSaved }) {
-  const record = snapshot?.data;
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const { confirm, notify } = useFeedback();
-  const queryClient = useQueryClient();
-  const action = useWrite();
-  const { save, busy, error } = useSave();
-  const initial = Object.fromEntries(
-    ["ho_ten", "email", "so_dien_thoai", "ngay_sinh", "ngay_vao_lam", "he_so_luong"].map(
-      (field) => [field, record?.[field] ?? ""],
-    ),
+function InlineEditRow({ icon, label, htmlFor, children }) {
+  const IconComponent = icon;
+  return (
+    <div className="admin-detail-row is-editable">
+      <dt>
+        <IconComponent size={18} aria-hidden="true" />
+        <label htmlFor={htmlFor}>{label}</label>
+      </dt>
+      <dd className="is-input">{children}</dd>
+    </div>
   );
+}
+
+function EmployeeForm({ snapshot, roles }) {
+  const navigate = useNavigate();
+  const { save, busy, error } = useSave();
   const [values, setValues] = useState({
-    ...initial,
+    ho_ten: "",
+    email: "",
+    so_dien_thoai: "",
+    ngay_sinh: "",
+    ngay_vao_lam: "",
+    he_so_luong: "",
     ten_dang_nhap: "",
     ma_nhan_vien: "",
     mat_khau: "",
     vai_tro_id: "",
   });
-  const [roleId, setRoleId] = useState(record?.vai_tro_id || "");
-  const lockedAdmin = record?.ma_vai_tro === "quan_tri_vien";
   const editableRoles = roles.filter((role) => role.ma_vai_tro !== "quan_tri_vien");
   const field = (name) => ({
     value: values[name],
@@ -562,30 +972,8 @@ function EmployeeForm({ snapshot, roles, onCancel, onSaved }) {
   function submit(event) {
     event.preventDefault();
     const profile = Object.fromEntries(
-      Object.keys(initial).map((name) => [name, nullable(String(values[name]))]),
+      PROFILE_FIELDS.map((name) => [name, nullable(String(values[name]))]),
     );
-    if (record) {
-      confirm({
-        title: "Xác nhận thay đổi",
-        description: "Bạn có chắc chắn muốn thay đổi thông tin tài khoản không?",
-        label: "Xác nhận",
-        hideImpact: true,
-        variant: "profile-save",
-        onConfirm: async () => {
-          await action.mutateAsync({
-            path: `${API.employees}/${record.id}`,
-            method: "patch",
-            body: profile,
-            etag: snapshot?.etag,
-            versioned: true,
-          });
-          notify("Đã lưu thay đổi.");
-          onSaved?.();
-        },
-      });
-      return;
-    }
-
     const body = {
       ...profile,
       ten_dang_nhap: values.ten_dang_nhap.trim(),
@@ -605,64 +993,43 @@ function EmployeeForm({ snapshot, roles, onCancel, onSaved }) {
     );
   }
 
-  function changeState() {
-    promptAccountStateChange({
-      record,
-      etag: snapshot?.etag,
-      currentUserId: user.id,
-      confirm,
-      notify,
-      queryClient,
-    });
-  }
-
   return (
     <div className="stack">
-      {record && (
-        <div className="actions">
-          <strong>
-            {record.ma_nhan_vien} · {record.ten_dang_nhap}
-          </strong>
-          <Badge status={record.trang_thai} />
-        </div>
-      )}
       <form onSubmit={submit} className="stack">
         <ErrorNotice error={error} />
-        {!record && (
-          <div className="form-grid">
-            <Field
-              label="Tên đăng nhập"
-              required
-              maxLength={255}
-              autoComplete="off"
-              {...field("ten_dang_nhap")}
-            />
-            <Field
-              label="Mã nhân viên"
-              placeholder="NV-000001"
-              pattern="NV-[0-9]{6}"
-              required
-              {...field("ma_nhan_vien")}
-            />
-            <Field
-              label="Mật khẩu ban đầu"
-              type="password"
-              minLength={8}
-              maxLength={1024}
-              required
-              autoComplete="new-password"
-              {...field("mat_khau")}
-            />
-            <Field as="select" label="Vai trò" required {...field("vai_tro_id")}>
-              <option value="">Chọn vai trò</option>
-              {editableRoles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.ten_vai_tro}
-                </option>
-              ))}
-            </Field>
-          </div>
-        )}
+        <div className="form-grid">
+          <Field
+            label="Tên đăng nhập"
+            required
+            maxLength={255}
+            autoComplete="off"
+            {...field("ten_dang_nhap")}
+          />
+          <Field
+            label="Mã nhân viên"
+            placeholder="NV-000001"
+            pattern="NV-[0-9]{6}"
+            required
+            {...field("ma_nhan_vien")}
+          />
+          <Field
+            label="Mật khẩu ban đầu"
+            type="password"
+            minLength={8}
+            maxLength={1024}
+            required
+            autoComplete="new-password"
+            {...field("mat_khau")}
+          />
+          <Field as="select" label="Vai trò" required {...field("vai_tro_id")}>
+            <option value="">Chọn vai trò</option>
+            {editableRoles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.ten_vai_tro}
+              </option>
+            ))}
+          </Field>
+        </div>
         <div className="form-grid">
           <Field label="Họ tên" {...field("ho_ten")} />
           <Field label="Email" type="email" {...field("email")} />
@@ -679,82 +1046,12 @@ function EmployeeForm({ snapshot, roles, onCancel, onSaved }) {
           />
         </div>
         <div className="actions actions-end">
-          {onCancel ? (
-            <Button variant="secondary" onClick={onCancel}>
-              Hủy
-            </Button>
-          ) : (
-            <Link to={base}>Hủy</Link>
-          )}
+          <Link to={base}>Hủy</Link>
           <Button type="submit" disabled={busy}>
-            {busy ? "Đang lưu…" : record ? "Lưu hồ sơ" : "Tạo tài khoản"}
+            {busy ? "Đang lưu…" : "Tạo tài khoản"}
           </Button>
         </div>
       </form>
-      {record && (
-        <>
-          <section className="form-section stack">
-            <h3>Phân quyền</h3>
-            <Field
-              as="select"
-              label="Vai trò"
-              disabled={lockedAdmin}
-              value={roleId}
-              onChange={(event) => setRoleId(event.target.value)}
-            >
-              {roles
-                .filter((role) => role.ma_vai_tro !== "quan_tri_vien" || lockedAdmin)
-                .map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.ten_vai_tro}
-                  </option>
-                ))}
-            </Field>
-            <Button
-              variant="secondary"
-              disabled={lockedAdmin || Number(roleId) === record.vai_tro_id}
-              onClick={() =>
-                confirm({
-                  title: "Đổi vai trò nhân viên",
-                  description: `Đổi vai trò cho ${record.ma_nhan_vien}. Quyền có hiệu lực ở request tiếp theo.`,
-                  onConfirm: async () => {
-                    await action.mutateAsync({
-                      path: `${API.employees}/${record.id}/vai_tro`,
-                      method: "put",
-                      body: { vai_tro_id: Number(roleId) },
-                      etag: snapshot.etag,
-                    });
-                    notify("Đã cập nhật vai trò.");
-                  },
-                })
-              }
-            >
-              Cập nhật vai trò
-            </Button>
-            {lockedAdmin && (
-              <Notice>Tài khoản quản trị viên duy nhất không thể bị hạ quyền hoặc khóa.</Notice>
-            )}
-          </section>
-          <section className="form-section stack">
-            <h3>Trạng thái tài khoản</h3>
-            <div className="actions">
-              <Button
-                variant="secondary"
-                disabled={lockedAdmin || record.id === user.id}
-                onClick={changeState}
-              >
-                {record.trang_thai === "bi_khoa" ? "Mở khóa tài khoản…" : "Khóa tài khoản…"}
-              </Button>
-              <Button variant="secondary" reason="Chưa có API đặt lại mật khẩu nhân viên.">
-                Đặt lại mật khẩu…
-              </Button>
-            </div>
-            <small className="muted">
-              Khóa thay cho xóa vĩnh viễn; giữ nguyên mọi tham chiếu lịch sử.
-            </small>
-          </section>
-        </>
-      )}
     </div>
   );
 }

@@ -207,7 +207,7 @@ test("R2-01 list row lock/unlock fetches snapshot before confirmation, uses revi
   ).toHaveLength(0);
 });
 
-test("ADM-03 detail view and ADM-05 confirmation popup preserve safety policies, masked password, draft on cancel/close, error handling, and prevent duplicate submits", async ({
+test("ADM-03 detail view, inline edit, and ADM-05 confirmation/success popups preserve safety policies, masked password, draft on cancel/close, error handling, and prevent duplicate submits", async ({
   page,
 }) => {
   let releasePatch;
@@ -268,10 +268,39 @@ test("ADM-03 detail view and ADM-05 confirmation popup preserve safety policies,
   await page.screenshot({ path: "test-results/adm-03-detail-1672x941.png" });
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Open edit mode and trigger ADM-05 confirmation popup
+  // Open inline edit mode and verify 10 rows remain in place with no old form sections
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await expect(page.locator(".admin-detail-row")).toHaveCount(10);
+  await expect(page.getByRole("button", { name: "Lưu hồ sơ" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Phân quyền" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Trạng thái tài khoản" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Đặt lại mật khẩu…" })).toHaveCount(0);
+  await expect(page.locator(".admin-detail-row").nth(4).locator("dd")).toHaveText("manager");
+  await expect(page.locator(".admin-detail-row").nth(4).locator("input")).toHaveCount(0);
+  await expect(page.locator(".admin-detail-row").nth(5).locator("dd")).toHaveText("••••••••");
+  await expect(page.locator(".admin-detail-row").nth(5).locator("input")).toHaveCount(0);
+  await expect(page.locator(".admin-detail-row").nth(9).locator("input, select")).toHaveCount(0);
+
+  await page.screenshot({ path: "test-results/adm-03-inline-edit-1440x900.png" });
+  await page.setViewportSize({ width: 1670, height: 941 });
+  await page.screenshot({ path: "test-results/adm-03-inline-edit-1670x941.png" });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/adm-03-inline-edit-375x812.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Top-bar Hủy discards draft and returns to view mode without API calls
+  await page.getByLabel("Họ tên", { exact: true }).fill("Bản nháp hủy");
+  await page.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Chỉnh sửa", exact: true })).toBeVisible();
+  await expect(page.locator(".admin-detail-row").first().locator("dd")).toHaveText("Nguyễn Văn An");
+  expect(
+    state.calls.filter((call) => call.path === "nhan_vien/2" && call.method === "PATCH"),
+  ).toHaveLength(0);
+
+  // Re-open edit mode and trigger ADM-05 confirmation popup
   await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
   await page.getByLabel("Họ tên", { exact: true }).fill("Nguyễn Văn An Mới");
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   const dialog = page.locator("dialog.confirmation.confirmation-profile-save");
   await expect(dialog).toBeVisible();
 
@@ -289,7 +318,7 @@ test("ADM-03 detail view and ADM-05 confirmation popup preserve safety policies,
   ).toHaveLength(0);
 
   // Close (X) button closes dialog without PATCH and keeps draft
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Đóng xác nhận", exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -298,17 +327,17 @@ test("ADM-03 detail view and ADM-05 confirmation popup preserve safety policies,
     state.calls.filter((call) => call.path === "nhan_vien/2" && call.method === "PATCH"),
   ).toHaveLength(0);
 
-  // API error keeps dialog open, shows alert, and never shows success toast
+  // API error keeps dialog open, shows alert, and never shows success popup
   failNextPatch = true;
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText("Hồ sơ nhân viên không hợp lệ");
-  await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
   await dialog.getByRole("button", { name: "Hủy", exact: true }).click();
 
-  // Confirm and verify duplicate submit protection
-  await page.getByRole("button", { name: "Lưu hồ sơ", exact: true }).click();
+  // Confirm and verify duplicate submit protection + Save Success popup
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Đang xử lý…" })).toBeDisabled();
@@ -319,18 +348,170 @@ test("ADM-03 detail view and ADM-05 confirmation popup preserve safety policies,
     );
   releasePatch();
   await expect(dialog).toHaveCount(0);
+
+  const successDialog = page.locator("dialog.confirmation-save-success");
+  await expect(successDialog).toBeVisible();
+  await expect(
+    successDialog.getByRole("heading", { name: "Lưu thành công", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/adm-05-save-success-1440x900.png" });
+  await page.setViewportSize({ width: 1670, height: 941 });
+  await page.screenshot({ path: "test-results/adm-05-save-success-1670x941.png" });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/adm-05-save-success-375x812.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await successDialog.getByRole("button", { name: "Đóng", exact: true }).click();
+  await expect(successDialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Chỉnh sửa", exact: true })).toBeVisible();
+
   expect(
     state.calls.filter((call) => call.path === "nhan_vien/2" && call.method === "PATCH"),
   ).toHaveLength(2); // 1 failed + 1 succeeded
+  expect(
+    state.calls.filter((call) => call.path === "nhan_vien/2/vai_tro" && call.method === "PUT"),
+  ).toHaveLength(0);
 
   // Admin account (id=1) cannot be locked or downgraded
   await page.goto("/admin/tai-khoan/1");
   await expect(page.getByRole("button", { name: "Vô hiệu hóa", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Cập nhật vai trò", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Vai trò", { exact: true })).toBeDisabled();
 });
 
-test("ADM-04 roles management displays real API roles, missing description placeholder, only 10 rows per page option, and unwired buttons make no requests", async ({
+test("ADM-03 inline edit supports role-only write, combined profile+role ETag chaining, partial-save failure recovery without re-sending saved profile, and 412 without GET retry", async ({
+  page,
+}) => {
+  let failRoleOnce = false;
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: (call) => {
+      if (failRoleOnce && call.path === "nhan_vien/3/vai_tro" && call.method === "PUT") {
+        failRoleOnce = false;
+        return {
+          status: 500,
+          json: { error: { message: "Lỗi máy chủ khi đổi vai trò" } },
+        };
+      }
+      return null;
+    },
+  });
+
+  // 1. Direct URL ?mode=edit & Role-only change sends ONLY PUT /vai_tro
+  await page.goto("/admin/tai-khoan/3?mode=edit");
+  await expect(page.getByLabel("Vai trò", { exact: true })).toHaveValue("3");
+  await page.getByLabel("Vai trò", { exact: true }).selectOption("2");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const confirmDialog = page.locator("dialog.confirmation.confirmation-profile-save");
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+
+  const successDialog = page.locator("dialog.confirmation-save-success");
+  await expect(successDialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(successDialog).toHaveCount(0);
+
+  expect(
+    state.calls.filter((call) => call.path === "nhan_vien/3" && call.method === "PATCH"),
+  ).toHaveLength(0);
+  const rolePutsAfterRoleOnly = state.calls.filter(
+    (call) => call.path === "nhan_vien/3/vai_tro" && call.method === "PUT",
+  );
+  expect(rolePutsAfterRoleOnly).toHaveLength(1);
+  expect(rolePutsAfterRoleOnly[0].headers["if-match"]).toBe('"v1"');
+  expect(rolePutsAfterRoleOnly[0].body).toEqual({ vai_tro_id: 2 });
+
+  // 2. Partial save: profile PATCH succeeds ("v2" -> "v3"), role PUT fails -> reports partial save, does NOT show "Lưu thành công", retry sends ONLY PUT /vai_tro with "v3"
+  failRoleOnce = true;
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await page.getByLabel("Họ tên", { exact: true }).fill("Đặng Quốc Bình Mới");
+  await page.getByLabel("Vai trò", { exact: true }).selectOption("3");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+
+  await expect(confirmDialog.getByRole("alert")).toContainText(
+    "Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại: Lỗi máy chủ khi đổi vai trò",
+  );
+  await expect(successDialog).toHaveCount(0);
+  await confirmDialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại",
+  );
+
+  // Retry clicking Lưu -> only PUT /vai_tro is sent with If-Match: "v3"
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(successDialog).toBeVisible();
+  await successDialog.getByRole("button", { name: "Đóng", exact: true }).click();
+
+  const patches = state.calls.filter(
+    (call) => call.path === "nhan_vien/3" && call.method === "PATCH",
+  );
+  expect(patches).toHaveLength(1);
+  expect(patches[0].headers["if-match"]).toBe('"v2"');
+
+  const rolePuts = state.calls.filter(
+    (call) => call.path === "nhan_vien/3/vai_tro" && call.method === "PUT",
+  );
+  expect(rolePuts).toHaveLength(3); // 1 role-only + 1 failed + 1 retry succeeded
+  expect(rolePuts[1].headers["if-match"]).toBe('"v3"');
+  expect(rolePuts[2].headers["if-match"]).toBe('"v3"');
+
+  // 3. Combined profile + role save in one pass chains ETag ("v4" -> "v5")
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await page.getByLabel("Số điện thoại", { exact: true }).fill("0912345678");
+  await page.getByLabel("Vai trò", { exact: true }).selectOption("2");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(successDialog).toBeVisible();
+  await successDialog.getByRole("button", { name: "Đóng", exact: true }).click();
+
+  const latestPatch = state.calls
+    .filter((call) => call.path === "nhan_vien/3" && call.method === "PATCH")
+    .at(-1);
+  const latestPut = state.calls
+    .filter((call) => call.path === "nhan_vien/3/vai_tro" && call.method === "PUT")
+    .at(-1);
+  expect(latestPatch.headers["if-match"]).toBe('"v4"');
+  expect(latestPut.headers["if-match"]).toBe('"v5"');
+
+  // 4. Stale ETag (412) on first write aborts second write and does not GET+retry
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await page.getByLabel("Họ tên", { exact: true }).fill("Bình Xung Đột");
+  await page.getByLabel("Vai trò", { exact: true }).selectOption("3");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const getsBefore412 = state.calls.filter(
+    (call) => call.path === "nhan_vien/3" && call.method === "GET",
+  ).length;
+  const putsBefore412 = state.calls.filter(
+    (call) => call.path === "nhan_vien/3/vai_tro" && call.method === "PUT",
+  ).length;
+  state.versions["nhan_vien/3"] = 99;
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(confirmDialog.getByRole("alert")).toContainText("Dữ liệu đã thay đổi");
+  expect(
+    state.calls.filter((call) => call.path === "nhan_vien/3" && call.method === "GET").length,
+  ).toBe(getsBefore412);
+  expect(
+    state.calls.filter((call) => call.path === "nhan_vien/3/vai_tro" && call.method === "PUT")
+      .length,
+  ).toBe(putsBefore412);
+  await confirmDialog.getByRole("button", { name: "Hủy", exact: true }).click();
+
+  // 5. Creating a new account at /admin/tai-khoan/moi still works
+  await page.goto("/admin/tai-khoan/moi");
+  const createDialog = page.locator("dialog.record-dialog");
+  await expect(createDialog).toBeVisible();
+  await createDialog.getByLabel("Tên đăng nhập", { exact: true }).fill("new_staff");
+  await createDialog.getByLabel("Mã nhân viên", { exact: true }).fill("NV-000099");
+  await createDialog.getByLabel("Mật khẩu ban đầu", { exact: true }).fill("secret123");
+  await createDialog.getByLabel("Vai trò", { exact: true }).selectOption("3");
+  await createDialog.getByLabel("Họ tên", { exact: true }).fill("Nhân Viên Mới");
+  await createDialog.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/tai-khoan\/4$/);
+});
+
+test("ADM-04 roles management disables Sửa and Xóa for all 3 system roles by role code, preserves disabled state under search, and simplified logout popup hides inventory impact notice", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -349,6 +530,15 @@ test("ADM-04 roles management displays real API roles, missing description place
     .evaluateAll((nodes) => nodes.map((node) => node.value));
   expect(pageSizeOptions).toEqual(["10"]);
 
+  // Both Sửa and Xóa buttons for the 3 system roles are disabled by role code
+  for (const roleName of ["Quản trị viên", "Quản lý kho", "Nhân viên"]) {
+    const editBtn = page.getByRole("button", { name: `Sửa ${roleName}`, exact: true });
+    const deleteBtn = page.getByRole("button", { name: `Xóa ${roleName}`, exact: true });
+    await expect(editBtn).toBeDisabled();
+    await expect(editBtn).toHaveClass(/admin-action-muted/);
+    await expect(deleteBtn).toBeDisabled();
+  }
+
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
   ).toBeTruthy();
@@ -356,24 +546,229 @@ test("ADM-04 roles management displays real API roles, missing description place
   await page.screenshot({ path: "test-results/adm-04-roles-1440x900.png" });
   await page.setViewportSize({ width: 1670, height: 941 });
   await page.screenshot({ path: "test-results/adm-04-roles-1670x941.png" });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/adm-04-roles-375x812.png" });
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Delete buttons for the 3 system roles are disabled as in design
-  await expect(page.getByRole("button", { name: "Xóa Quản trị viên" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Xóa Quản lý kho" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Xóa Nhân viên" })).toBeDisabled();
-
-  // Unwired buttons (+ Tạo vai trò, Sửa) remain enabled and make no API calls or fake toasts
+  // Unwired "+ Tạo vai trò" button remains enabled and makes no API calls or fake toasts
   const beforeCalls = state.calls.length;
   await page.getByRole("button", { name: "Tạo vai trò", exact: true }).click();
-  await page.getByRole("button", { name: "Sửa Quản trị viên", exact: true }).click();
   expect(state.calls.length).toBe(beforeCalls);
   await expect(page.locator(".toast")).toHaveCount(0);
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 
-  // Client-side search on Enter
+  // Client-side search on Enter: "Nhân viên" becomes row 1 and its Sửa button remains disabled
   const search = page.getByLabel("Tìm vai trò", { exact: true });
-  await search.fill("Quản lý kho");
+  await search.fill("Nhân viên");
   await search.press("Enter");
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Sửa Nhân viên", exact: true })).toBeDisabled();
+
+  // Simplified logout confirmation popup (03-xac-nhan-dang-xuat.png)
+  async function triggerLogout() {
+    const userMenu = page.locator(".user-menu");
+    const isOpen = await userMenu.evaluate((el) => el.hasAttribute("open"));
+    if (!isOpen) {
+      await page.locator(".user-menu summary").click();
+    }
+    await page.getByRole("button", { name: "Đăng xuất", exact: true }).click();
+  }
+
+  await triggerLogout();
+  const logoutDialog = page.locator("dialog.confirmation.confirmation-logout");
+  await expect(logoutDialog).toBeVisible();
+  await expect(logoutDialog.getByRole("heading", { name: "Đăng xuất", exact: true })).toBeVisible();
+  await expect(logoutDialog).toContainText("Bạn có muốn kết thúc phiên làm việc?");
+  await expect(logoutDialog.locator(".notice")).toHaveCount(0);
+  await expect(logoutDialog).not.toContainText("Thao tác này không làm thay đổi tồn kho");
+
+  await page.screenshot({ path: "test-results/adm-05-logout-1440x900.png" });
+  await page.setViewportSize({ width: 1670, height: 941 });
+  await page.screenshot({ path: "test-results/adm-05-logout-1670x941.png" });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/adm-05-logout-375x812.png" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Cancel and close (X) keep the user logged in
+  await logoutDialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(logoutDialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/admin\/vai-tro$/);
+
+  await triggerLogout();
+  await expect(logoutDialog).toBeVisible();
+  await logoutDialog.getByRole("button", { name: "Đóng xác nhận", exact: true }).click();
+  await expect(logoutDialog).toHaveCount(0);
+  await expect(page).toHaveURL(/\/admin\/vai-tro$/);
+
+  // Confirm logs out to /dang-nhap
+  await triggerLogout();
+  await logoutDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(page).toHaveURL(/\/dang-nhap$/);
+});
+
+test("ADM-03 regression: background refetch while confirm is open does not upgrade reviewed ETag or overwrite external changes", async ({
+  page,
+}) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan/2?mode=edit");
+  await expect(page.locator("#inline-ho-ten")).toHaveValue(state.resources.nhan_vien[1].ho_ten);
+
+  await page.locator("#inline-ho-ten").fill("Reviewed draft");
+  await page.locator(".admin-detail-actions button[type=submit]").click();
+  const confirmDialog = page.locator("dialog.confirmation-profile-save[open]");
+  await expect(confirmDialog).toBeVisible();
+
+  // External change bumps server version to 2 and modifies phone
+  state.resources.nhan_vien[1].so_dien_thoai = "0999999999";
+  state.versions["nhan_vien/2"] = 2;
+
+  // Background refetch triggers while confirmation popup is open
+  await page.evaluate(async () => {
+    const { queryClient } = await import("/src/lib/query-client.js");
+    await queryClient.invalidateQueries({ queryKey: ["resources"] });
+  });
+
+  // Confirming must send If-Match: "v1" (the reviewed ETag), NOT "v2"
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(confirmDialog.getByRole("alert")).toContainText("Dữ liệu đã thay đổi");
+  await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
+
+  const patch = state.calls.find((c) => c.method === "PATCH" && c.path === "nhan_vien/2");
+  expect(patch.headers["if-match"]).toBe('"v1"');
+  expect(state.resources.nhan_vien[1].so_dien_thoai).toBe("0999999999");
+});
+
+test("ADM-03 regression: partial save then cancel reflects saved baseline in view mode and subsequent edit session", async ({
+  page,
+}) => {
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: (call) =>
+      call.path === "nhan_vien/3/vai_tro" && call.method === "PUT"
+        ? { status: 500, json: { error: { message: "Role update failed" } } }
+        : null,
+  });
+
+  await page.goto("/admin/tai-khoan/3?mode=edit");
+  const originalName = state.resources.nhan_vien[2].ho_ten;
+  await expect(page.locator("#inline-ho-ten")).toHaveValue(originalName);
+
+  await page.locator("#inline-ho-ten").fill("Saved profile");
+  await page.locator("#inline-vai-tro").selectOption("2");
+  await page.locator(".admin-detail-actions button[type=submit]").click();
+
+  const confirmDialog = page.locator("dialog.confirmation-profile-save[open]");
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+
+  await expect(confirmDialog.getByRole("alert")).toContainText(
+    "Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại: Role update failed",
+  );
+  expect(state.resources.nhan_vien[2].ho_ten).toBe("Saved profile");
+
+  // Close confirmation, then cancel inline edit
+  await confirmDialog.getByRole("button", { name: "Đóng xác nhận", exact: true }).click();
+  await page.getByRole("button", { name: "Hủy", exact: true }).click();
+
+  // View mode must truthfully display "Saved profile" (not stale original name)
+  await expect(page.locator(".admin-detail-row").first().locator("dd")).toHaveText("Saved profile");
+
+  // Re-opening edit must initialize from the saved baseline
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await expect(page.locator("#inline-ho-ten")).toHaveValue("Saved profile");
+});
+
+test("ADM-03 regression: missing new ETag in profile response halts role write with 428 and keeps draft", async ({
+  page,
+}) => {
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: (call) =>
+      call.path === "nhan_vien/3" && call.method === "PATCH"
+        ? {
+            status: 200,
+            json: { data: { ho_ten: "ETag Missing Test" }, meta: {} },
+            headers: {}, // Omit ETag
+          }
+        : null,
+  });
+
+  await page.goto("/admin/tai-khoan/3?mode=edit");
+  await page.locator("#inline-ho-ten").fill("ETag Missing Test");
+  await page.locator("#inline-vai-tro").selectOption("2");
+  await page.locator(".admin-detail-actions button[type=submit]").click();
+
+  const confirmDialog = page.locator("dialog.confirmation-profile-save[open]");
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+
+  await expect(confirmDialog.getByRole("alert")).toContainText(
+    "Phản hồi lưu hồ sơ không trả về ETag mới để tiếp tục cập nhật vai trò",
+  );
+  expect(
+    state.calls.filter((c) => c.path === "nhan_vien/3/vai_tro" && c.method === "PUT"),
+  ).toHaveLength(0);
+});
+
+test("ADM-03 regression: cache update scopes strictly to current actor/role and does not mutate other user or role projections", async ({
+  page,
+}) => {
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: (call) =>
+      call.path === "nhan_vien/3/vai_tro" && call.method === "PUT"
+        ? { status: 500, json: { error: { message: "Role update failed" } } }
+        : null,
+  });
+
+  await page.goto("/admin/tai-khoan/3?mode=edit");
+  await expect(page.locator("#inline-ho-ten")).toBeVisible();
+
+  // Seed another-user cache entry and same-user/different-role cache entry with distinct markers
+  await page.evaluate(async () => {
+    const { queryClient } = await import("/src/lib/query-client.js");
+    queryClient.setQueryData(["resources", 999, "quan_ly", "/nhan_vien/3", {}], {
+      data: { id: 3, ho_ten: "Other User Projection", email: "other@example.test" },
+      etag: '"other-v1"',
+    });
+    queryClient.setQueryData(["resources", 1, "quan_ly", "/nhan_vien/3", {}], {
+      data: { id: 3, ho_ten: "Same User Different Role Projection", email: "role@example.test" },
+      etag: '"role-v1"',
+    });
+  });
+
+  // Edit profile and role, triggering partial save (profile succeeds, role fails)
+  await page.locator("#inline-ho-ten").fill("Scoped Saved Profile");
+  await page.locator("#inline-vai-tro").selectOption("2");
+  await page.locator(".admin-detail-actions button[type=submit]").click();
+
+  const confirmDialog = page.locator("dialog.confirmation-profile-save[open]");
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(confirmDialog.getByRole("alert")).toContainText(
+    "Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại: Role update failed",
+  );
+
+  // Inspect the two foreign projections in queryClient
+  const { otherUserCache, diffRoleCache, currentActorCache } = await page.evaluate(async () => {
+    const { queryClient } = await import("/src/lib/query-client.js");
+    return {
+      otherUserCache: queryClient.getQueryData(["resources", 999, "quan_ly", "/nhan_vien/3", {}]),
+      diffRoleCache: queryClient.getQueryData(["resources", 1, "quan_ly", "/nhan_vien/3", {}]),
+      currentActorCache: queryClient.getQueryData(["resources", 1, "quan_tri_vien", "/nhan_vien/3", {}]),
+    };
+  });
+
+  // Foreign projections must remain completely untouched
+  expect(otherUserCache.data.ho_ten).toBe("Other User Projection");
+  expect(otherUserCache.data.email).toBe("other@example.test");
+  expect(diffRoleCache.data.ho_ten).toBe("Same User Different Role Projection");
+  expect(diffRoleCache.data.email).toBe("role@example.test");
+
+  // Current actor's cache must hold the truthful partial-save baseline
+  expect(currentActorCache.data.ho_ten).toBe("Scoped Saved Profile");
+  expect(currentActorCache.etag).toBe('"v2"');
+  expect(
+    state.calls.filter((c) => c.method === "PATCH" && c.path === "nhan_vien/3"),
+  ).toHaveLength(1);
 });

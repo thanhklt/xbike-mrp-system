@@ -52,7 +52,9 @@ export function MainLayout() {
   function signOut() {
     confirm({
       title: "Đăng xuất",
-      description: "Bạn muốn kết thúc phiên làm việc? Hãy lưu các thay đổi trước khi đăng xuất.",
+      description: "Bạn có muốn kết thúc phiên làm việc?",
+      hideImpact: true,
+      variant: "logout",
       onConfirm: () => {
         logout();
         navigate("/dang-nhap", { replace: true });
