@@ -22,6 +22,8 @@ from app.modules.dieu_chinh_kho.repository import (
 from app.modules.dieu_chinh_kho.service import PhieuDieuChinhKhoService, TicketDieuChinhService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
 from app.modules.inventory.service import InventoryService
+from app.modules.luu_luong.repository import SqlAlchemyLuuLuongRepository
+from app.modules.luu_luong.service import LuuLuongService
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
@@ -66,6 +68,10 @@ def get_pagination_params(
 
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditService:
     return AuditService(SqlAlchemyAuditRepository(db))
+
+
+def get_luu_luong_service(db: Annotated[AsyncSession, Depends(get_db)]) -> LuuLuongService:
+    return LuuLuongService(SqlAlchemyLuuLuongRepository(db))
 
 
 def get_nhan_vien_service(

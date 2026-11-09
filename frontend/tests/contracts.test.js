@@ -9,6 +9,11 @@ import {
 } from "../src/lib/api/contract.js";
 import { documentPermissions, homeFor, isAllowed } from "../src/features/auth/permissions.js";
 import {
+  changedProfileFields,
+  formatAuditAction,
+  formatAuditDetail,
+} from "../src/features/dashboard/auditFormat.js";
+import {
   dateTime,
   formatAuditTime,
   formatCoefficient,
@@ -120,4 +125,113 @@ test("admin formatters format dates as dd/MM/yyyy, salary coefficients to 2 deci
   assert.equal(formatCoefficient(null), "—");
   assert.equal(initials("Lê Văn Thành"), "VT");
   assert.equal(formatAuditTime("2026-11-04T18:05:00Z"), "01:05 - 05/11/2026");
+});
+
+const historicalEmployee = {
+  ma_nhan_vien: "NV-000003",
+  ho_ten: "Tên lịch sử",
+  ma_vai_tro: "nhan_vien",
+  trang_thai: "hoat_dong",
+  email: "old@example.test",
+  so_dien_thoai: null,
+};
+const employeeAudit = {
+  loai_doi_tuong: "nhan_vien",
+  doi_tuong_id: 3,
+  du_lieu_truoc: historicalEmployee,
+  du_lieu_sau: historicalEmployee,
+};
+
+test("audit profile changes only list the six supported fields without exposing values", () => {
+  const before = {
+    ...historicalEmployee,
+    ngay_sinh: "2000-01-01",
+    ngay_vao_lam: "2026-01-01",
+    he_so_luong: "1.00",
+  };
+  const after = {
+    ...before,
+    ho_ten: "Tên mới",
+    ngay_sinh: "2001-01-01",
+    so_dien_thoai: "0900000000",
+    email: "new@example.test",
+    ngay_vao_lam: "2026-02-01",
+    he_so_luong: "2.00",
+    ma_vai_tro: "quan_ly",
+  };
+  assert.deepEqual(changedProfileFields(before, after), [
+    "họ tên", "ngày sinh", "số điện thoại", "email", "ngày vào làm", "hệ số lương",
+  ]);
+  assert.deepEqual(changedProfileFields(null, after), []);
+  assert.deepEqual(changedProfileFields(before, null), []);
+  assert.deepEqual(changedProfileFields({}, { email: "new@example.test" }), []);
+  assert.deepEqual(changedProfileFields(before, { ...before, ma_vai_tro: "quan_ly" }), []);
+  assert.deepEqual(changedProfileFields({ email: null }, { email: "a@example.test" }), ["email"]);
+});
+
+test("account audit sentences describe creation, profile update, password change and unlock", () => {
+  const scenarios = [
+    [
+      { thao_tac: "tao", du_lieu_truoc: null },
+      "Tạo tài khoản",
+      'Tạo tài khoản NV-000003 (Tên lịch sử) với vai trò "Nhân viên".',
+    ],
+    [
+      { thao_tac: "sua", du_lieu_sau: { ...historicalEmployee, email: "new@example.test", so_dien_thoai: "0900000000" } },
+      "Cập nhật tài khoản",
+      "Cập nhật thông tin tài khoản NV-000003 (Tên lịch sử) (số điện thoại, email).",
+    ],
+    [
+      { thao_tac: "sua", du_lieu_truoc: null, du_lieu_sau: { da_doi_mat_khau: true } },
+      "Đổi mật khẩu",
+      "Đổi mật khẩu tài khoản NV-000003 (Tên hiện tại).",
+    ],
+    [
+      { thao_tac: "sua", du_lieu_truoc: { ...historicalEmployee, trang_thai: "bi_khoa" }, ly_do: "Đã xác minh" },
+      "Mở khóa tài khoản",
+      "Mở khóa tài khoản NV-000003 (Tên lịch sử) do Đã xác minh.",
+    ],
+    [
+      { thao_tac: "vo_hieu_hoa", ly_do: "không còn sử dụng" },
+      "Vô hiệu hóa tài khoản",
+      "Vô hiệu hóa tài khoản NV-000003 (Tên lịch sử) do không còn sử dụng.",
+    ],
+    [
+      { thao_tac: "dang_nhap", du_lieu_truoc: null, du_lieu_sau: null },
+      "Đăng nhập",
+      "Đăng nhập thành công vào hệ thống.",
+    ],
+  ];
+  for (const [changes, action, detail] of scenarios) {
+    const entry = { ...employeeAudit, ...changes };
+    assert.equal(formatAuditAction(entry), action);
+    assert.equal(formatAuditDetail(entry, [{ id: 3, ma_nhan_vien: "NV-000003", ho_ten: "Tên hiện tại" }]), detail);
+  }
+});
+
+test("role audit uses historical roles and employee identity instead of current directory values", () => {
+  const entry = {
+    ...employeeAudit,
+    thao_tac: "cap_quyen",
+    du_lieu_sau: { ...historicalEmployee, ma_vai_tro: "quan_ly" },
+  };
+  assert.equal(formatAuditAction(entry), "Phân quyền");
+  assert.equal(
+    formatAuditDetail(entry, [{ id: 3, ma_nhan_vien: "NV-999999", ho_ten: "Tên hiện tại" }]),
+    'Gán vai trò "Quản lý kho" cho tài khoản NV-000003 (Tên lịch sử) (trước đó: "Nhân viên").',
+  );
+  assert.equal(formatAuditAction({ ...entry, thao_tac: "thu_hoi_quyen" }), "Thu hồi quyền");
+  assert.equal(formatAuditDetail({ ...entry, thao_tac: "thu_hoi_quyen" }), 'Thu hồi vai trò "Nhân viên" của tài khoản NV-000003 (Tên lịch sử).');
+});
+
+test("audit falls back without inventing missing history and keeps warehouse event text", () => {
+  const directory = [{ id: 3, ma_nhan_vien: "NV-000003", ho_ten: "Tên hiện tại" }];
+  for (const thao_tac of ["tao", "sua", "cap_quyen", "thu_hoi_quyen", "vo_hieu_hoa"]) {
+    assert.equal(formatAuditDetail({ ...employeeAudit, thao_tac, du_lieu_truoc: null, du_lieu_sau: null }, directory), "NV-000003 (Tên hiện tại)");
+  }
+  assert.equal(formatAuditDetail({ ...employeeAudit, thao_tac: "cap_quyen", du_lieu_sau: { ma_nhan_vien: "NV-000003", ma_vai_tro: "unknown" } }), "NV-000003");
+  assert.equal(formatAuditDetail({ ...employeeAudit, thao_tac: "sua", du_lieu_sau: { ...historicalEmployee, ma_vai_tro: "quan_ly" }, ly_do: "kiểm tra" }), "NV-000003 (Tên lịch sử) do kiểm tra.");
+  const warehouse = { loai_doi_tuong: "phieu_nhap", doi_tuong_id: 2, thao_tac: "hoan_tat", ly_do: "đã kiểm tra" };
+  assert.equal(formatAuditAction(warehouse), "Hoàn tất phiếu nhập");
+  assert.equal(formatAuditDetail(warehouse), "phiếu nhập #2 · đã kiểm tra");
 });

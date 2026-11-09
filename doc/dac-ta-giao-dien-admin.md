@@ -78,8 +78,15 @@ Thứ tự từ trên xuống: breadcrumb và tiêu đề **Tổng quan**; một
 
 - [x] **OV-01** — Có 4 chỉ số lấy tổng từ API: tổng tài khoản, tài khoản hoạt động, tài khoản bị khóa và vai trò. Căn cứ: `AdminDashboard`, `AdminStatCard` trong `DashboardPage.jsx`.
 - [x] **OV-02** — Đặt thẻ đúng thứ tự (`Tổng tài khoản` → `Tổng vai trò` → `Tài khoản đang hoạt động` → `Tài khoản đã vô hiệu hóa`), nhãn, icon và hình thức của ảnh.
-- [x] **OV-03** — Có khối “Lưu lượng truy website”, dòng mô tả “Tổng hợp theo số lượng request mỗi giờ” và bộ chọn “Hôm nay / 7 ngày / 30 ngày” (giữ chưa gắn hành động theo quyết định dev).
-- [ ] **OV-04** — Vẽ đường biểu diễn màu cam kèm vùng tô phía dưới, các điểm dữ liệu, trục thời gian và trục số lượng. Đã dựng khung trục (`00h`–`21h`, `0`–`4.000`), giữ trống đường biểu diễn vì chưa có API lưu lượng (`FE-MISS-001`).
+- [x] **OV-03** — Có khối “Lưu lượng truy website”. Dòng mô tả là “Tổng hợp theo số lượng request mỗi giờ” ở `Hôm nay` và “… mỗi ngày” ở `7 ngày` / `30 ngày`. Bộ chọn “Hôm nay / 7 ngày / 30 ngày” đã gắn API, có `aria-pressed` (D-LL-01).
+- [x] **OV-04** — Vẽ đường cam có vùng tô phía dưới, điểm dữ liệu, trục thời gian và trục số lượng từ `GET /api/v1/luu_luong_truy_cap` (`TrafficCard` trong `DashboardPage.jsx`).
+  - `Hôm nay`: 24 điểm theo giờ, nhãn `00h`–`21h`, đường dừng ở giờ hiện tại.
+  - `7 ngày`: 7 điểm theo ngày, nhãn `dd/MM`.
+  - `30 ngày`: 30 điểm theo ngày, 6 nhãn cách 5 ngày.
+  - Khác ảnh, đã được dev duyệt (D-LL-01):
+    - trục Y tuyến tính, có mốc `1.500` mà ảnh thiếu, tự giãn khi vượt 4.000;
+    - tab `30 ngày` có thêm đường nét đứt “Trung bình 7 ngày” và chú giải;
+    - mốc `21h` nằm ở khoảng 91% chiều ngang, vì trục có đủ 24 giờ.
 - [x] **OV-05** — Có biểu đồ donut “Phân bổ tài khoản theo vai trò”, tổng tài khoản ở tâm; chú giải có màu, tên vai trò, số lượng và tỷ lệ tính từ dữ liệu thật của API (bao gồm cả tài khoản bị khóa).
 - [x] **OV-06** — Có khối “Hoạt động gần đây”, gọi API audit với 5 bản ghi mới nhất, sắp xếp `-created_at`.
 - [x] **OV-07** — Trình bày hoạt động thành bảng 4 cột: “Thời gian”, “Người thực hiện”, “Hành động”, “Chi tiết”.
@@ -87,7 +94,10 @@ Thứ tự từ trên xuống: breadcrumb và tiêu đề **Tổng quan**; một
 
 ### 3.2. Điểm cần xác nhận
 
-- [ ] **OV-Q01** — Chốt nguồn số liệu truy cập, cách đếm request, múi giờ, khoảng lấy mẫu cho 7/30 ngày và thời điểm làm mới (`FE-MISS-001`).
+- [x] **OV-Q01** — Đã chốt nguồn số liệu, cách đếm request, múi giờ, khoảng lấy mẫu cho 7/30 ngày và thời điểm làm mới (`FE-MISS-001`, `docs/DECISION.md` D-LL-01).
+  - Nguồn: bảng `"LuuLuongTruyCap"`, đếm mọi request `/api/v1` trừ `OPTIONS`.
+  - Múi giờ: Asia/Ho_Chi_Minh.
+  - Làm mới: khi mở trang, khi đổi tab và khi quay lại cửa sổ; không tự tải định kỳ.
 - [x] **OV-Q02** — Dev đã chốt phân bổ vai trò tính cả tài khoản bị khóa và lấy từ dữ liệu thật của API (`doc/admin-ui-plan.md`).
 - [ ] **OV-Q03** — Chốt nội dung mở rộng và khả năng xem thêm từ bảng hoạt động (`FE-MISS-004`).
 
@@ -192,21 +202,21 @@ Tiêu đề **Quản lý vai trò**; thanh công cụ có ô **Tìm vai trò** b
 
 - [x] **ROL-01** — Có trang lấy danh sách vai trò thật từ API (`GET /api/v1/vai_tro`).
 - [x] **ROL-02** — Có tiêu đề “Quản lý vai trò”, ô tìm kiếm “Tìm vai trò”, nút “+ Tạo vai trò” và bố cục bảng đúng ảnh (`RolesPage.jsx`).
-- [ ] **ROL-03** — Đã dựng cột STT và Mô tả; do `VaiTroRead` chưa có trường `mo_ta` nên hiển thị giá trị thiếu `—` theo quy định project (`FE-MISS-002`).
-- [ ] **ROL-04** — Nút “+ Tạo vai trò” đã hiển thị đúng thiết kế nhưng chưa gắn hành động vì chưa có API tạo vai trò (`FE-MISS-002`).
-- [x] **ROL-05** — Nút “Sửa” của 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) được vô hiệu hóa (`disabled` + `admin-action-muted`) theo mã vai trò đúng quyết định của dev (`doc/admin-ui-inline-edit-plan.md`); chưa có API sửa vai trò (`FE-MISS-002`).
-- [ ] **ROL-06** — Nút “Xóa” của 3 vai trò hệ thống được hiển thị ở trạng thái vô hiệu hóa kèm icon thông tin đúng như ảnh; chưa có API xóa vai trò (`FE-MISS-002`).
+- [x] **ROL-03** — Cột STT và Mô tả hiển thị dữ liệu thật; `VaiTroRead.mo_ta` là string hoặc null, null hiển thị `—`. Mô tả seed tóm tắt SRS_v4 §2 (D-VT-01, `FE-MISS-002`).
+- [x] **ROL-04** — Nút “+ Tạo vai trò” giữ nguyên vị trí/hình dạng, ở trạng thái disabled và mờ 0.55 theo D-VT-01. Không có API tạo vai trò vì bộ vai trò cố định.
+- [x] **ROL-05** — Nút “Sửa” của 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) giữ vô hiệu hóa (`disabled` + `admin-action-muted`) theo mã vai trò, theo `doc/admin-ui-inline-edit-plan.md` và D-VT-01. Không hỗ trợ API sửa vai trò.
+- [x] **ROL-06** — Nút “Xóa” của 3 vai trò hệ thống vô hiệu hóa kèm icon thông tin vai trò hệ thống; không hỗ trợ API xóa vai trò theo D-VT-01.
 - [x] **ROL-07** — Có tìm kiếm (Enter đưa về trang 1), selector số dòng/trang chỉ giữ mức `10` theo quyết định dev (`R2-04`) và thanh phân trang phía client trên danh sách vai trò đã tải đầy đủ.
 
 ### 6.2. Mâu thuẫn và điểm cần xác nhận
 
-- [ ] **ROL-Q01** — Chốt có mở rộng từ ba mã vai trò cố định sang vai trò tạo động hay không. Code hiện chỉ nhận `quan_tri_vien`, `quan_ly`, `nhan_vien`; frontend cũng kiểm tra quyền theo ba mã này. Hai vai trò bổ sung trong ảnh chưa phải vai trò được hệ thống hỗ trợ.
-- [ ] **ROL-Q02** — Chốt quyền nào được gán cho vai trò mới, phạm vi thao tác của từng vai trò và UI cấu hình quyền. Ảnh chỉ có danh sách và mô tả, không có ma trận phân quyền.
-- [ ] **ROL-Q03** — Chốt lý do ba nút Xóa bị vô hiệu hóa: vai trò hệ thống, đang có tài khoản sử dụng hay quy tắc khác. Icon thông tin trong ảnh không đủ để kết luận.
-- [ ] **ROL-Q04** — Chốt form tạo/sửa, yêu cầu tên/mô tả, kiểm tra trùng, điều kiện xóa và nội dung xác nhận xóa. Chưa có ảnh các form này.
-- [ ] **ROL-Q05** — Làm rõ số liệu minh họa: tổng quan ghi 3 vai trò nhưng danh sách vai trò có 5 hàng. Dữ liệu thật giữa các màn hình phải nhất quán, không sao chép các số minh họa thành quy tắc.
+- [x] **ROL-Q01** — D-VT-01: giữ ba mã cố định `quan_tri_vien`, `quan_ly`, `nhan_vien`, không mở vai trò động hoặc thay cơ chế phân quyền. Hai vai trò bổ sung trong ảnh chỉ minh họa.
+- [x] **ROL-Q02** — Không áp dụng: D-VT-01 không tạo vai trò mới, không có UI cấu hình quyền hoặc ma trận quyền mới.
+- [x] **ROL-Q03** — D-VT-01: Sửa/Xóa bị vô hiệu hóa vì đây là ba vai trò hệ thống cố định, xác định theo mã vai trò.
+- [x] **ROL-Q04** — D-VT-01: không có form tạo/sửa, xác nhận xóa hoặc API ghi vai trò; mô tả chỉ đọc.
+- [x] **ROL-Q05** — Dữ liệu thật có đúng ba vai trò theo SRS_v4 §2 và D-VT-01; Cộng tác viên/Hỗ trợ kỹ thuật trong ảnh chỉ minh họa, không xuất hiện trong hệ thống.
 
-Các mục tạo/sửa/xóa vai trò được ghi nhận là thành phần trong thiết kế đích. Triển khai chúng sẽ ảnh hưởng hợp đồng API và cơ chế phân quyền, cần dev chốt phạm vi riêng; tác vụ tài liệu này không sửa các phần đó.
+D-VT-01 (09/11/2026) thay phần tạo/sửa/xóa trong thiết kế bằng danh sách chỉ đọc có mô tả từ API. Ba khác biệt đã chốt với ảnh: Sửa vô hiệu hóa, chỉ có ba vai trò thật và Tạo vô hiệu hóa. Quyền đọc API vẫn là admin/quản lý; không hỗ trợ ghi vai trò. Các mục trên không xác nhận DB đang chạy đã có cột mới; backend mới cần DB đã bootstrap với `mo_ta`.
 
 ## 7. ADM-05 — Popup xác nhận thay đổi
 
@@ -269,7 +279,7 @@ Các mục dưới đây ghi nhận trạng thái đã dựng UI, đã tích h�
 - [x] **QA-07** — Đã kiểm chứng tự động: tạo/sửa hồ sơ và đổi vai trò gửi đúng nhóm trường; nhập sai hoặc trùng dữ liệu có phản hồi, không báo lưu thành công khi API lỗi (`mutations.spec.js`, `admin-ui.spec.js`).
 - [x] **QA-08** — Đã kiểm chứng tự động: vô hiệu hóa/mở khóa yêu cầu xác nhận trên snapshot đã duyệt; sau thành công badge và thao tác thay đổi đúng; hồ sơ và lịch sử được giữ nguyên (`mutations.spec.js`, `admin-ui.spec.js`).
 - [x] **QA-09** — Đã kiểm chứng tự động: Hủy/X popup không ghi dữ liệu và giữ bản nháp; bấm Xác nhận nhiều lần chỉ gửi một hành động; lỗi giữ đủ thông tin để người dùng xử lý (`mutations.spec.js`, `admin-ui.spec.js`).
-- [ ] **QA-10** — Tạo/sửa/xóa vai trò chỉ nghiệm thu sau khi các mục `ROL-Q01` đến `ROL-Q04` được chốt và có API tương ứng (`FE-MISS-002`).
+- [x] **QA-10** — Nghiệm thu theo D-VT-01: danh sách có mô tả, tìm theo mô tả, null hiển thị `—`, Tạo/Sửa/Xóa vô hiệu hóa; không có chức năng ghi vai trò để nghiệm thu (`FE-MISS-002`).
 - [x] **QA-11** — Đã kiểm chứng tự động: truy cập URL trực tiếp khi chưa đăng nhập/sai quyền và khi phiên hết hạn giữ phản hồi 401/403 của hệ thống (`navigation.spec.js`, `workflows.spec.js`).
 - [x] **QA-12** — Đã kiểm chứng tự động cập nhật đồng thời cả ở trang chi tiết và thao tác khóa/mở khóa trực tiếp trên hàng danh sách (`R2-01`): lấy snapshot + ETag trước khi mở popup xác nhận, khi xác nhận chỉ gửi ETag đã duyệt, nhận 412/428 không tự lấy ETag mới để ghi đè và hiển thị hướng dẫn tải lại (`contracts.test.js`, `admin-ui.spec.js`, `workflows.spec.js`).
 - [x] **QA-13** — Đã kiểm chứng tự động: dùng bàn phím truy cập được bộ lọc, bảng, nút và popup; focus nhìn thấy, nằm trong popup khi mở và trở về nơi mở khi đóng; icon thao tác có tên dễ hiểu.

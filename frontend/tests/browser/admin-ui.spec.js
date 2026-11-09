@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
-test("ADM-01 overview displays 4 KPI cards in order, role distribution including locked accounts, unwired traffic tabs, and 4-column recent activity", async ({
+test("ADM-01 overview displays 4 KPI cards in order, role distribution including locked accounts, traffic chart per range, and 4-column recent activity", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -37,11 +37,60 @@ test("ADM-01 overview displays 4 KPI cards in order, role distribution including
   await expect(page.locator(".admin-donut-legend")).toContainText("Quản lý kho: 1 (33.3%)");
   await expect(page.locator(".admin-donut-legend")).toContainText("Quản trị viên: 1 (33.3%)");
 
-  // Traffic controls are present and make no API calls when clicked
-  const beforeCalls = state.calls.length;
-  await page.getByRole("button", { name: "7 ngày", exact: true }).click();
-  await page.getByRole("button", { name: "30 ngày", exact: true }).click();
-  expect(state.calls.length).toBe(beforeCalls);
+  // Traffic chart: today by hour, 7 days by day, 30 days by day with a 7-day average
+  const traffic = page.locator(".admin-traffic-card");
+  const trafficCalls = () =>
+    state.calls.filter((call) => call.path === "luu_luong_truy_cap").map((call) => call.params);
+  const xLabels = () =>
+    traffic
+      .locator(".admin-traffic-xaxis span")
+      .evaluateAll((nodes) => nodes.map((n) => n.textContent));
+  const todayTab = traffic.getByRole("button", { name: "Hôm nay", exact: true });
+  const weekTab = traffic.getByRole("button", { name: "7 ngày", exact: true });
+  const monthTab = traffic.getByRole("button", { name: "30 ngày", exact: true });
+
+  await expect(traffic.locator(".admin-traffic-line")).toHaveCount(1);
+  expect(trafficCalls()).toEqual([{ khoang_thoi_gian: "hom_nay" }]);
+  await expect(todayTab).toHaveAttribute("aria-pressed", "true");
+  await expect(traffic.locator(".admin-card-subtitle")).toHaveText(
+    "Tổng hợp theo số lượng request mỗi giờ",
+  );
+  expect(await xLabels()).toEqual(["00h", "03h", "06h", "09h", "12h", "15h", "18h", "21h"]);
+  // Hours after the current one (15h) are null: dots only at 00h..15h
+  await expect(traffic.locator(".admin-traffic-dot")).toHaveCount(6);
+  await expect(traffic.locator(".admin-traffic-legend")).toHaveCount(0);
+  await expect(traffic.locator(".admin-traffic-yaxis span").first()).toHaveText("4.000");
+  await expect(traffic.locator(".admin-traffic-plot")).toHaveAttribute(
+    "aria-label",
+    "Biểu đồ lưu lượng truy cập Hôm nay: tổng 26.760 request",
+  );
+
+  await weekTab.click();
+  await expect(weekTab).toHaveAttribute("aria-pressed", "true");
+  await expect(todayTab).toHaveAttribute("aria-pressed", "false");
+  await expect(traffic.locator(".admin-traffic-dot")).toHaveCount(7);
+  expect(trafficCalls().at(-1)).toEqual({ khoang_thoi_gian: "7_ngay" });
+  await expect(traffic.locator(".admin-card-subtitle")).toHaveText(
+    "Tổng hợp theo số lượng request mỗi ngày",
+  );
+  expect(await xLabels()).toEqual(["03/11", "04/11", "05/11", "06/11", "07/11", "08/11", "09/11"]);
+  await expect(traffic.locator(".admin-traffic-line.is-average")).toHaveCount(0);
+  await expect(traffic.locator(".admin-traffic-yaxis span").first()).toHaveText("40.000");
+
+  await monthTab.click();
+  await expect(traffic.locator(".admin-traffic-line.is-average")).toHaveCount(1);
+  expect(trafficCalls().at(-1)).toEqual({ khoang_thoi_gian: "30_ngay" });
+  expect(await xLabels()).toEqual(["15/10", "20/10", "25/10", "30/10", "04/11", "09/11"]);
+  await expect(traffic.locator(".admin-traffic-dot")).toHaveCount(6);
+  await expect(traffic.locator(".admin-traffic-legend li")).toHaveText([
+    "Request mỗi ngày",
+    "Trung bình 7 ngày",
+  ]);
+  await page.screenshot({ path: "test-results/adm-01-traffic-30-ngay-1440x900.png" });
+  await weekTab.click();
+  await page.screenshot({ path: "test-results/adm-01-traffic-7-ngay-1440x900.png" });
+  await todayTab.click();
+  await expect(traffic.locator(".admin-traffic-dot")).toHaveCount(6);
 
   // Recent activity 4-column table
   const activityHeaders = await page
@@ -511,7 +560,7 @@ test("ADM-03 inline edit supports role-only write, combined profile+role ETag ch
   await expect(page).toHaveURL(/\/admin\/tai-khoan\/4$/);
 });
 
-test("ADM-04 roles management disables Sửa and Xóa for all 3 system roles by role code, preserves disabled state under search, and simplified logout popup hides inventory impact notice", async ({
+test("ADM-04 shows role descriptions, disables role writes, preserves disabled state under search, and simplified logout popup hides inventory impact notice", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -522,6 +571,15 @@ test("ADM-04 roles management disables Sửa and Xóa for all 3 system roles by 
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(3);
   await expect(page.locator(".admin-table tbody")).not.toContainText("Cộng tác viên");
   await expect(page.locator(".admin-table tbody")).not.toContainText("Hỗ trợ kỹ thuật");
+
+  for (const role of state.resources.vai_tro) {
+    const row = page.getByRole("row").filter({ hasText: role.ten_vai_tro });
+    await expect(row.locator(".admin-role-desc")).toHaveText(role.mo_ta);
+  }
+
+  const createRole = page.getByRole("button", { name: "Tạo vai trò", exact: true });
+  await expect(createRole).toBeDisabled();
+  await expect(createRole).toHaveCSS("opacity", "0.55");
 
   // Page size selector must offer ONLY [10]
   const pageSizeOptions = await page
@@ -550,15 +608,28 @@ test("ADM-04 roles management disables Sửa and Xóa for all 3 system roles by 
   await page.screenshot({ path: "test-results/adm-04-roles-375x812.png" });
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Unwired "+ Tạo vai trò" button remains enabled and makes no API calls or fake toasts
+  // A real pointer click on the disabled control makes no request or fake toast.
   const beforeCalls = state.calls.length;
-  await page.getByRole("button", { name: "Tạo vai trò", exact: true }).click();
+  const createBox = await createRole.boundingBox();
+  await page.mouse.click(createBox.x + createBox.width / 2, createBox.y + createBox.height / 2);
   expect(state.calls.length).toBe(beforeCalls);
   await expect(page.locator(".toast")).toHaveCount(0);
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 
-  // Client-side search on Enter: "Nhân viên" becomes row 1 and its Sửa button remains disabled
   const search = page.getByLabel("Tìm vai trò", { exact: true });
+  await search.fill("BOM");
+  await search.press("Enter");
+  await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".admin-table tbody tr")).toContainText("Quản lý kho");
+
+  state.resources.vai_tro[2].mo_ta = null;
+  await page.reload();
+  await expect(page.locator(".admin-table tbody tr")).toHaveCount(3);
+  await expect(
+    page.getByRole("row").filter({ hasText: "Nhân viên" }).locator(".admin-role-desc"),
+  ).toHaveText("—");
+
+  // Client-side search on Enter keeps the system role's Sửa button disabled.
   await search.fill("Nhân viên");
   await search.press("Enter");
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);

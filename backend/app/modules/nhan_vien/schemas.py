@@ -194,6 +194,7 @@ class VaiTroRead(BaseModel):
     id: int
     ma_vai_tro: RoleCode
     ten_vai_tro: str
+    mo_ta: str | None
 
 
 class VaiTroListResponse(BaseModel):

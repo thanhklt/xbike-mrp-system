@@ -20,16 +20,16 @@ SET LOCAL search_path = public, pg_catalog;
 DO $$
 DECLARE t record; used boolean;
 BEGIN
-  FOR t IN SELECT schemaname,tablename FROM pg_tables WHERE schemaname='public' AND tablename=ANY(ARRAY['NhanVien','VaiTro','MatHang','Bom','ChiTietBom','NhaCungCap','PhieuNhap','ChiTietPhieuNhap','PhieuXuat','ChiTietPhieuXuat','YeuCauSanXuat','LenhSanXuat','ChiTietLenhSanXuat','ChungTuHoanThanhSx','PhieuDieuChinhKho','ChiTietPhieuDieuChinhKho','TicketLoiDieuChinh','ChiTietTicketLoiDieuChinh','GiaoDichKho','LichSuThaoTac']) LOOP
+  FOR t IN SELECT schemaname,tablename FROM pg_tables WHERE schemaname='public' AND tablename=ANY(ARRAY['NhanVien','VaiTro','MatHang','Bom','ChiTietBom','NhaCungCap','PhieuNhap','ChiTietPhieuNhap','PhieuXuat','ChiTietPhieuXuat','YeuCauSanXuat','LenhSanXuat','ChiTietLenhSanXuat','ChungTuHoanThanhSx','PhieuDieuChinhKho','ChiTietPhieuDieuChinhKho','TicketLoiDieuChinh','ChiTietTicketLoiDieuChinh','GiaoDichKho','LichSuThaoTac','LuuLuongTruyCap']) LOOP
     EXECUTE format('SELECT EXISTS(SELECT 1 FROM %I.%I)', t.schemaname, t.tablename) INTO used;
     IF used THEN RAISE EXCEPTION 'seed.sql yêu cầu DB trống; bảng % đã có dữ liệu',t.tablename; END IF;
   END LOOP;
 END $$;
 
-INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro) VALUES
-  (1, 'quan_tri_vien', 'Quản trị viên'),
-  (2, 'quan_ly', 'Quản lý'),
-  (3, 'nhan_vien', 'Nhân viên');
+INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro, mo_ta) VALUES
+  (1, 'quan_tri_vien', 'Quản trị viên', 'Quản trị hệ thống và tài khoản người dùng: thêm, vô hiệu hóa và phân quyền tài khoản; không mặc định thực hiện nghiệp vụ kho, sản xuất.'),
+  (2, 'quan_ly', 'Quản lý', 'Quản lý nguyên vật liệu, thành phẩm, BOM; nhập kho, duyệt xuất kho, duyệt chứng từ hoàn thành sản xuất, yêu cầu sản xuất và báo cáo kho.'),
+  (3, 'nhan_vien', 'Nhân viên', 'Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.');
 
 INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai) VALUES
   (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong'),
@@ -293,6 +293,22 @@ INSERT INTO public."LichSuThaoTac" (id, nhan_vien_id, loai_doi_tuong, doi_tuong_
   (16, 2, 'ticket_loi_dieu_chinh', 1, 'ghi_nhan_loi', NULL, '{"trang_thai": "cho_xu_ly", "so_luong_de_nghi": 200, "ton": 265}', 'Điều chỉnh không hợp lệ; kho không thay đổi.', '2026-10-22 11:00:00+07'),
   (17, 2, 'ticket_loi_dieu_chinh', 2, 'ghi_nhan_loi', NULL, '{"trang_thai": "cho_xu_ly", "so_luong_de_nghi": 300, "ton": 265}', 'Điều chỉnh không hợp lệ; kho không thay đổi.', '2026-10-22 11:10:00+07'),
   (18, 2, 'ticket_loi_dieu_chinh', 2, 'giai_quyet', '{"trang_thai": "cho_xu_ly"}', '{"trang_thai": "da_xu_ly", "nguoi_xu_ly_id": 2, "ket_qua_xu_ly": "Đề nghị 300 là nhầm; giữ lượng hiệu lực 985."}', 'Đóng thủ công, không cần phiếu điều chỉnh mới.', '2026-10-22 12:00:00+07');
+
+-- Lưu lượng truy cập minh họa cho biểu đồ Tổng quan admin (FE-MISS-001, D-LL-01).
+-- Mỗi giờ một dòng, từ 00:00 của 35 ngày trước (giờ Asia/Ho_Chi_Minh) đến giờ lúc chạy seed.
+-- Đủ 36 ngày cho "Hôm nay", "7 ngày" và "30 ngày" (cộng 6 ngày cho trung bình trượt).
+-- Số liệu tính theo giờ trong ngày: thấp về đêm, cao lúc 09h–11h và 14h–16h, tối đa dưới 4.000/giờ.
+-- Thứ Bảy và Chủ nhật bằng 55% ngày thường, cộng một dao động cố định 0–20%, không dùng random.
+-- Dữ liệu tính theo thời điểm chạy seed: sau vài ngày, "Hôm nay" sẽ chỉ còn request thật.
+INSERT INTO public."LuuLuongTruyCap" (gio_bat_dau, so_request)
+SELECT gio,
+  round(
+    (ARRAY[420, 380, 350, 330, 360, 450, 800, 1500, 2300, 3000, 2900, 2600,
+           2200, 2700, 3400, 3550, 3200, 2600, 1900, 1400, 1100, 900, 700, 520])[extract(hour FROM gio)::int + 1]
+    * CASE WHEN extract(isodow FROM gio) IN (6, 7) THEN 0.55 ELSE 1 END
+    * (0.9 + ((extract(doy FROM gio)::int * 7 + extract(hour FROM gio)::int * 3) % 21) / 100.0)
+  )::bigint
+FROM generate_series(date_trunc('day', now()) - interval '35 days', date_trunc('hour', now()), interval '1 hour') AS gio;
 
 -- Đồng bộ sequence sau khi dùng id cố định trong dữ liệu minh họa.
 DO $$

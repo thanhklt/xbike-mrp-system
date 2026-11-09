@@ -62,7 +62,7 @@ export function RolesPage() {
           </div>
         </form>
 
-        <button type="button" className="btn btn-primary admin-primary-cta">
+        <button type="button" className="btn btn-primary admin-primary-cta" disabled>
           <Plus size={20} strokeWidth={2.25} aria-hidden="true" />
           <span>Tạo vai trò</span>
         </button>

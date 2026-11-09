@@ -375,3 +375,51 @@ Giới hạn/hoàn tác: chỉ thay code và tài liệu, chưa cập nhật dat
 Hoàn tác phải đồng bộ module, import/wiring, InventoryWriter, envelope và tài liệu;
 giữ nguyên các chứng từ, ticket và ledger đã ghi. Không sửa/xóa dữ liệu nghiệp vụ
 để chạy code cũ. ORM ledger legacy và endpoint chi tiết giao dịch kho thuộc tác vụ sau.
+
+## Lưu lượng truy cập — ADM-01 Tổng quan (chốt ngày 09/11/2026)
+
+Nguồn: `doc/MISSING.md` FE-MISS-001; `doc/dac-ta-giao-dien-admin.md` OV-03, OV-04, OV-Q01; ảnh `doc/ui-spec-admin/tong_quan.png`. Drive chỉ có ảnh thiết kế, không có hợp đồng API. Kế hoạch: `.handoff/plan-luu-luong-truy-cap.md`. Nguyên tắc dev chốt: backend tuân theo giao diện đã thiết kế.
+
+### D-LL-01. Lưu lượng truy cập cho Tổng quan admin
+
+| Điểm | Quyết định |
+|---|---|
+| Nguồn số liệu | Bảng `"LuuLuongTruyCap"` (`gio_bat_dau` timestamptz PK, `so_request` bigint ≥ 0). Middleware upsert +1 cho giờ hiện tại. Ghi bằng session riêng; lỗi ghi không đổi response, log warning tối đa 1 lần/60 giây. |
+| Request được đếm | Path `/api/v1` và `/api/v1/...`, mọi method trừ `OPTIONS`, kể cả 4xx/5xx và chính endpoint lưu lượng. Không đếm `/`, `/health`, `/docs`, `/redoc`. |
+| Endpoint | `GET /api/v1/luu_luong_truy_cap?khoang_thoi_gian=hom_nay\|7_ngay\|30_ngay`, chỉ `quan_tri_vien`. Mở rộng danh sách endpoint admin của D-PQ-01. |
+| `Hôm nay` | 24 điểm theo giờ; FE hiện nhãn mỗi 3 giờ (`00h`…`21h`). Giờ chưa tới trả `null`. |
+| `7 ngày` | 7 điểm, mỗi điểm là tổng một ngày lịch, điểm cuối là hôm nay. |
+| `30 ngày` | 30 điểm theo ngày kèm đường trung bình trượt 7 ngày (`trung_binh_7_ngay`, backend tính, làm tròn 1 chữ số, dùng thêm 6 ngày trước khoảng). FE vẽ nét đứt và có chú giải. |
+| Hôm nay trong chuỗi ngày | Luôn hiện là điểm cuối với số tạm tính đến hiện tại; chấp nhận đường cắm xuống đầu ngày. Trung bình của điểm cuối cũng tính số tạm này. |
+| Múi giờ | Ranh giới giờ/ngày theo Asia/Ho_Chi_Minh; thời điểm trả về là UTC. |
+| Trục Y (FE) | Thang tuyến tính 0 → `yMax`, 8 khoảng, `yMax = max(4000, bội số đẹp ≥ giá trị lớn nhất)`. Bổ sung mốc `1.500` mà ảnh thiếu. |
+| Dòng mô tả (FE) | "… mỗi giờ" ở `Hôm nay`; "… mỗi ngày" ở `7 ngày` và `30 ngày`. |
+
+Giới hạn/hoàn tác: chỉ sửa bootstrap `init.sql`, không migration. Database đang chạy không có bảng mới cho tới khi được khởi tạo lại; khi đó endpoint trả 500 và middleware chỉ log warning. Hoàn tác: gỡ middleware, router, module `luu_luong`, bảng trong `init.sql`, phần FE và các tài liệu liên quan cùng lúc.
+
+## Vai trò — ADM-04 (chốt ngày 09/11/2026)
+
+Nguồn: `.handoff/plan-vai-tro-mo-ta.md`, `doc/MISSING.md` FE-MISS-002 và SRS_v4 §2.1–§2.3 trên Drive. Data model v3.1 và API contract v3 trên Drive chưa có `mo_ta`; quyết định này bổ sung trường trong bootstrap, ORM và contract local. Dev cập nhật hai bản Drive riêng.
+
+### D-VT-01. Bộ vai trò cố định và mô tả chỉ đọc
+
+| Điểm | Quyết định |
+|---|---|
+| Phạm vi | Giữ đúng ba mã `quan_tri_vien`, `quan_ly`, `nhan_vien`; giữ CHECK, `RoleCode` và cơ chế phân quyền. Không thêm vai trò động hoặc API tạo/sửa/xóa vai trò. |
+| Dữ liệu | Thêm `"VaiTro".mo_ta varchar(255) NULL`, không default; ORM `VaiTro.mo_ta` là cột thường, không deferred. Không cần `undefer` hay schema riêng. |
+| Response | `VaiTroRead` thêm `mo_ta: str \| None`; `list_roles` và `get_role` dùng schema này. `GET /api/v1/vai_tro` chỉ bổ sung field, giữ quyền admin/quản lý, query, thứ tự ID và phân trang. Hồ sơ nhân viên/auth không bổ sung mô tả. |
+| Nội dung seed | Tóm tắt SRS_v4 §2, mỗi câu dưới 255 ký tự; không dùng mô tả bán hàng hoặc quyền toàn hệ thống trong ảnh. Nội dung ba câu ghi bên dưới. |
+| Nút Tạo | Giữ vị trí, hình dạng; đặt `disabled`, dùng `.btn:disabled { opacity: 0.55 }` có sẵn. Không thêm CSS hoặc tooltip. |
+| Sửa/Xóa | Giữ vô hiệu hóa cho cả ba vai trò hệ thống theo mã vai trò; icon thông tin thể hiện vai trò hệ thống. Không có form hoặc ma trận quyền mới. |
+| Hiển thị | Cột mô tả lấy từ API, null hiển thị `—`; tìm kiếm phía client gồm mô tả. Dữ liệu thật có ba vai trò; hai vai trò bổ sung trong ảnh chỉ minh họa. Không đổi tên seed “Quản lý” hoặc nhãn FE trong tác vụ này. |
+| Theo dõi | Đóng FE-MISS-002, ROL-03/04/06, ROL-Q01..Q05 và QA-10 theo phạm vi chỉ đọc; không nghiệm thu chức năng ghi vai trò. |
+
+Nội dung seed theo P1:
+
+- `quan_tri_vien`: “Quản trị hệ thống và tài khoản người dùng: thêm, vô hiệu hóa và phân quyền tài khoản; không mặc định thực hiện nghiệp vụ kho, sản xuất.”
+- `quan_ly`: “Quản lý nguyên vật liệu, thành phẩm, BOM; nhập kho, duyệt xuất kho, duyệt chứng từ hoàn thành sản xuất, yêu cầu sản xuất và báo cáo kho.”
+- `nhan_vien`: “Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.”
+
+Giới hạn triển khai: chỉ bootstrap database mới/trống bằng `init.sql` và `seed.sql`, không migration hoặc sửa database đang chạy. Vì `NhanVien.role` nạp selectin và `mo_ta` không deferred, backend mới trên DB thiếu cột sẽ trả 500 ở đăng nhập, mọi request có token và API nhân viên/vai trò. Backend phải triển khai cùng database đã có cột; sửa bootstrap hoặc restart/rebuild không cập nhật volume cũ. Dev chủ động chuẩn bị DB mới hoặc tự bổ sung cột/dữ liệu; tác vụ không chạy ALTER/UPDATE trên DB ứng dụng. Hoàn tác phải đồng bộ ORM, response, seed, UI và tài liệu, giữ nguyên dữ liệu đang có.
+
+Kiểm chứng theo xác nhận trong phiên: test API backend chỉ chạy tạm, không giữ file mới trong repo. Hai skill `ui-consistency:adjusting`/`verifying` không có sẵn; dev đồng ý thay bằng đối chiếu toolbar/CSS và Playwright/ảnh ADM-04 trực tiếp.

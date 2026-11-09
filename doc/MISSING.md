@@ -6,7 +6,7 @@ File được khởi tạo cùng quy tắc frontend và được cập nhật tr
 
 ## Danh sách
 
-- [ ] FE-MISS-001 — Lưu lượng truy cập website theo giờ và bộ lọc khoảng thời gian
+- [x] FE-MISS-001 — Lưu lượng truy cập website theo giờ và bộ lọc khoảng thời gian
   - Màn hình / mã yêu cầu / ảnh thiết kế: ADM-01 Tổng quan (`OV-03`, `OV-04`, `OV-Q01`) — `tong_quan.png`.
   - Thành phần hoặc thao tác bị ảnh hưởng: Khối “Lưu lượng truy website”, bộ chọn `Hôm nay` / `7 ngày` / `30 ngày` và đường biểu diễn số lượng request theo giờ.
   - Thiết kế yêu cầu: Hiển thị biểu đồ đường màu cam kèm vùng tô phía dưới theo số lượng request mỗi giờ (`00h` đến `21h`) và chuyển đổi dữ liệu theo `Hôm nay`, `7 ngày`, `30 ngày`.
@@ -14,19 +14,31 @@ File được khởi tạo cùng quy tắc frontend và được cập nhật tr
   - Bằng chứng: `frontend/src/lib/api/endpoints.js`, `backend/app/modules/nhan_vien/router.py`, `backend/app/modules/audit/router.py`.
   - Ảnh hưởng và phần vẫn tiếp tục làm được: Đã dựng đầy đủ khung thẻ “Lưu lượng truy website”, dòng mô tả “Tổng hợp theo số lượng request mỗi giờ”, trục tọa độ và 3 nút `Hôm nay` / `7 ngày` / `30 ngày` đúng hình thức ảnh nhưng chưa gắn hành động gọi API và không vẽ đường/số liệu giả.
   - Câu hỏi / quyết định cần dev xác nhận: Nguồn thu thập số liệu request, hợp đồng API trả về chuỗi thời gian, múi giờ tổng hợp và bước thời gian cho chế độ `7 ngày` / `30 ngày`.
-  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` giữ khung và các nút `Hôm nay / 7 ngày / 30 ngày` chưa gắn hành động, không vẽ đường/số liệu giả và không thêm banner kỹ thuật.
-  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Đã dựng UI khung và kiểm tra click không sinh request ngoài ý muốn (`frontend/tests/browser/admin-ui.spec.js`); giữ `[ ]` vì chưa có API lưu lượng.
+  - Phản hồi của dev: Đợt UI admin trước đó, dev đã chốt trong `doc/admin-ui-plan.md` giữ khung và các nút chưa gắn hành động. Ngày 09/11/2026, dev chốt cho backend tuân theo frontend và duyệt `.handoff/plan-luu-luong-truy-cap.md`. Nội dung đã chốt (ghi tại `docs/DECISION.md` D-LL-01):
+    - số liệu lưu vào bảng `"LuuLuongTruyCap"` theo từng giờ;
+    - `Hôm nay` có 24 điểm theo giờ, nhãn hiện mỗi 3 giờ;
+    - `7 ngày` có 7 điểm theo ngày;
+    - `30 ngày` có 30 điểm theo ngày, kèm đường trung bình trượt 7 ngày và chú giải;
+    - luôn hiện hôm nay với số đếm đến hiện tại;
+    - trục Y tuyến tính, tối thiểu 4.000;
+    - dòng mô tả đổi giữa "mỗi giờ" và "mỗi ngày" theo bộ lọc.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục:
+    - Backend: thêm module `backend/app/modules/luu_luong/` (middleware đếm request, `GET /api/v1/luu_luong_truy_cap` chỉ cho `quan_tri_vien`) và bảng mới trong `infra/postgres/init.sql`. Kiểm tra bằng `backend/tests/test_luu_luong_api.py`, 14/14 test qua trên DB `xbike_mrp_test`.
+    - Frontend: gắn 3 nút vào API và vẽ đường cam có vùng tô trong `DashboardPage.jsx` (`TrafficCard`). Test `frontend/tests/browser/admin-ui.spec.js` (ADM-01) qua.
+    - Tài liệu: `docs/sequence/luu_luong.md`, `docs/api_contract_v3.md` §3 và §13.
+    - Giới hạn: database đang chạy chưa có bảng mới cho tới khi khởi tạo lại từ `init.sql`.
 
-- [ ] FE-MISS-002 — Trường mô tả vai trò và các API Tạo / Sửa / Xóa vai trò
+- [x] FE-MISS-002 — Trường mô tả vai trò và phạm vi Tạo / Sửa / Xóa vai trò
   - Màn hình / mã yêu cầu / ảnh thiết kế: ADM-04 Quản lý vai trò (`ROL-03`, `ROL-04`, `ROL-05`, `ROL-06`, `ROL-Q01`..`ROL-Q04`) — `quan_ly_vai_tro.png`.
   - Thành phần hoặc thao tác bị ảnh hưởng: Cột “Mô tả” trong bảng vai trò; nút `+ Tạo vai trò`; nút `Sửa` và nút `Xóa` trên từng dòng vai trò.
-  - Thiết kế yêu cầu: Hiển thị mô tả chi tiết cho từng vai trò, cho phép tạo vai trò mới, sửa thông tin vai trò và xóa các vai trò không phải mặc định.
-  - API hiện đáp ứng / còn thiếu: `GET /api/v1/vai_tro` chỉ trả về `VaiTroRead` gồm `id`, `ma_vai_tro` (`Literal["nhan_vien", "quan_ly", "quan_tri_vien"]`), `ten_vai_tro` (không có trường `mo_ta`); `vai_tro_router` chỉ có `GET ""` và chưa có `POST`, `PATCH`/`PUT`, `DELETE` cho `/api/v1/vai_tro`.
-  - Bằng chứng: `backend/app/modules/nhan_vien/schemas.py` (`RoleCode`, `VaiTroRead`, dòng 32 & 191–197), `backend/app/modules/nhan_vien/router.py` (`vai_tro_router`, dòng 28 & 247–254).
-  - Ảnh hưởng và phần vẫn tiếp tục làm được: Đã dựng trang ADM-04 lấy danh sách vai trò thật từ `GET /api/v1/vai_tro`, hiển thị giá trị thiếu `—` cho cột “Mô tả” khi response chưa có `mo_ta`, giữ nút `+ Tạo vai trò` đúng hình thức thiết kế nhưng chưa gắn hành động, và vô hiệu hóa (`disabled` + `admin-action-muted`) cả nút `Sửa` lẫn nút `Xóa` của 3 vai trò hệ thống (`quan_tri_vien`, `quan_ly`, `nhan_vien`) theo quyết định dev trong `doc/admin-ui-inline-edit-plan.md`.
-  - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung trường `mo_ta` vào bảng `"VaiTro"`/`VaiTroRead` và mở rộng CRUD vai trò động hay giữ cố định 3 vai trò hệ thống.
-  - Phản hồi của dev: Dev đã chốt trong `doc/admin-ui-plan.md` và `doc/admin-ui-inline-edit-plan.md` chỉ hiển thị danh sách vai trò thật từ API, dùng cách hiển thị giá trị thiếu của project cho cột mô tả, giữ nút `+ Tạo vai trò` chưa gắn hành động và vô hiệu hóa cả nút `Sửa` lẫn `Xóa` cho 3 vai trò hệ thống.
-  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Đã dựng UI ADM-04 và kiểm tra bằng Playwright (`frontend/tests/browser/admin-ui.spec.js`); giữ `[ ]` vì backend chưa có trường `mo_ta` và endpoint ghi vai trò.
+  - Thiết kế gốc: Hiển thị mô tả cho từng vai trò và thao tác tạo/sửa/xóa. Phạm vi đã được dev điều chỉnh tại D-VT-01 (09/11/2026).
+  - API hiện đáp ứng: `GET /api/v1/vai_tro` trả `VaiTroRead` gồm `id`, `ma_vai_tro`, `ten_vai_tro`, `mo_ta` (`string | null`); admin/quản lý được đọc, nhân viên nhận 403. Không hỗ trợ API ghi vai trò vì bộ vai trò cố định theo SRS_v4 §2.
+  - Bằng chứng: `backend/app/modules/nhan_vien/models.py`, `schemas.py`, `router.py`; `infra/postgres/init.sql`, `seed.sql`; `docs/api_contract_v3.md` §4; `docs/sequence/nhan_vien.md`.
+  - Hành vi đã triển khai: ADM-04 hiển thị mô tả từ API, null hiển thị `—`, tìm theo mô tả; nút `+ Tạo vai trò` disabled và mờ 0.55; giữ Sửa/Xóa vô hiệu hóa theo mã của ba vai trò hệ thống, kèm icon thông tin.
+  - Quyết định đã chốt: Không mở CRUD vai trò động hoặc thay cơ chế phân quyền; không có form tạo/sửa/xóa.
+  - Phản hồi của dev: Duyệt `.handoff/plan-vai-tro-mo-ta.md`: (1) giữ ba vai trò cố định, mô tả chỉ đọc; (2) giữ Sửa vô hiệu hóa; (3) seed theo SRS_v4 §2; (4) cột `mo_ta varchar(255) NULL`; (5) Tạo disabled và mờ; (6) đóng FE-MISS-002 và ghi D-VT-01, đóng ROL-Q01..Q04. Trong phiên triển khai, dev chọn test backend tạm và đồng ý kiểm tra UI trực tiếp thay hai skill ui-consistency không có sẵn.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: 14/14 ca backend tạm đạt trên PostgreSQL test riêng, bao gồm mô tả/null, quyền 401/403, ghi trả 405, phân trang, đăng nhập và hồ sơ; bootstrap nguyên bản init/seed thành công trên container tạm, ba mô tả dài 135/136/124 ký tự. Playwright ADM-04 đạt: mô tả đúng, tìm “BOM” còn Quản lý kho, null hiện `—`, Tạo disabled và không phát sinh request. Đóng theo D-VT-01, không phải xác nhận chức năng ghi vai trò đã được bổ sung.
+  - Giới hạn triển khai: Chưa thay đổi DB ứng dụng; backend mới cần cột `mo_ta`, nếu DB cũ thiếu cột thì đăng nhập và mọi request có token có thể trả 500. Chỉ bootstrap DB mới/trống, không migration. Contract/data model trên Drive cần dev cập nhật riêng.
 
 - [ ] FE-MISS-003 — Ảnh đại diện (avatar) nhân viên
   - Màn hình / mã yêu cầu / ảnh thiết kế: Khung dùng chung (`LAY-08`), ADM-02 Quản lý tài khoản (`ACC-04`), ADM-03 Chi tiết tài khoản (`DET-04`, `DET-Q03`) — `quan_ly_tai_khoan.png`, `chi_tiet_tai_khoan.png`.

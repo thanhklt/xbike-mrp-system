@@ -19,12 +19,12 @@ Không thay đổi backend, hợp đồng API, schema, dependency hoặc dữ li
 
 | Khu vực | Đường dẫn | Trạng thái và hành vi |
 | --- | --- | --- |
-| Tổng quan | `/admin` | Bốn thẻ thống kê, donut phân bổ tài khoản theo vai trò và hoạt động gần đây lấy từ API hiện có; giữ khung lưu lượng khi chưa có API. |
+| Tổng quan | `/admin` | Bốn thẻ thống kê, biểu đồ lưu lượng truy cập theo 3 khoảng thời gian, donut phân bổ tài khoản theo vai trò và hoạt động gần đây, tất cả lấy từ API. |
 | Quản lý tài khoản | `/admin/tai-khoan` | Danh sách, checkbox trên trang hiện tại, tìm kiếm bằng Enter, bộ lọc khi chọn, phân trang chỉ 10 dòng/trang và các hành động theo quyền. |
 | Chi tiết tài khoản | `/admin/tai-khoan/:id` | Khối danh tính bên trái và mười hàng thông tin bên phải; mật khẩu luôn là dấu chấm cố định. |
 | Chỉnh sửa tài khoản | `/admin/tai-khoan/:id?mode=edit` | Sửa trực tiếp trong các hàng chi tiết, nút Hủy/Lưu ở thanh hành động; thay thế form sửa hai cột cũ. |
 | Tạo tài khoản | `/admin/tai-khoan/moi` | Giữ form tạo và validation hiện có; không xóa luồng này khi thay form sửa. |
-| Quản lý vai trò | `/admin/vai-tro` | Danh sách thật, tìm kiếm và phân trang; cả Sửa/Xóa của ba vai trò hệ thống bị disabled theo mã vai trò. |
+| Quản lý vai trò | `/admin/vai-tro` | Danh sách thật có mô tả từ API (null hiện `—`), tìm kiếm cả mô tả và phân trang; Tạo/Sửa/Xóa disabled theo D-VT-01, bộ ba vai trò cố định. |
 | Lịch sử | `/admin/lich-su` | Giữ trang và khả năng đọc API lịch sử theo quyền; không đưa dữ liệu snapshot nghiệp vụ bị hạn chế vào giao diện admin. |
 | Hồ sơ bản thân | `/ho-so` | Giữ luồng hồ sơ/đổi mật khẩu hiện có. |
 
@@ -112,8 +112,8 @@ Lịch sử review có hai lần Codex yêu cầu sửa tiếp trước khi kế
 
 Các mục sau vẫn mở tại [MISSING.md](./MISSING.md); hoàn thiện UI không có nghĩa đã cung cấp API còn thiếu:
 
-- [ ] **FE-MISS-001:** dữ liệu lưu lượng truy cập website theo giờ/khoảng thời gian. Khung và nút vẫn hiện, chưa gắn hành động, không vẽ dữ liệu giả.
-- [ ] **FE-MISS-002:** mô tả vai trò và API tạo/sửa/xóa vai trò. Giữ danh sách thật, placeholder dữ liệu thiếu; ba vai trò hệ thống được bảo vệ như dev đã chốt.
+- [x] **FE-MISS-001:** dữ liệu lưu lượng truy cập website theo giờ và theo khoảng thời gian. Đã có API `GET /api/v1/luu_luong_truy_cap`; biểu đồ vẽ theo `Hôm nay` / `7 ngày` / `30 ngày` (D-LL-01).
+- [x] **FE-MISS-002:** đã bổ sung mô tả chỉ đọc từ API và seed theo SRS_v4 §2; Tạo/Sửa/Xóa vô hiệu hóa vì bộ vai trò cố định (D-VT-01). Không mở API ghi vai trò; không xác nhận DB đang chạy đã có cột mới.
 - [ ] **FE-MISS-003:** API chưa cung cấp ảnh đại diện nhân viên. Giữ avatar chữ cái như đã thống nhất, không tự thêm upload ảnh.
 - [ ] **FE-MISS-004:** mô tả hoạt động gần đây ngoài projection API audit hiện có. Không tự bịa nội dung hoặc lấy snapshot nghiệp vụ bị hạn chế.
 - [ ] **FE-MISS-005:** API admin đặt lại mật khẩu nhân viên. Hàng mật khẩu vẫn chỉ hiển thị dấu chấm cố định.
@@ -125,7 +125,7 @@ Các mục sau vẫn mở tại [MISSING.md](./MISSING.md); hoàn thiện UI kh�
 | --- | --- | --- |
 | Giao diện/luồng tài khoản | `frontend/src/features/auth/UsersPage.jsx` | Chỉnh sửa trực tiếp, lưu hồ sơ/vai trò, ETag, cache và partial save. |
 | Thông báo dùng chung | `frontend/src/components/FeedbackProvider.jsx` | Popup thành công, đóng bằng bàn phím và trả focus. |
-| Vai trò | `frontend/src/features/auth/RolesPage.jsx` | Disabled Sửa theo ba mã vai trò hệ thống. |
+| Vai trò | `frontend/src/features/auth/RolesPage.jsx` | Hiển thị/tìm mô tả API, disabled Tạo và giữ disabled Sửa/Xóa của ba vai trò hệ thống theo D-VT-01. |
 | Khung ứng dụng | `frontend/src/layouts/MainLayout.jsx` | Nội dung và phạm vi popup đăng xuất. |
 | Kiểu hiển thị | `frontend/src/app/App.css` | Input trực tiếp, popup thành công và logout có phạm vi. |
 | Kiểm thử | `frontend/tests/browser/admin-ui.spec.js`, `api-fixture.js`, `mutations.spec.js` | Kiểm tra luồng mới và hồi quy an toàn dữ liệu. |
@@ -133,3 +133,37 @@ Các mục sau vẫn mở tại [MISSING.md](./MISSING.md); hoàn thiện UI kh�
 | Bàn giao | `doc/bao-cao-ui-admin.md`, `doc/ui-admin-screenshots/*.png` | Báo cáo tổng hợp và ảnh kiểm chứng có thể xem cùng repository. |
 
 **Kết luận bàn giao:** đạt yêu cầu frontend đã chốt; còn các phụ thuộc API và kiểm chứng E2E nêu trên. Dev đã yêu cầu commit/push báo cáo cùng code lên `feature/UI-admin`; không bao gồm merge vào `main` hoặc thay đổi môi trường dữ liệu.
+
+## 9. Bổ sung FE-MISS-002 — Mô tả vai trò (09/11/2026)
+
+Thực thi `.handoff/plan-vai-tro-mo-ta.md` theo D-VT-01. `GET /api/v1/vai_tro` bổ sung `mo_ta` (`string | null`), giữ quyền admin/quản lý, thứ tự và phân trang. ORM dùng cột thường `varchar(255) NULL`, không default; seed có ba mô tả tóm tắt SRS_v4 §2. Tạo/Sửa/Xóa vô hiệu hóa vì bộ vai trò cố định. Đóng FE-MISS-002, ROL-03/04/06, ROL-Q01..Q05 và QA-10 theo phạm vi này.
+
+Các file sửa trong riêng tác vụ này (giữ nguyên thay đổi có sẵn của dev):
+
+| File | Mục đích |
+| --- | --- |
+| `backend/app/modules/nhan_vien/models.py` | Thêm ORM `VaiTro.mo_ta`, đồng bộ cột đã có trong bootstrap. |
+| `backend/app/modules/nhan_vien/schemas.py` | Bổ sung field nullable trong `VaiTroRead`. |
+| `infra/postgres/seed.sql` | Seed ba mô tả theo P1; giữ nguyên các phần seed khác. |
+| `frontend/src/features/auth/RolesPage.jsx` | Đặt disabled cho Tạo; dùng CSS độ mờ sẵn có. |
+| `frontend/tests/browser/api-fixture.js` | Fixture ba mô tả khớp seed. |
+| `frontend/tests/browser/admin-ui.spec.js` | Kiểm tra mô tả, tìm BOM, null, nút Tạo disabled và không phát sinh request; chụp lại ADM-04. |
+| `docs/sequence/nhan_vien.md` | Cập nhật mô tả response; giữ nguyên tám khối Mermaid. |
+| `docs/api_contract_v3.md` | Cập nhật field và phạm vi vai trò chỉ đọc. |
+| `docs/DECISION.md` | Ghi D-VT-01, các quyết định P1–P5 và giới hạn triển khai. |
+| `doc/MISSING.md` | Đóng FE-MISS-002, ghi căn cứ và giới hạn. |
+| `doc/dac-ta-giao-dien-admin.md` | Cập nhật ROL/QA và các khác biệt đã chốt với ảnh. |
+| `doc/bao-cao-ui-admin.md` | Đồng bộ báo cáo, danh sách file và kết quả kiểm chứng. |
+
+`infra/postgres/init.sql` đã có cột/comment `mo_ta` trước phiên này; không sửa thêm. Repository/service/ports không cần đổi vì đã chuyển ORM sang `VaiTroRead`. Không giữ test backend mới trong repo theo lựa chọn dev; tám file test bị xóa trước phiên được giữ nguyên trạng thái.
+
+Kết quả kiểm chứng:
+
+- Backend: 14/14 ca pytest tạm đạt trên database có hậu tố `_test`, schema ngẫu nhiên được dọn sau mỗi ca. Bao gồm mô tả seed/null cho admin/quản lý, nhân viên 403, thiếu token 401, POST/PATCH/DELETE trả 405, phân trang và hồi quy đăng nhập, `/auth/me`, chi tiết nhân viên cho cả ba vai trò. Chạy bằng venv tạm từ manifest backend và công cụ kiểm thử; không dùng database ứng dụng.
+- Bootstrap: nguyên bản `init.sql` rồi `seed.sql` đều exit 0 trên container `postgres:16-alpine` tạm không mount volume ứng dụng. SELECT xác nhận ba mô tả dài lần lượt 135/136/124 ký tự; metadata cột là `character varying`, 255, nullable YES, không default; CHECK ba mã giữ nguyên. Container tạm đã được dừng và tự xóa.
+- Ruff toàn backend đạt; mypy hai file backend sửa đạt. Chạy trực tiếp tương đương phần lint của Makefile, không khởi động backend trên DB cũ.
+- Frontend: `npm run lint` đạt; `npm test` đạt 27/27. `npm run test:browser` đạt 103/105, trong đó ADM-04 đạt. Hai lỗi ở `workflows.spec.js:57` (kỳ vọng heading “Việc được giao” nhưng trang hiện “Tổng quan”) và `workflows.spec.js:90` (locator “Nhà cung cấp” chọn link sidebar thay vì select). Đã chạy lại hai ca với fixture trước tác vụ và test workflow không đổi ở thư mục/cổng riêng: cả hai tái hiện cùng lỗi. Không sửa các phần ngoài phạm vi để làm xanh toàn bộ suite.
+- Đã xem ảnh thiết kế `quan_ly_vai_tro.png` và ảnh mới `frontend/test-results/adm-04-roles-1670x941.png`, `adm-04-roles-375x812.png`; có đủ mô tả, Tạo mờ, Sửa/Xóa disabled. Ảnh 1440×900 cũng được chụp. Mobile giữ bảng cuộn ngang hiện có. Dev đồng ý kiểm tra trực tiếp thay hai skill ui-consistency không có sẵn.
+- Sequence đã đối chiếu router/service/schema/model/dependency; tám khối Mermaid giữ nguyên. Không có công cụ Mermaid sẵn có nên chưa render/kiểm tra cú pháp bằng Mermaid. `git diff --check` đạt.
+
+Giới hạn: DB ứng dụng chưa được cập nhật. Backend mới chạy trên DB thiếu `mo_ta` sẽ lỗi ở đăng nhập và mọi request có token do selectin `NhanVien.role`; cần triển khai cùng DB đã có cột. Chỉ cập nhật bootstrap cho DB mới/trống, không migration, ALTER, seed lại hoặc xóa volume đang dùng. Dev cập nhật riêng API contract/data model trên Drive. Kiểm thử API PostgreSQL và UI fixture là hai lớp riêng, chưa xác nhận browser E2E kết nối backend thật. Tác vụ này chưa commit/push hoặc accept thay đổi.

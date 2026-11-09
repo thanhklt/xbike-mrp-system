@@ -4,6 +4,7 @@ from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.bom import models as bom_models  # noqa: F401
 from app.modules.dieu_chinh_kho import models as dieu_chinh_kho_models  # noqa: F401
 from app.modules.inventory import models as inventory_models  # noqa: F401
+from app.modules.luu_luong import models as luu_luong_models  # noqa: F401
 from app.modules.mat_hang import models as mat_hang_models  # noqa: F401
 from app.modules.nha_cung_cap import models as nha_cung_cap_models  # noqa: F401
 from app.modules.nhan_vien import models as nhan_vien_models  # noqa: F401

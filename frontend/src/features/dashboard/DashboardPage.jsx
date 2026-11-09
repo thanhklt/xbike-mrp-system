@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Ban,
@@ -124,8 +124,255 @@ const ROLE_CHART_CONFIG = [
   { code: "quan_tri_vien", label: "Quản trị viên", color: "#feddbe" },
 ];
 
-const TRAFFIC_TICKS_Y = ["4.000", "3.500", "3.000", "2.500", "2.000", "1.000", "500", "0"];
-const TRAFFIC_TICKS_X = ["00h", "03h", "06h", "09h", "12h", "15h", "18h", "21h"];
+const TRAFFIC_RANGES = [
+  { key: "hom_nay", label: "Hôm nay" },
+  { key: "7_ngay", label: "7 ngày" },
+  { key: "30_ngay", label: "30 ngày" },
+];
+const TRAFFIC_MIN_Y_MAX = 4000;
+const TRAFFIC_Y_STEPS = 8;
+const TRAFFIC_HOURS_PER_DAY = 24;
+const TRAFFIC_HOUR_LABEL_EVERY = 3;
+const TRAFFIC_DAY_LABEL_EVERY = 5;
+const TRAFFIC_VIEWBOX = 1000;
+
+const trafficHourFormat = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+const trafficDayFormat = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
+});
+
+function trafficTickLabel(instant, step) {
+  const formatter = step === "ngay" ? trafficDayFormat : trafficHourFormat;
+  const parts = Object.fromEntries(
+    formatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]),
+  );
+  // vi-VN joins day and month with "-"; the chart writes dd/MM.
+  return step === "ngay" ? `${parts.day}/${parts.month}` : `${parts.hour}h`;
+}
+
+/** Points that get an x-axis label and a dot: every 3 hours, every day, or every 5 days back from today. */
+function isTrafficTick(range, index, count) {
+  if (range === "hom_nay") return index % TRAFFIC_HOUR_LABEL_EVERY === 0;
+  if (range === "7_ngay") return true;
+  return (count - 1 - index) % TRAFFIC_DAY_LABEL_EVERY === 0;
+}
+
+/** Linear axis from 0, never below the design's 4.000, rounded up to a step of 1/2/2.5/5 × 10ⁿ. */
+function trafficYMax(values) {
+  const highest = Math.max(0, ...values);
+  if (highest <= TRAFFIC_MIN_Y_MAX) return TRAFFIC_MIN_Y_MAX;
+  const rawStep = highest / TRAFFIC_Y_STEPS;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const factor = [1, 2, 2.5, 5, 10].find((candidate) => candidate * magnitude >= rawStep);
+  return factor * magnitude * TRAFFIC_Y_STEPS;
+}
+
+function trafficX(index, count) {
+  return count > 1 ? (index / (count - 1)) * 100 : 0;
+}
+
+/** Monotone cubic curve (Fritsch–Carlson): smooth like the design, never dips below 0. */
+function smoothTrafficPath(points) {
+  if (points.length === 0) return "";
+  const [first] = points;
+  if (points.length === 1) return `M${first.x},${first.y}`;
+  const slopes = points
+    .slice(0, -1)
+    .map((point, index) => (points[index + 1].y - point.y) / (points[index + 1].x - point.x));
+  const tangents = points.map((_, index) => {
+    if (index === 0) return slopes[0];
+    if (index === points.length - 1) return slopes[index - 1];
+    const before = slopes[index - 1];
+    const after = slopes[index];
+    return before * after <= 0 ? 0 : (before + after) / 2;
+  });
+  slopes.forEach((slope, index) => {
+    if (slope === 0) {
+      tangents[index] = 0;
+      tangents[index + 1] = 0;
+      return;
+    }
+    const a = tangents[index] / slope;
+    const b = tangents[index + 1] / slope;
+    const length = a * a + b * b;
+    if (length > 9) {
+      const scale = 3 / Math.sqrt(length);
+      tangents[index] = scale * a * slope;
+      tangents[index + 1] = scale * b * slope;
+    }
+  });
+  let path = `M${first.x},${first.y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const third = (end.x - start.x) / 3;
+    path += ` C${start.x + third},${start.y + tangents[index] * third} ${end.x - third},${
+      end.y - tangents[index + 1] * third
+    } ${end.x},${end.y}`;
+  }
+  return path;
+}
+
+function TrafficCard() {
+  const gradientId = useId();
+  const [range, setRange] = useState("hom_nay");
+  const traffic = useResource(API.traffic, { khoang_thoi_gian: range });
+  const series = traffic.isSuccess ? traffic.data?.data : null;
+  const points = series?.diem ?? [];
+  const count = points.length;
+  const rangeLabel = TRAFFIC_RANGES.find((item) => item.key === range).label;
+  const showAverage = range === "30_ngay";
+
+  // The line stops at the last point the server has reached (later hours of today are null).
+  const firstNull = points.findIndex((point) => point.so_request === null);
+  const reached = firstNull === -1 ? points : points.slice(0, firstNull);
+  const averages = showAverage ? points.filter((point) => point.trung_binh_7_ngay !== null) : [];
+  const yMax = trafficYMax([
+    ...reached.map((point) => point.so_request),
+    ...averages.map((point) => point.trung_binh_7_ngay),
+  ]);
+  const yTicks = Array.from(
+    { length: TRAFFIC_Y_STEPS + 1 },
+    (_, index) => yMax - (index * yMax) / TRAFFIC_Y_STEPS,
+  );
+  const toSvg = (index, value) => ({
+    x: (trafficX(index, count) / 100) * TRAFFIC_VIEWBOX,
+    y: TRAFFIC_VIEWBOX - (value / yMax) * TRAFFIC_VIEWBOX,
+  });
+  const linePoints = reached.map((point) => toSvg(points.indexOf(point), point.so_request));
+  const linePath = smoothTrafficPath(linePoints);
+  const areaPath =
+    linePoints.length > 1
+      ? `${linePath} L${linePoints.at(-1).x},${TRAFFIC_VIEWBOX} L${linePoints[0].x},${TRAFFIC_VIEWBOX} Z`
+      : "";
+  const averagePath = smoothTrafficPath(
+    averages.map((point) => toSvg(points.indexOf(point), point.trung_binh_7_ngay)),
+  );
+
+  const xTicks = series
+    ? points
+        .map((point, index) => ({ point, index }))
+        .filter(({ index }) => isTrafficTick(range, index, count))
+        .map(({ point, index }) => ({
+          key: point.bat_dau,
+          label: trafficTickLabel(point.bat_dau, series.buoc),
+          x: trafficX(index, count),
+        }))
+    : range === "hom_nay"
+      ? Array.from({ length: TRAFFIC_HOURS_PER_DAY / TRAFFIC_HOUR_LABEL_EVERY }, (_, slot) => ({
+          key: slot,
+          label: `${String(slot * TRAFFIC_HOUR_LABEL_EVERY).padStart(2, "0")}h`,
+          x: trafficX(slot * TRAFFIC_HOUR_LABEL_EVERY, TRAFFIC_HOURS_PER_DAY),
+        }))
+      : [];
+  const dots = reached
+    .map((point) => ({ point, index: points.indexOf(point) }))
+    .filter(({ index }) => isTrafficTick(range, index, count))
+    .map(({ point, index }) => ({
+      key: point.bat_dau,
+      x: trafficX(index, count),
+      y: (point.so_request / yMax) * 100,
+    }));
+  const plotLabel = series
+    ? `Biểu đồ lưu lượng truy cập ${rangeLabel}: tổng ${number(series.tong_request)} request`
+    : `Biểu đồ lưu lượng truy cập ${rangeLabel}`;
+
+  return (
+    <section className="admin-surface admin-traffic-card">
+      <div className="admin-traffic-header">
+        <div>
+          <div className="admin-card-title">
+            <BarChart3 size={18} className="admin-title-icon" aria-hidden="true" />
+            <h2>Lưu lượng truy website</h2>
+          </div>
+          <p className="admin-card-subtitle">
+            {range === "hom_nay"
+              ? "Tổng hợp theo số lượng request mỗi giờ"
+              : "Tổng hợp theo số lượng request mỗi ngày"}
+          </p>
+          {showAverage && (
+            <ul className="admin-traffic-legend">
+              <li>
+                <span className="admin-traffic-legend-line" aria-hidden="true" />
+                Request mỗi ngày
+              </li>
+              <li>
+                <span className="admin-traffic-legend-line is-average" aria-hidden="true" />
+                Trung bình 7 ngày
+              </li>
+            </ul>
+          )}
+          {traffic.isError && <small className="admin-stat-error">Không tải được số liệu</small>}
+        </div>
+        <div className="admin-range-tabs" role="group" aria-label="Khoảng thời gian lưu lượng">
+          {TRAFFIC_RANGES.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`admin-range-tab${range === item.key ? " is-active" : ""}`}
+              aria-pressed={range === item.key}
+              onClick={() => setRange(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="admin-traffic-plot" role="img" aria-label={plotLabel}>
+        <div className="admin-traffic-yaxis" aria-hidden="true">
+          {yTicks.map((tick) => (
+            <span key={tick}>{number(tick)}</span>
+          ))}
+        </div>
+        <div className="admin-traffic-canvas">
+          <div className="admin-traffic-gridlines" aria-hidden="true">
+            {yTicks.map((tick) => (
+              <div key={tick} className="admin-traffic-gridline" />
+            ))}
+            {linePoints.length > 0 && (
+              <svg
+                className="admin-traffic-svg"
+                viewBox={`0 0 ${TRAFFIC_VIEWBOX} ${TRAFFIC_VIEWBOX}`}
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" className="admin-traffic-fill-top" />
+                    <stop offset="100%" className="admin-traffic-fill-bottom" />
+                  </linearGradient>
+                </defs>
+                {areaPath && <path d={areaPath} fill={`url(#${gradientId})`} />}
+                <path d={linePath} className="admin-traffic-line" />
+                {averagePath && <path d={averagePath} className="admin-traffic-line is-average" />}
+              </svg>
+            )}
+            {dots.map((dot) => (
+              <span
+                key={dot.key}
+                className="admin-traffic-dot"
+                style={{ left: `${dot.x}%`, bottom: `${dot.y}%` }}
+              />
+            ))}
+          </div>
+          <div className="admin-traffic-xaxis" aria-hidden="true">
+            {xTicks.map((tick) => (
+              <span key={tick.key} style={{ left: `${tick.x}%` }}>
+                {tick.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function AdminDashboard() {
   const employees = useChoices(API.employees);
@@ -193,52 +440,7 @@ function AdminDashboard() {
       </div>
 
       <div className="admin-charts-row">
-        <section className="admin-surface admin-traffic-card">
-          <div className="admin-traffic-header">
-            <div>
-              <div className="admin-card-title">
-                <BarChart3 size={18} className="admin-title-icon" aria-hidden="true" />
-                <h2>Lưu lượng truy website</h2>
-              </div>
-              <p className="admin-card-subtitle">Tổng hợp theo số lượng request mỗi giờ</p>
-            </div>
-            <div className="admin-range-tabs" role="group" aria-label="Khoảng thời gian lưu lượng">
-              <button type="button" className="admin-range-tab is-active">
-                Hôm nay
-              </button>
-              <button type="button" className="admin-range-tab">
-                7 ngày
-              </button>
-              <button type="button" className="admin-range-tab">
-                30 ngày
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="admin-traffic-plot"
-            role="img"
-            aria-label="Khung biểu đồ lưu lượng truy cập theo giờ"
-          >
-            <div className="admin-traffic-yaxis" aria-hidden="true">
-              {TRAFFIC_TICKS_Y.map((tick) => (
-                <span key={tick}>{tick}</span>
-              ))}
-            </div>
-            <div className="admin-traffic-canvas">
-              <div className="admin-traffic-gridlines" aria-hidden="true">
-                {TRAFFIC_TICKS_Y.map((tick) => (
-                  <div key={tick} className="admin-traffic-gridline" />
-                ))}
-              </div>
-              <div className="admin-traffic-xaxis" aria-hidden="true">
-                {TRAFFIC_TICKS_X.map((tick) => (
-                  <span key={tick}>{tick}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <TrafficCard />
 
         <section className="admin-surface admin-donut-card">
           <div className="admin-card-title">

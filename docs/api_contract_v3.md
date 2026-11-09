@@ -187,6 +187,7 @@ Phiếu nháp phải có ít nhất một dòng hợp lệ. Số lượng dòng 
 - `/nhan_vien/*` và `/vai_tro` trong phạm vi quyền ghi ở §4;
 - `/auth/*`: đăng nhập, xem hồ sơ và đổi mật khẩu của chính mình;
 - `GET /lich_su_thao_tac` dạng rút gọn (§13);
+- **[FE-MISS-001]** `GET /luu_luong_truy_cap` (§13, D-LL-01). Chỉ A được gọi;
 - `GET /health`, `GET /api/v1/ping`.
 
 Mọi endpoint nghiệp vụ còn lại trả 403 cho A, kể cả các endpoint chỉ đọc `/mat_hang`, `/danh_muc_mat_hang/`, `/nha_cung_cap`. Mỗi route nghiệp vụ phải có role guard loại trừ `quan_tri_vien`; kiểm thử chính sách rà soát toàn bộ route.
@@ -215,7 +216,9 @@ Tài nguyên tồn tại nhưng ngoài phạm vi người dùng trả 403; ID kh
 | PUT | `/nhan_vien/{id}/vai_tro` | A | `{vai_tro_id: int}` → NhanVienRead |
 | ~~POST~~ | ~~`/nhan_vien/{id}/vo_hieu_hoa`~~ | ~~A~~ | **[v3-bỏ]** Thay bằng DELETE |
 | POST | `/nhan_vien/{id}/mo_khoa` | A | LyDoInput; bi_khoa → hoat_dong; NhanVienRead |
-| GET | `/vai_tro` | A/Q | Danh sách `{id, ma_vai_tro, ten_vai_tro}`, phân trang, sắp theo ID tăng dần |
+| GET | `/vai_tro` | A/Q | Danh sách `{id, ma_vai_tro, ten_vai_tro, mo_ta}`, phân trang, sắp theo ID tăng dần |
+
+Theo D-VT-01 (09/11/2026), bộ vai trò cố định `quan_tri_vien`, `quan_ly`, `nhan_vien`; không có API tạo/sửa/xóa vai trò. `mo_ta` là `string | null`, chỉ đọc, tóm tắt phạm vi theo SRS_v4 §2. Bổ sung field này vào response không đổi quyền, query, phân trang hay thứ tự. Bootstrap `"VaiTro".mo_ta` dùng `varchar(255) NULL`, không default; database đã khởi tạo chưa tự cập nhật khi sửa bootstrap. Bản contract và data model v3.1 trên Drive cần dev cập nhật riêng.
 
 > v3: module `auth` giữ nguyên tên và đường dẫn, là ngoại lệ của quy tắc Việt hóa (QĐ-0311). Bổ sung `POST /auth/token` cho Swagger (QĐ-AUTH). DELETE nhân viên là soft delete; `POST /vo_hieu_hoa` bị bỏ (QĐ-NV).
 
@@ -663,6 +666,7 @@ Filter: `trang_thai`, `phieu_nhap_id`, `nguoi_tao_id`, `nguoi_xu_ly_id`, `tu_nga
 | GET | `/bao_cao/nhap_xuat_ton` | Q | NhapXuatTonRead phân trang theo mặt hàng |
 | GET | `/lich_su_thao_tac` | **[v3-đổi]** Q đầy đủ; A rút gọn | Danh sách AuditRead |
 | ~~GET~~ | ~~`/lich_su_thao_tac/{id}`~~ | ~~Cùng phạm vi~~ | **[v3-bỏ]** Không có endpoint chi tiết |
+| GET | `/luu_luong_truy_cap` | **[FE-MISS-001]** chỉ A | LuuLuongRead, không phân trang |
 
 > v3: giữ đường dẫn `/lich_su_thao_tac` của v2 theo yêu cầu Việt hóa (QĐ-0311). D-PQ-01 và code hiện tại dùng `/audit`; code phải đổi (§16.3).
 
@@ -689,6 +693,16 @@ Chỉ tính ledger đã ghi sổ, mỗi giao dịch một lần.
 - **[v3-mới] Rút gọn cho A (D-PQ-02):** A thấy mọi dòng, vẫn nhận `ly_do`; response bỏ hẳn hai key `du_lieu_truoc`, `du_lieu_sau`, không thay bằng `null`.
 - **[v3-đổi]** Vì whitelist sort chỉ có `id`, `created_at`, mọi vai trò gửi `sort=du_lieu_truoc`/`du_lieu_sau` đều nhận 422. Quy tắc "server tự chuyển sang `created_at`" của D-PQ-02 không còn cần.
 - Không có POST/PATCH/DELETE; trigger chặn UPDATE/DELETE bảng audit.
+
+**[FE-MISS-001] GET `/luu_luong_truy_cap`** (D-LL-01, phục vụ khối "Lưu lượng truy website" của ADM-01):
+
+- Quyền: chỉ A; Q và N nhận 403.
+- Query duy nhất `khoang_thoi_gian` ∈ `hom_nay` (mặc định), `7_ngay`, `30_ngay`. Giá trị khác, tham số lặp hoặc tham số lạ trả 422.
+- Response `{data: LuuLuongRead, meta: {request_id}}`. LuuLuongRead gồm `khoang_thoi_gian`, `buoc` (`gio` | `ngay`), `timezone` (`Asia/Ho_Chi_Minh`), `tu_thoi_diem`, `den_thoi_diem_exclusive`, `tong_request`, `diem[]`. Mỗi điểm gồm `bat_dau` (UTC, đầu giờ hoặc đầu ngày địa phương), `so_request` (`int | null`) và `trung_binh_7_ngay` (`number | null`).
+- `hom_nay`: 24 điểm theo giờ của ngày hiện tại; giờ sau giờ hiện tại có `so_request = null`.
+- `7_ngay` / `30_ngay`: 7 hoặc 30 điểm theo ngày lịch, điểm cuối là hôm nay (số tạm tính đến hiện tại).
+- Chỉ `30_ngay` có `trung_binh_7_ngay`: trung bình của ngày đó và 6 ngày trước, làm tròn 1 chữ số; tính cả 6 ngày trước `tu_thoi_diem`. Các khoảng khác trả `null`. `tong_request` chỉ cộng các điểm hiển thị.
+- Nguồn số liệu: bảng `"LuuLuongTruyCap"`, mỗi giờ một dòng. Middleware đếm mọi request `/api/v1` trừ `OPTIONS`, kể cả request lỗi.
 
 ## 14. Trạng thái, ghi sổ và lỗi
 

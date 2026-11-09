@@ -1,4 +1,56 @@
 // In-memory API for browser verification only. This file is not imported by the app.
+// Fixed "today" for traffic: 09/11/2026 in Asia/Ho_Chi_Minh, current hour 15h.
+const TRAFFIC_TODAY_START = Date.UTC(2026, 10, 8, 17);
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const TRAFFIC_HOURS = [
+  420, 380, 350, 400, 520, 610, 900, 1500, 2100, 2650, 2400, 2300, 2280, 3000, 3550, 3400,
+];
+const TRAFFIC_DAYS = [
+  31000, 29500, 30500, 32000, 28000, 26500, 33000, 34500, 30000, 29000, 31500, 32500, 35000, 27000,
+  25500, 33500, 36000, 34000, 30500, 31000, 32000, 29500, 28500, 33000, 35500, 34500, 31000, 30000,
+  32500, 33000, 31500, 30500, 34000, 35000, 36500, 12500,
+];
+
+export function trafficSeries(range) {
+  const iso = (time) => new Date(time).toISOString().replace(".000Z", "Z");
+  const end = TRAFFIC_TODAY_START + DAY;
+  let points;
+  if (range === "hom_nay") {
+    points = Array.from({ length: 24 }, (_, hour) => ({
+      bat_dau: iso(TRAFFIC_TODAY_START + hour * HOUR),
+      so_request: TRAFFIC_HOURS[hour] ?? null,
+      trung_binh_7_ngay: null,
+    }));
+  } else {
+    const count = range === "7_ngay" ? 7 : 30;
+    const offset = TRAFFIC_DAYS.length - count;
+    points = Array.from({ length: count }, (_, index) => {
+      const window = TRAFFIC_DAYS.slice(offset + index - 6, offset + index + 1);
+      return {
+        bat_dau: iso(TRAFFIC_TODAY_START - (count - 1 - index) * DAY),
+        so_request: TRAFFIC_DAYS[offset + index],
+        trung_binh_7_ngay:
+          range === "30_ngay"
+            ? Math.round((window.reduce((sum, value) => sum + value, 0) / 7) * 10) / 10
+            : null,
+      };
+    });
+  }
+  return {
+    data: {
+      khoang_thoi_gian: range,
+      buoc: range === "hom_nay" ? "gio" : "ngay",
+      timezone: "Asia/Ho_Chi_Minh",
+      tu_thoi_diem: points[0].bat_dau,
+      den_thoi_diem_exclusive: iso(end),
+      tong_request: points.reduce((sum, point) => sum + (point.so_request ?? 0), 0),
+      diem: points,
+    },
+    meta: { request_id: "traffic-fixture" },
+  };
+}
+
 export async function installApi(page, { role = "quan_ly", authenticated = true, intercept } = {}) {
   const people = [
     {
@@ -167,9 +219,27 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     resources: {
       nhan_vien: people,
       vai_tro: [
-        { id: 1, ma_vai_tro: "quan_tri_vien", ten_vai_tro: "Quản trị viên" },
-        { id: 2, ma_vai_tro: "quan_ly", ten_vai_tro: "Quản lý kho" },
-        { id: 3, ma_vai_tro: "nhan_vien", ten_vai_tro: "Nhân viên" },
+        {
+          id: 1,
+          ma_vai_tro: "quan_tri_vien",
+          ten_vai_tro: "Quản trị viên",
+          mo_ta:
+            "Quản trị hệ thống và tài khoản người dùng: thêm, vô hiệu hóa và phân quyền tài khoản; không mặc định thực hiện nghiệp vụ kho, sản xuất.",
+        },
+        {
+          id: 2,
+          ma_vai_tro: "quan_ly",
+          ten_vai_tro: "Quản lý kho",
+          mo_ta:
+            "Quản lý nguyên vật liệu, thành phẩm, BOM; nhập kho, duyệt xuất kho, duyệt chứng từ hoàn thành sản xuất, yêu cầu sản xuất và báo cáo kho.",
+        },
+        {
+          id: 3,
+          ma_vai_tro: "nhan_vien",
+          ten_vai_tro: "Nhân viên",
+          mo_ta:
+            "Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
+        },
       ],
       mat_hang: items,
       nha_cung_cap: [
@@ -353,6 +423,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (path === "auth/doi_mat_khau") return respond({ data: { da_doi: true }, meta: {} });
     if (path === "danh_muc_mat_hang")
       return respond({ data: items, meta: { total: items.length } });
+    if (path === "luu_luong_truy_cap")
+      return respond(trafficSeries(call.params.khoang_thoi_gian || "hom_nay"));
     const [resource, rawId, action] = path.split("/");
     const records = state.resources[resource];
     if (!records) {
