@@ -1,4 +1,108 @@
 // In-memory API for browser verification only. This file is not imported by the app.
+// Fixed "today" for traffic: 09/11/2026 in Asia/Ho_Chi_Minh, current hour 15h.
+const TRAFFIC_TODAY_START = Date.UTC(2026, 10, 8, 17);
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const TRAFFIC_HOURS = [
+  420, 380, 350, 400, 520, 610, 900, 1500, 2100, 2650, 2400, 2300, 2280, 3000, 3550, 3400,
+];
+const TRAFFIC_DAYS = [
+  31000, 29500, 30500, 32000, 28000, 26500, 33000, 34500, 30000, 29000, 31500, 32500, 35000, 27000,
+  25500, 33500, 36000, 34000, 30500, 31000, 32000, 29500, 28500, 33000, 35500, 34500, 31000, 30000,
+  32500, 33000, 31500, 30500, 34000, 35000, 36500, 12500,
+];
+
+export function trafficSeries(range) {
+  const iso = (time) => new Date(time).toISOString().replace(".000Z", "Z");
+  const end = TRAFFIC_TODAY_START + DAY;
+  let points;
+  if (range === "hom_nay") {
+    points = Array.from({ length: 24 }, (_, hour) => ({
+      bat_dau: iso(TRAFFIC_TODAY_START + hour * HOUR),
+      so_request: TRAFFIC_HOURS[hour] ?? null,
+      trung_binh_7_ngay: null,
+    }));
+  } else {
+    const count = range === "7_ngay" ? 7 : 30;
+    const offset = TRAFFIC_DAYS.length - count;
+    points = Array.from({ length: count }, (_, index) => {
+      const window = TRAFFIC_DAYS.slice(offset + index - 6, offset + index + 1);
+      return {
+        bat_dau: iso(TRAFFIC_TODAY_START - (count - 1 - index) * DAY),
+        so_request: TRAFFIC_DAYS[offset + index],
+        trung_binh_7_ngay:
+          range === "30_ngay"
+            ? Math.round((window.reduce((sum, value) => sum + value, 0) / 7) * 10) / 10
+            : null,
+      };
+    });
+  }
+  return {
+    data: {
+      khoang_thoi_gian: range,
+      buoc: range === "hom_nay" ? "gio" : "ngay",
+      timezone: "Asia/Ho_Chi_Minh",
+      tu_thoi_diem: points[0].bat_dau,
+      den_thoi_diem_exclusive: iso(end),
+      tong_request: points.reduce((sum, point) => sum + (point.so_request ?? 0), 0),
+      diem: points,
+    },
+    meta: { request_id: "traffic-fixture" },
+  };
+}
+
+export function adminActivityEntries() {
+  return [
+    {
+      loai_doi_tuong: "vai_tro",
+      thao_tac: "tao",
+      doi_tuong_id: 2,
+      du_lieu_sau: { ten_vai_tro: "Quản lý kho" },
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "cap_quyen",
+      doi_tuong_id: 5,
+      du_lieu_truoc: { ma_vai_tro: "nhan_vien" },
+      du_lieu_sau: { ma_nhan_vien: "nv005", ho_ten: "Tên lịch sử", ma_vai_tro: "quan_ly" },
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "sua",
+      doi_tuong_id: 3,
+      du_lieu_truoc: { email: "old", so_dien_thoai: "old" },
+      du_lieu_sau: {
+        ma_nhan_vien: "nv003",
+        ho_ten: "Tên lịch sử",
+        email: "private@example.test",
+        so_dien_thoai: "0909999999",
+      },
+    },
+    { loai_doi_tuong: "nhan_vien", thao_tac: "dang_nhap", nhan_vien_id: 3, doi_tuong_id: 3 },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "vo_hieu_hoa",
+      doi_tuong_id: 7,
+      du_lieu_sau: { ma_nhan_vien: "nv007", ho_ten: "Tên lịch sử" },
+      ly_do: "không còn sử dụng",
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "thu_hoi_quyen",
+      doi_tuong_id: 5,
+      du_lieu_truoc: { ma_vai_tro: "nhan_vien" },
+    },
+  ].map((entry, index) => ({
+    id: index + 1,
+    nhan_vien_id: 2,
+    created_at: `2026-11-10T0${8 - index}:00:00Z`,
+    du_lieu_truoc: null,
+    du_lieu_sau: null,
+    ly_do: null,
+    ...entry,
+  }));
+}
+
 export async function installApi(page, { role = "quan_ly", authenticated = true, intercept } = {}) {
   const people = [
     {
@@ -161,15 +265,34 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
   };
   const state = {
     role,
+    accessToken: "browser-test-token",
     calls: [],
     unexpected: [],
     versions: {},
     resources: {
       nhan_vien: people,
       vai_tro: [
-        { id: 1, ma_vai_tro: "quan_tri_vien", ten_vai_tro: "Quản trị viên" },
-        { id: 2, ma_vai_tro: "quan_ly", ten_vai_tro: "Quản lý kho" },
-        { id: 3, ma_vai_tro: "nhan_vien", ten_vai_tro: "Nhân viên" },
+        {
+          id: 1,
+          ma_vai_tro: "quan_tri_vien",
+          ten_vai_tro: "Quản trị viên",
+          mo_ta:
+            "Quản trị hệ thống và tài khoản người dùng: thêm, vô hiệu hóa và phân quyền tài khoản; không mặc định thực hiện nghiệp vụ kho, sản xuất.",
+        },
+        {
+          id: 2,
+          ma_vai_tro: "quan_ly",
+          ten_vai_tro: "Quản lý kho",
+          mo_ta:
+            "Quản lý nguyên vật liệu, thành phẩm, BOM; nhập kho, duyệt xuất kho, duyệt chứng từ hoàn thành sản xuất, yêu cầu sản xuất và báo cáo kho.",
+        },
+        {
+          id: 3,
+          ma_vai_tro: "nhan_vien",
+          ten_vai_tro: "Nhân viên",
+          mo_ta:
+            "Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
+        },
       ],
       mat_hang: items,
       nha_cung_cap: [
@@ -342,17 +465,21 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (path === "auth/dang_nhap")
       return respond({
         data: {
-          access_token: "browser-test-token",
+          access_token: state.accessToken,
           token_type: "bearer",
           expires_in: 3600,
           nhan_vien: user,
         },
         meta: {},
       });
+    if (state.accessToken !== "browser-test-token" && call.headers.authorization !== `Bearer ${state.accessToken}`)
+      return respond({ error: { message: "Please sign in again" } }, 401);
     if (path === "auth/me") return respond({ data: user, meta: {} }, 200, { etag: '"user-v1"' });
     if (path === "auth/doi_mat_khau") return respond({ data: { da_doi: true }, meta: {} });
     if (path === "danh_muc_mat_hang")
       return respond({ data: items, meta: { total: items.length } });
+    if (path === "luu_luong_truy_cap")
+      return respond(trafficSeries(call.params.khoang_thoi_gian || "hom_nay"));
     const [resource, rawId, action] = path.split("/");
     const records = state.resources[resource];
     if (!records) {
@@ -440,11 +567,13 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (method === "GET") {
       let matching = records.filter((entry) =>
         Object.entries(call.params).every(([key, value]) =>
-          ["page", "page_size", "sort", "sort_by", "sort_order"].includes(key) ||
-          ["q", "search"].includes(key)
-            ? !["q", "search"].includes(key) ||
-              JSON.stringify(entry).toLowerCase().includes(value.toLowerCase())
-            : String(entry[key]) === value,
+          key === "bo_thao_tac"
+            ? entry.thao_tac !== value
+            : ["page", "page_size", "sort", "sort_by", "sort_order"].includes(key) ||
+                ["q", "search"].includes(key)
+              ? !["q", "search"].includes(key) ||
+                JSON.stringify(entry).toLowerCase().includes(value.toLowerCase())
+              : String(entry[key]) === value,
         ),
       );
       const pageNumber = Number(url.searchParams.get("page") || 1),
@@ -486,8 +615,20 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         { error: { code: "du_lieu_da_thay_doi", message: "Dữ liệu đã thay đổi" }, meta: {} },
         412,
       );
+    if (resource === "nhan_vien" && action === "dat_lai_mat_khau" && method === "POST") {
+      if (id === user.id) state.accessToken = "browser-test-token-renewed";
+      return respond({ data: record, meta: {} }, 200, { etag: version() });
+    }
     state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
-    if (method === "PATCH" || method === "PUT") Object.assign(record, body);
+    if (method === "PATCH" || method === "PUT") {
+      Object.assign(record, body);
+      if (resource === "nhan_vien" && action === "vai_tro" && body.vai_tro_id !== undefined) {
+        const matchedRole = state.resources.vai_tro.find(
+          (entry) => entry.id === Number(body.vai_tro_id),
+        );
+        if (matchedRole) record.ma_vai_tro = matchedRole.ma_vai_tro;
+      }
+    }
     if (method === "DELETE" && resource === "mat_hang") {
       record.is_active = false;
       return respond(null, 204);

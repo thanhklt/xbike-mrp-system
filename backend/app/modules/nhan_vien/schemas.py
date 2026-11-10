@@ -175,6 +175,12 @@ class DoiVaiTroInput(BaseModel):
     vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
 
 
+class DatLaiMatKhauInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024, repr=False)
+
+
 class LyDoInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -194,6 +200,7 @@ class VaiTroRead(BaseModel):
     id: int
     ma_vai_tro: RoleCode
     ten_vai_tro: str
+    mo_ta: str | None
 
 
 class VaiTroListResponse(BaseModel):

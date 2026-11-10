@@ -10,6 +10,7 @@ from app.core.request_context import get_request_id
 from app.core.request_context import reject_query as validate_detail_query
 from app.dependencies import get_current_user_payload, get_nhan_vien_service
 from app.modules.nhan_vien.schemas import (
+    DatLaiMatKhauInput,
     DoiVaiTroInput,
     EmployeeSort,
     EmployeeStatus,
@@ -213,6 +214,28 @@ async def unlock_entry(
     if_match: IfMatch = None,
 ) -> NhanVienDetailResponse:
     result, etag = await service.unlock_employee(id, actor, if_match, params.ly_do, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+@router.post(
+    "/{id}/dat_lai_mat_khau",
+    response_model=NhanVienDetailResponse,
+    dependencies=[Depends(validate_detail_query)],
+    responses={200: {"headers": {"ETag": ETAG_HEADER}}},
+)
+async def reset_password_entry(
+    id: EmployeeId,
+    params: DatLaiMatKhauInput,
+    actor: Actor,
+    service: Service,
+    request_id: RequestId,
+    response: Response,
+    if_match: IfMatch = None,
+) -> NhanVienDetailResponse:
+    result, etag = await service.reset_password(
+        id, params.mat_khau_moi.get_secret_value(), actor, if_match, request_id
+    )
     response.headers["ETag"] = etag
     return result
 

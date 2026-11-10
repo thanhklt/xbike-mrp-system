@@ -34,7 +34,7 @@ class LichSuThaoTac(Base):
             name="ck_lich_su_thao_tac_loai_doi_tuong",
         ),
         CheckConstraint(
-            "thao_tac IN ('tao', 'sua', 'xoa_nhap', 'gui', 'bat_dau', 'duyet', 'tu_choi', 've_nhap', 'hoan_tat', 'cap_quyen', 'thu_hoi_quyen', 'vo_hieu_hoa', 'huy', 'ghi_nhan_loi', 'nhan_xu_ly', 'giai_quyet', 'xac_nhan')",
+            "thao_tac IN ('tao', 'sua', 'xoa_nhap', 'gui', 'bat_dau', 'duyet', 'tu_choi', 've_nhap', 'hoan_tat', 'cap_quyen', 'thu_hoi_quyen', 'vo_hieu_hoa', 'huy', 'ghi_nhan_loi', 'nhan_xu_ly', 'giai_quyet', 'xac_nhan', 'dang_nhap')",
             name="ck_lich_su_thao_tac_thao_tac",
         ),
     )

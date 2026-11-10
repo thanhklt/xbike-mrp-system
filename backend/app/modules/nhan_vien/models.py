@@ -56,3 +56,4 @@ class VaiTro(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     ma_vai_tro: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     ten_vai_tro: Mapped[str] = mapped_column(String, nullable=False)
+    mo_ta: Mapped[str | None] = mapped_column(String(255), nullable=True)

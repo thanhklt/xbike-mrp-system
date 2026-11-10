@@ -16,7 +16,29 @@ class CreationAudit(BaseModel):
     ly_do: str | None = None
 
 
-class AuditLogSummary(BaseModel):
+ThaoTac = Literal[
+    "tao",
+    "sua",
+    "xoa_nhap",
+    "gui",
+    "bat_dau",
+    "duyet",
+    "tu_choi",
+    "ve_nhap",
+    "hoan_tat",
+    "cap_quyen",
+    "thu_hoi_quyen",
+    "vo_hieu_hoa",
+    "huy",
+    "ghi_nhan_loi",
+    "nhan_xu_ly",
+    "giai_quyet",
+    "xac_nhan",
+    "dang_nhap",
+]
+
+
+class AuditLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -36,29 +58,8 @@ class AuditLogSummary(BaseModel):
         "ticket_loi_dieu_chinh",
     ]
     doi_tuong_id: int
-    thao_tac: Literal[
-        "tao",
-        "sua",
-        "xoa_nhap",
-        "gui",
-        "bat_dau",
-        "duyet",
-        "tu_choi",
-        "ve_nhap",
-        "hoan_tat",
-        "cap_quyen",
-        "thu_hoi_quyen",
-        "vo_hieu_hoa",
-        "huy",
-        "ghi_nhan_loi",
-        "nhan_xu_ly",
-        "giai_quyet",
-        "xac_nhan",
-    ]
+    thao_tac: ThaoTac
     ly_do: str | None
     created_at: datetime
-
-
-class AuditLogResponse(AuditLogSummary):
     du_lieu_truoc: dict | None
     du_lieu_sau: dict | None

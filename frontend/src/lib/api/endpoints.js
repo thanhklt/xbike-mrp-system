@@ -16,4 +16,5 @@ export const API = {
   adjustments: "/phieu_dieu_chinh_kho",
   tickets: "/ticket_loi_dieu_chinh",
   audit: "/audit",
+  traffic: "/luu_luong_truy_cap",
 };

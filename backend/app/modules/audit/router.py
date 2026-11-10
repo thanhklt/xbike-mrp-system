@@ -10,7 +10,7 @@ from app.dependencies import (
     get_pagination_params,
     require_roles,
 )
-from app.modules.audit.schemas import AuditLogResponse, AuditLogSummary
+from app.modules.audit.schemas import AuditLogResponse, ThaoTac
 from app.modules.audit.service import AuditService
 from app.shared.pagination import PageParams, PaginatedResponse
 
@@ -19,12 +19,11 @@ router = APIRouter(
 )
 
 
-@router.get(
-    "", response_model=PaginatedResponse[AuditLogResponse] | PaginatedResponse[AuditLogSummary]
-)
+@router.get("", response_model=PaginatedResponse[AuditLogResponse])
 async def list_0(
     params: Annotated[PageParams, Depends(get_pagination_params)],
     service: Annotated[AuditService, Depends(get_audit_service)],
     actor: Annotated[dict, Depends(require_roles(["quan_tri_vien", "quan_ly"]))],
+    bo_thao_tac: ThaoTac | None = None,
 ):
-    return await service.list_entries(params, actor)
+    return await service.list_entries(params, actor, bo_thao_tac=bo_thao_tac)

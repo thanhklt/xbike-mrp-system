@@ -117,6 +117,24 @@ class NhanVienService:
         _require_active(user)
         return _identity(user)
 
+    async def record_login(self, employee_id: int) -> None:
+        try:
+            async with self.transaction:
+                await self.audit.append(
+                    CreationAudit(
+                        nhan_vien_id=employee_id,
+                        loai_doi_tuong="nhan_vien",
+                        doi_tuong_id=employee_id,
+                        thao_tac="dang_nhap",
+                        du_lieu_truoc=None,
+                        du_lieu_sau=None,
+                        ly_do=None,
+                    )
+                )
+        except ConflictException as error:
+            # The shared transaction maps integrity errors to 409; login audit failures are 500.
+            raise RuntimeError("Không ghi được lịch sử đăng nhập") from error
+
     async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             raise UnauthorizedException(message="Invalid token subject")
@@ -302,6 +320,33 @@ class NhanVienService:
             if changes:
                 employee = await self.repository.update_profile(employee_id, changes)
                 await self._audit(actor, employee, "sua", before=before)
+        return self._result(employee, actor, request_id)
+
+    async def reset_password(
+        self,
+        employee_id: int,
+        new_password: str,
+        actor: dict,
+        if_match: str | None,
+        request_id: str,
+    ) -> tuple[NhanVienDetailResponse, str]:
+        _require_admin(actor)
+        new_hash = await asyncio.to_thread(get_password_hash, new_password)
+        async with self.transaction:
+            actor = await self._lock_admin(actor)
+            employee = await self._target(employee_id, actor, if_match)
+            await self.repository.set_password_hash(employee.id, new_hash)
+            await self.audit.append(
+                CreationAudit(
+                    nhan_vien_id=int(actor["sub"]),
+                    loai_doi_tuong="nhan_vien",
+                    doi_tuong_id=employee.id,
+                    thao_tac="sua",
+                    du_lieu_truoc=None,
+                    du_lieu_sau={"da_dat_lai_mat_khau": True},
+                    ly_do=None,
+                )
+            )
         return self._result(employee, actor, request_id)
 
     async def change_role(

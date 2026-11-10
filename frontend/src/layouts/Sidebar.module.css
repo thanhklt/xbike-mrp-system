@@ -131,6 +131,115 @@
   border-top: 1px solid #e9edf2;
 }
 
+.admin {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  flex: 0 0 264px;
+  width: 264px;
+  padding: 28px 12px 0;
+  background: #1b1511;
+  border-right: 1px solid #2b231d;
+  color: #f4ede6;
+  overflow: hidden;
+  z-index: 16;
+}
+
+.adminBrand {
+  padding: 2px 24px 28px;
+  flex-shrink: 0;
+}
+
+.adminLogo {
+  display: block;
+  width: 144px;
+  height: auto;
+}
+
+.admin .navigation {
+  flex: 1;
+  padding: 0;
+  z-index: 2;
+}
+
+.admin .group {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin .link {
+  min-height: 54px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  color: #e6ddd4;
+  font-size: 17px;
+  font-weight: 500;
+  gap: 14px;
+}
+
+.admin .link svg {
+  color: #d3c8bc;
+}
+
+.admin .link:hover {
+  background: rgb(255 255 255 / 0.06);
+  color: #fff;
+}
+
+.admin .link:hover svg {
+  color: #fff;
+}
+
+.admin .link:focus-visible {
+  outline: 2px solid #e06d2b;
+  outline-offset: 2px;
+}
+
+.admin .link.active {
+  background: #df6d27;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgb(223 109 39 / 0.28);
+}
+
+.admin .link.active svg {
+  color: #fff;
+}
+
+.admin .link.active::before {
+  display: none;
+}
+
+.adminArtwork {
+  position: relative;
+  margin: auto -12px 0;
+  height: min(600px, 64dvh);
+  flex-shrink: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.adminArtwork::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, #1b1511 0%, rgb(27 21 17 / 0.55) 14%, transparent 32%); /* taste-skill-ignore */
+  z-index: 1;
+}
+
+.adminArtwork img {
+  position: absolute;
+  left: 0;
+  bottom: -10px;
+  display: block;
+  width: 1684px;
+  max-width: none;
+  height: auto;
+}
+
 @media (min-width: 901px) {
   .collapsed {
     flex-basis: 76px;
@@ -160,7 +269,7 @@
 }
 
 @media (min-width: 901px) and (max-width: 1200px) {
-  .root:not(.collapsed) {
+  .root:not(.collapsed):not(.admin) {
     flex-basis: 240px;
     width: 240px;
   }
@@ -177,6 +286,13 @@
     width: min(280px, calc(100vw - 48px));
     box-shadow: 8px 12px 24px #192d401a;
     transition: none;
+  }
+
+  .admin {
+    top: 0;
+    height: 100dvh;
+    z-index: 25;
+    box-shadow: 12px 0 32px rgb(0 0 0 / 0.55);
   }
 
   .root.open {

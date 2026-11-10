@@ -14,6 +14,9 @@ sequenceDiagram
     participant A as auth.service
     participant N as nhan_vien.service
     participant P as nhan_vien.repository
+    participant T as SqlAlchemyTransaction
+    participant U as audit.service
+    participant AP as audit.repository
     participant DB as PostgreSQL
     C->>R: POST /api/v1/auth/dang_nhap, JSON
     R->>R: Validate LoginInput, reject_query
@@ -33,14 +36,30 @@ sequenceDiagram
             N-->>C: 403 tai_khoan_bi_vo_hieu_hoa hoặc khong_co_quyen
         else Xác thực thành công
             N-->>A: AuthIdentity, không có password hash
-            A->>A: Ký JWT với sub, roles, pwdv, iat, exp
-            A-->>R: TokenRead
-            R-->>C: 200 data và meta.request_id
+            A->>N: record_login(identity.profile.id)
+            N->>T: Mở phạm vi transaction ghi audit
+            N->>U: append(CreationAudit dang_nhap)
+            Note over N,U: nhan_vien_id = doi_tuong_id = id đăng nhập; hai snapshot và ly_do null
+            U->>AP: append(entry)
+            AP->>AP: session.add(LichSuThaoTac)
+            N->>T: Kết thúc phạm vi transaction
+            T->>DB: Flush INSERT audit và COMMIT
+            alt Append hoặc commit lỗi
+                T->>DB: ROLLBACK
+                Note over N,T: record_login chuyển ConflictException của adapter thành lỗi nội bộ
+                R-->>C: 500 loi_noi_bo, không cấp token
+            else Commit thành công
+                T-->>N: Đã commit
+                N-->>A: record_login hoàn tất
+                A->>A: Ký JWT với sub, roles, pwdv, iat, exp
+                A-->>R: TokenRead
+                R-->>C: 200 data và meta.request_id
+            end
         end
     end
 ```
 
-Response gồm `access_token`, `token_type=bearer`, `expires_in` tính bằng giây và `nhan_vien` là hồ sơ bản thân đầy đủ cho cả ba vai trò. Không fallback email ở endpoint này. Không lưu audit đăng nhập. JWT/hash/password không được đưa vào audit hoặc lỗi validation.
+Response gồm `access_token`, `token_type=bearer`, `expires_in` tính bằng giây và `nhan_vien` là hồ sơ bản thân đầy đủ cho cả ba vai trò. Không fallback email ở endpoint này. Theo D-HD-01, ghi đúng một audit đăng nhập trong transaction riêng, commit xong mới cấp token; không ghi khi xác thực bị từ chối. JWT/hash/password không được đưa vào audit hoặc lỗi validation.
 
 ## POST /api/v1/auth/token
 
@@ -53,6 +72,9 @@ sequenceDiagram
     participant A as auth.service
     participant N as nhan_vien.service
     participant P as nhan_vien.repository
+    participant T as SqlAlchemyTransaction
+    participant U as audit.service
+    participant AP as audit.repository
     participant DB as PostgreSQL
     C->>R: POST /api/v1/auth/token, OAuth2 form
     R->>R: Validate OAuth2PasswordRequestForm
@@ -78,14 +100,32 @@ sequenceDiagram
             N-->>C: 403
         else Hợp lệ
             N-->>A: AuthIdentity
-            A->>A: Ký JWT có credential version
-            A-->>R: TokenResponse
-            R-->>C: 200 access_token, token_type, expires_in
+            A->>N: record_login(identity.profile.id)
+            N->>T: Mở phạm vi transaction ghi audit
+            N->>U: append(CreationAudit dang_nhap)
+            Note over N,U: nhan_vien_id = doi_tuong_id = id đăng nhập; hai snapshot và ly_do null
+            U->>AP: append(entry)
+            AP->>AP: session.add(LichSuThaoTac)
+            N->>T: Kết thúc phạm vi transaction
+            T->>DB: Flush INSERT audit và COMMIT
+            alt Append hoặc commit lỗi
+                T->>DB: ROLLBACK
+                Note over N,T: record_login chuyển ConflictException của adapter thành lỗi nội bộ
+                R-->>C: 500 loi_noi_bo, không cấp token
+            else Commit thành công
+                T-->>N: Đã commit
+                N-->>A: record_login hoàn tất
+                A->>A: Ký JWT có credential version
+                A-->>R: TokenResponse
+                R-->>C: 200 access_token, token_type, expires_in
+            end
         end
     end
 ```
 
 Username ưu tiên hơn email; nếu username tồn tại nhưng password sai thì không thử account khác qua email. Email trùng bị từ chối. `/api/v1/auth/login` không được triển khai, trả 404.
+
+Cả hai endpoint đăng nhập giữ response/header hiện hành. Append/commit lỗi trả 500 và không có `access_token`, kể cả lỗi CHECK được adapter transaction chuyển thành ConflictException. Volume tạo trước commit `2ef564c` có thể chưa cho phép `dang_nhap`; không tự ALTER/seed DB.
 
 ## GET /api/v1/auth/me
 
@@ -211,4 +251,4 @@ sequenceDiagram
 
 Audit lưu `loai_doi_tuong=nhan_vien`, `thao_tac=sua`, `du_lieu_sau={da_doi_mat_khau: true}`; không lưu password/hash/token. Không phát token mới. Tất cả token có password version cũ bị từ chối ở request tiếp theo. Hai action đồng thời dùng cùng token được tuần tự hóa bằng khóa dòng; chỉ bên đầu tiên commit thành công, bên sau nhận 401.
 
-Mọi response auth thành công/lỗi do handler auth xử lý có `Cache-Control: no-store`, `Pragma: no-cache`; lỗi 401 thêm `WWW-Authenticate: Bearer`. Exception không dự kiến được trả 500 an toàn; lỗi DB khi đọc không được đưa chi tiết nội bộ ra client. Đăng nhập và GET không tự commit; dependency đóng session khi kết thúc request.
+Mọi response auth thành công/lỗi do handler auth xử lý có `Cache-Control: no-store`, `Pragma: no-cache`; lỗi 401 thêm `WWW-Authenticate: Bearer`. Exception không dự kiến được trả 500 an toàn; lỗi DB khi đọc không được đưa chi tiết nội bộ ra client. Đăng nhập thành công commit audit trong `record_login` trước khi cấp token; GET không ghi/commit. Dependency đóng session khi kết thúc request.

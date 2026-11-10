@@ -47,3 +47,13 @@ test("employee sidebar focuses on assigned work without revoking read-only docum
     assert.equal(canAccessPath("nhan_vien", path), true);
   }
 });
+
+test("admin sidebar displays the 3 spec navigation items while keeping /admin/lich-su permitted", () => {
+  const items = navigationFor("quan_tri_vien").flatMap((group) => group.items);
+  assert.deepEqual(items, [
+    ["/admin", "Tổng quan"],
+    ["/admin/tai-khoan", "Quản lý tài khoản"],
+    ["/admin/vai-tro", "Quản lý vai trò"],
+  ]);
+  assert.equal(canAccessPath("quan_tri_vien", "/admin/lich-su"), true);
+});

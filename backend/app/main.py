@@ -13,6 +13,9 @@ from app.modules.bom.router import router as bom_router
 from app.modules.dieu_chinh_kho.router import router as dieu_chinh_kho_router
 from app.modules.dieu_chinh_kho.router import ticket_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.luu_luong.middleware import dem_luu_luong
+from app.modules.luu_luong.recorder import LuuLuongRecorder
+from app.modules.luu_luong.router import router as luu_luong_router
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.router import router as mat_hang_router
 from app.modules.mat_hang.synchronizer import create_synchronizer
@@ -37,10 +40,13 @@ async def lifespan(app: FastAPI):
     synchronizer = create_synchronizer(
         app.state.mat_hang_cache, settings.database_url, AsyncSessionLocal
     )
+    # Created only here: tests run without lifespan and must not count into the app database.
+    app.state.luu_luong_recorder = LuuLuongRecorder(AsyncSessionLocal)
     try:
         await synchronizer.start()
         yield
     finally:
+        app.state.luu_luong_recorder = None
         await synchronizer.stop()
     # Shutdown
     logger.info("Shutting down %s...", settings.project_name)
@@ -70,6 +76,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Traffic counter for the admin overview (FE-MISS-001)
+app.middleware("http")(dem_luu_luong)
 
 
 @app.get("/", tags=["Root"])
@@ -114,5 +123,6 @@ app.include_router(yeu_cau_sx_router, prefix=api_v1_prefix)
 app.include_router(lenh_sx_router, prefix=api_v1_prefix)
 app.include_router(chung_tu_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)
+app.include_router(luu_luong_router, prefix=api_v1_prefix)
 app.include_router(ticket_router, prefix=api_v1_prefix)
 app.include_router(dieu_chinh_kho_router, prefix=api_v1_prefix)

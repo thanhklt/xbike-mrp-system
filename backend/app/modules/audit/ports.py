@@ -2,15 +2,17 @@
 
 from typing import Protocol, TypeVar
 
-from app.modules.audit.schemas import AuditLogSummary, CreationAudit
+from app.modules.audit.schemas import AuditLogResponse, CreationAudit, ThaoTac
 from app.shared.pagination import PageParams
 from app.shared.records import RecordPage
 
-T = TypeVar("T", bound=AuditLogSummary)
+T = TypeVar("T", bound=AuditLogResponse)
 
 
 class AuditRepository(Protocol):
-    async def list_entries(self, params: PageParams, schema: type[T]) -> RecordPage[T]: ...
+    async def list_entries(
+        self, params: PageParams, schema: type[T], *, bo_thao_tac: ThaoTac | None = None
+    ) -> RecordPage[T]: ...
 
     async def append(self, entry: CreationAudit) -> None: ...
 

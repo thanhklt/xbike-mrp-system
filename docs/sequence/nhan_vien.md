@@ -474,7 +474,7 @@ Audit dùng sua vì enum chưa có mo_khoa. Không cấp JWT mới, không đổ
 
 ## GET /api/v1/vai_tro — Danh sách vai trò
 
-Thuộc module nhân viên, đăng ký vai_tro_router tại /api/v1. Chỉ admin/quản lý được đọc. Query chỉ có page mặc định 1 (>=1), page_size mặc định 20 (1–100); dư/lặp trả 422. Sắp xếp ID tăng dần; trang vượt tổng trả data rỗng. Response gồm id, ma_vai_tro, ten_vai_tro và meta phân trang giống danh sách nhân viên.
+Thuộc module nhân viên, đăng ký vai_tro_router tại /api/v1. Chỉ admin/quản lý được đọc. Query chỉ có page mặc định 1 (>=1), page_size mặc định 20 (1–100); dư/lặp trả 422. Sắp xếp ID tăng dần; trang vượt tổng trả data rỗng. Response gồm id, ma_vai_tro, ten_vai_tro, mo_ta (string hoặc null) và meta phân trang giống danh sách nhân viên. Bộ vai trò cố định ba mã; không có API tạo/sửa/xóa vai trò (D-VT-01).
 
 ```mermaid
 sequenceDiagram
@@ -509,3 +509,91 @@ sequenceDiagram
 ```
 
 GET không ghi audit hoặc commit. Chi tiết xác thực dùng get_auth_identity như hai GET nhân viên ở trên.
+
+## POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau — Admin đặt lại mật khẩu
+
+Bổ sung D-MK-01 (10/11/2026), ngoài SRS_v4/contract v3.1. Body duy nhất `mat_khau_moi` là SecretStr 8–1024 ký tự, không trim; không nhận query. Path ID nguyên dương. Không cần lý do, cho phép đích ở mọi vai trò/trạng thái và đích là chính admin. Không có nhánh lỗi nghiệp vụ 409.
+
+```mermaid
+sequenceDiagram
+    actor C as Client admin
+    participant R as nhan_vien.router và dependencies
+    participant A as auth.service
+    participant N as nhan_vien.service
+    participant P as nhan_vien.repository
+    participant U as audit.service và repository
+    participant DB as PostgreSQL
+    C->>R: POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau, JWT, If-Match, body
+    R->>A: current_payload(token)
+    A->>A: Verify JWT và sub
+    A->>N: get_auth_identity(id actor, credential_version=pwdv)
+    N->>P: get_credentials_by_id(id actor)
+    P->>DB: SELECT NhanVien và VaiTro
+    DB-->>P: Credentials và quyền hiện tại
+    P-->>N: Credentials
+    alt Thiếu/token lỗi/account mất/pwdv cũ
+        R-->>C: 401 chua_xac_thuc
+    else Actor bị khóa hoặc role không hợp lệ
+        R-->>C: 403
+    else Xác thực hợp lệ
+        N-->>A: AuthIdentity
+        A-->>R: Actor hiện tại
+        R->>R: reject_query, validate ID và DatLaiMatKhauInput
+        alt Query hoặc body hoặc ID không hợp lệ
+            R-->>C: 422 du_lieu_khong_hop_le
+        else Input hợp lệ
+            R->>N: reset_password(id, mật khẩu mới, actor, if_match, request_id)
+            N->>N: _require_admin(actor)
+            alt Không phải quan_tri_vien
+                N-->>C: 403 khong_co_quyen
+            else Admin
+                N->>N: asyncio.to_thread(get_password_hash, new_password)
+                Note over N,DB: Hash trước transaction
+                N->>DB: Transaction bắt đầu / tiếp quản session hiện tại
+                N->>P: _lock_admin → lock_credentials_by_id(actor.sub)
+                P->>DB: SELECT admin FOR UPDATE
+                DB-->>P: Credentials sau khi giữ khóa
+                P-->>N: Credentials
+                N->>N: Kiểm tra lại active, pwdv và quyền admin
+                alt Actor mất / pwdv cũ / khóa / mất quyền khi chờ
+                    N->>DB: ROLLBACK
+                    N-->>C: 401 hoặc 403
+                else Actor còn hợp lệ
+                    N->>P: _target → get_for_update(id đích)
+                    P->>DB: SELECT đích FOR UPDATE
+                    DB-->>P: EmployeeRecord hoặc null
+                    P-->>N: EmployeeRecord hoặc null
+                    alt Không có đích
+                        N->>DB: ROLLBACK
+                        N-->>C: 404 khong_tim_thay
+                    else Thiếu If-Match
+                        N->>DB: ROLLBACK
+                        N-->>C: 428 thieu_if_match
+                    else If-Match khác ETag hiện tại
+                        N->>DB: ROLLBACK
+                        N-->>C: 412 du_lieu_da_thay_doi
+                    else ETag hợp lệ
+                        N->>P: set_password_hash(id đích, new_hash)
+                        P->>DB: UPDATE NhanVien.mat_khau
+                        N->>U: append(CreationAudit)
+                        U->>DB: INSERT LichSuThaoTac, cùng session/transaction
+                        alt Cập nhật / audit / commit lỗi
+                            N->>DB: ROLLBACK
+                            R-->>C: 500
+                        else Thành công
+                            N->>DB: COMMIT
+                            N->>N: _result(employee, actor, request_id)
+                            N-->>R: NhanVienDetailResponse và ETag
+                            R-->>C: 200 data, meta.request_id, header ETag
+                        end
+                    end
+                end
+            end
+        end
+    end
+```
+
+- Auth và input là dependency FastAPI; khi cùng sai, sơ đồ không quy định ưu tiên lỗi. Các khóa nằm trong cùng transaction/session, kể cả khi khóa đích trùng dòng admin.
+- Audit: `nhan_vien_id=admin`, `doi_tuong_id=id đích`, `loai_doi_tuong=nhan_vien`, `thao_tac=sua`, `du_lieu_truoc=null`, `du_lieu_sau={"da_dat_lai_mat_khau": true}`, `ly_do=null`; không mật khẩu/hash. Append dùng service audit thực sự có trong code; transaction do service nhân viên sở hữu.
+- Response là hồ sơ đầy đủ cho admin, không phân trang, không trả mật khẩu/hash. ETag có thể không đổi vì biểu diễn hồ sơ không chứa hash. Token cũ của đích bị 401 qua kiểm tra `pwdv` ở request sau; tài khoản khóa vẫn bị khóa.
+- FE lưu hồ sơ → vai trò → reset; nếu tự reset thì gọi `login()` ngay trước mọi invalidate/refetch, `/auth/me` dùng token mới, giữ trang chi tiết và popup thành công. Login lỗi mới logout kèm thông báo đã chốt. Không thêm tầng/token response riêng cho endpoint này.

@@ -70,3 +70,84 @@ export function Pagination({ meta = {}, onPage, busy }) {
     </div>
   );
 }
+
+export function buildPageSequence(current, total) {
+  const totalPages = Math.max(Number(total) || 1, 1);
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+  if (current <= 3) {
+    return [1, 2, 3, "...", totalPages];
+  }
+  if (current >= totalPages - 2) {
+    return [1, "...", totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", totalPages];
+}
+
+export function AdminPagination({
+  page = 1,
+  pageSize = 10,
+  totalPages = 1,
+  busy = false,
+  onPage,
+  onPageSize,
+}) {
+  const safeTotalPages = Math.max(Number(totalPages) || 1, 1);
+  const pages = buildPageSequence(page, safeTotalPages);
+  return (
+    <div className="admin-pagination">
+      <div className="admin-page-size">
+        <span>Hiển thị</span>
+        <select
+          aria-label="Số dòng mỗi trang"
+          value={pageSize}
+          disabled={busy}
+          onChange={(event) => onPageSize?.(Number(event.target.value))}
+        >
+          <option value={10}>10</option>
+        </select>
+        <span>dòng / trang</span>
+      </div>
+      <div className="admin-page-numbers" role="navigation" aria-label="Phân trang">
+        <button
+          type="button"
+          className="admin-page-btn"
+          aria-label="Trang trước"
+          disabled={busy || page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          ‹
+        </button>
+        {pages.map((entry, index) =>
+          entry === "..." ? (
+            <span key={`ellipsis-${index}`} className="admin-page-ellipsis" aria-hidden="true">
+              …
+            </span>
+          ) : (
+            <button
+              key={entry}
+              type="button"
+              className={`admin-page-btn ${entry === page ? "is-active" : ""}`}
+              aria-label={`Trang ${entry}`}
+              aria-current={entry === page ? "page" : undefined}
+              disabled={busy}
+              onClick={() => onPage(entry)}
+            >
+              {entry}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          className="admin-page-btn"
+          aria-label="Trang sau"
+          disabled={busy || page >= safeTotalPages}
+          onClick={() => onPage(page + 1)}
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  );
+}

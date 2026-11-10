@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "./Button.jsx";
 import { ErrorNotice } from "./QueryState.jsx";
 import { Field } from "./Field.jsx";
@@ -7,11 +8,24 @@ export const useFeedback = () => useContext(FeedbackContext);
 
 export function FeedbackProvider({ children }) {
   const [confirmation, setConfirmation] = useState(null);
+  const [successDialog, setSuccessDialog] = useState(null);
   const [notice, setNotice] = useState("");
   const confirm = (options) => setConfirmation({ ...options, trigger: document.activeElement });
+  const showSuccess = (options = {}) =>
+    setSuccessDialog({
+      title: "Lưu thành công",
+      label: "Đóng",
+      ...options,
+      trigger: options.trigger || document.activeElement,
+    });
   return (
     <FeedbackContext.Provider
-      value={{ confirm, notify: setNotice, dismissConfirmation: () => setConfirmation(null) }}
+      value={{
+        confirm,
+        showSuccess,
+        notify: setNotice,
+        dismissConfirmation: () => setConfirmation(null),
+      }}
     >
       {children}
       {notice && (
@@ -29,7 +43,57 @@ export function FeedbackProvider({ children }) {
           onClose={() => setConfirmation(null)}
         />
       )}
+      {successDialog && (
+        <SuccessDialog options={successDialog} onClose={() => setSuccessDialog(null)} />
+      )}
     </FeedbackContext.Provider>
+  );
+}
+
+function SuccessDialog({ options, onClose }) {
+  const dialog = useRef(null);
+  const closeButton = useRef(null);
+  useEffect(() => {
+    const element = dialog.current;
+    element.showModal();
+    closeButton.current?.focus({ preventScroll: true });
+    return () => {
+      element.close();
+      if (options.trigger?.isConnected) {
+        options.trigger.focus({ preventScroll: true });
+        return;
+      }
+      const fallback =
+        document.querySelector(".admin-detail-actions .admin-primary-cta") ||
+        document.getElementById("main-content");
+      fallback?.focus?.({ preventScroll: true });
+    };
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="confirmation confirmation-save-success"
+      aria-labelledby="save-success-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <div className="save-success-body">
+        <span className="save-success-icon" aria-hidden="true">
+          <CheckCircle2 size={52} strokeWidth={2.4} />
+        </span>
+        <h2 id="save-success-title">{options.title}</h2>
+        <button
+          ref={closeButton}
+          type="button"
+          className="btn btn-primary save-success-btn"
+          onClick={onClose}
+        >
+          {options.label}
+        </button>
+      </div>
+    </dialog>
   );
 }
 
@@ -66,7 +130,7 @@ function Confirmation({ options, onClose }) {
   return (
     <dialog
       ref={dialog}
-      className="confirmation"
+      className={`confirmation ${options.variant ? `confirmation-${options.variant}` : ""}`.trim()}
       aria-labelledby="confirmation-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -89,9 +153,11 @@ function Confirmation({ options, onClose }) {
         <div className="dialog-body stack">
           <p>{options.description}</p>
           {options.content}
-          <div className={`notice ${options.danger ? "notice-warning" : "notice-info"}`}>
-            {options.impact || "Thao tác này không thay đổi tồn kho."}
-          </div>
+          {!options.hideImpact && (
+            <div className={`notice ${options.danger ? "notice-warning" : "notice-info"}`}>
+              {options.impact || "Thao tác này không thay đổi tồn kho."}
+            </div>
+          )}
           {options.reason && (
             <Field
               as="textarea"

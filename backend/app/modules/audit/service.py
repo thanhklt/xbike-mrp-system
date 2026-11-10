@@ -1,7 +1,7 @@
 """Read audit history and append entries in the caller's transaction."""
 
 from app.modules.audit.ports import AuditRepository
-from app.modules.audit.schemas import AuditLogResponse, AuditLogSummary, CreationAudit
+from app.modules.audit.schemas import AuditLogResponse, CreationAudit, ThaoTac
 from app.shared.pagination import PageParams, PaginatedResponse, create_paginated_response
 
 __all__ = ["AuditService", "CreationAudit"]
@@ -16,10 +16,9 @@ class AuditService:
         await self.repository.append(entry)
 
     async def list_entries(
-        self, params: PageParams, actor: dict
-    ) -> PaginatedResponse[AuditLogResponse] | PaginatedResponse[AuditLogSummary]:
-        schema = AuditLogSummary if "quan_tri_vien" in actor["roles"] else AuditLogResponse
-        if schema is AuditLogSummary and params.sort_by in {"du_lieu_truoc", "du_lieu_sau"}:
-            params = params.model_copy(update={"sort_by": "created_at"})
-        result = await self.repository.list_entries(params, schema)
+        self, params: PageParams, actor: dict, *, bo_thao_tac: ThaoTac | None = None
+    ) -> PaginatedResponse[AuditLogResponse]:
+        result = await self.repository.list_entries(
+            params, AuditLogResponse, bo_thao_tac=bo_thao_tac
+        )
         return create_paginated_response(result.items, result.total, params.page, params.page_size)

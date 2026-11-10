@@ -132,12 +132,15 @@ Nguồn: yêu cầu dev thực thi `.handoff/plan-phan-quyen-quan-tri-vien.md`, 
 
 ### D-PQ-02. Audit rút gọn cho quản trị viên
 
+> **Đã thay bởi D-HD-01** (chốt 09/11, triển khai 10/11/2026). Nội dung bên dưới giữ để đối chiếu lịch sử quyết định.
+
 - Admin thấy tất cả dòng audit, không lọc `loai_doi_tuong`, và vẫn nhận `ly_do`.
 - Response của admin bỏ hẳn hai key `du_lieu_truoc` và `du_lieu_sau`, kể cả audit nhân viên/vai trò. Không thay bằng `null`, vì `null` vẫn có nghĩa riêng trong response đầy đủ, ví dụ dữ liệu trước của thao tác tạo.
 - Dev xác nhận khi thực thi ngày 02/11/2026: chỉ loại hai trường khỏi DTO/response. Giữ helper `select_page` và cách đọc ORM đầy đủ hiện tại; không yêu cầu loại hai cột khỏi câu SELECT hoặc bộ nhớ của session.
 - Admin gửi `sort_by=du_lieu_truoc` hoặc `sort_by=du_lieu_sau` thì server chuyển sang `created_at`, giữ các tham số khác. Quản lý vẫn nhận đủ hai trường và giữ cách sắp xếp hiện tại. Nhân viên không được đọc audit.
 - Đánh đổi chấp nhận: admin vẫn thấy ai thao tác, loại/ID đối tượng và thời điểm, kể cả siêu dữ liệu nghiệp vụ. Nội dung `ly_do` vẫn hiển thị và tìm được qua `search`; các cột JSON không được tìm kiếm.
 - Admin cũng không thấy giá trị trước/sau khi đổi thông tin hoặc vai trò nhân viên trong audit; trạng thái hiện tại vẫn xem qua `/nhan_vien` theo quyền hiện có.
+
 
 ### D-PQ-03. Điểm lệch so với contract v2
 
@@ -375,3 +378,78 @@ Giới hạn/hoàn tác: chỉ thay code và tài liệu, chưa cập nhật dat
 Hoàn tác phải đồng bộ module, import/wiring, InventoryWriter, envelope và tài liệu;
 giữ nguyên các chứng từ, ticket và ledger đã ghi. Không sửa/xóa dữ liệu nghiệp vụ
 để chạy code cũ. ORM ledger legacy và endpoint chi tiết giao dịch kho thuộc tác vụ sau.
+
+## Lưu lượng truy cập — ADM-01 Tổng quan (chốt ngày 09/11/2026)
+
+Nguồn: `doc/MISSING.md` FE-MISS-001; `doc/dac-ta-giao-dien-admin.md` OV-03, OV-04, OV-Q01; ảnh `doc/ui-spec-admin/tong_quan.png`. Drive chỉ có ảnh thiết kế, không có hợp đồng API. Kế hoạch: `.handoff/plan-luu-luong-truy-cap.md`. Nguyên tắc dev chốt: backend tuân theo giao diện đã thiết kế.
+
+### D-LL-01. Lưu lượng truy cập cho Tổng quan admin
+
+| Điểm | Quyết định |
+|---|---|
+| Nguồn số liệu | Bảng `"LuuLuongTruyCap"` (`gio_bat_dau` timestamptz PK, `so_request` bigint ≥ 0). Middleware upsert +1 cho giờ hiện tại. Ghi bằng session riêng; lỗi ghi không đổi response, log warning tối đa 1 lần/60 giây. |
+| Request được đếm | Path `/api/v1` và `/api/v1/...`, mọi method trừ `OPTIONS`, kể cả 4xx/5xx và chính endpoint lưu lượng. Không đếm `/`, `/health`, `/docs`, `/redoc`. |
+| Endpoint | `GET /api/v1/luu_luong_truy_cap?khoang_thoi_gian=hom_nay\|7_ngay\|30_ngay`, chỉ `quan_tri_vien`. Mở rộng danh sách endpoint admin của D-PQ-01. |
+| `Hôm nay` | 24 điểm theo giờ; FE hiện nhãn mỗi 3 giờ (`00h`…`21h`). Giờ chưa tới trả `null`. |
+| `7 ngày` | 7 điểm, mỗi điểm là tổng một ngày lịch, điểm cuối là hôm nay. |
+| `30 ngày` | 30 điểm theo ngày kèm đường trung bình trượt 7 ngày (`trung_binh_7_ngay`, backend tính, làm tròn 1 chữ số, dùng thêm 6 ngày trước khoảng). FE vẽ nét đứt và có chú giải. |
+| Hôm nay trong chuỗi ngày | Luôn hiện là điểm cuối với số tạm tính đến hiện tại; chấp nhận đường cắm xuống đầu ngày. Trung bình của điểm cuối cũng tính số tạm này. |
+| Múi giờ | Ranh giới giờ/ngày theo Asia/Ho_Chi_Minh; thời điểm trả về là UTC. |
+| Trục Y (FE) | Thang tuyến tính 0 → `yMax`, 8 khoảng, `yMax = max(4000, bội số đẹp ≥ giá trị lớn nhất)`. Bổ sung mốc `1.500` mà ảnh thiếu. |
+| Dòng mô tả (FE) | "… mỗi giờ" ở `Hôm nay`; "… mỗi ngày" ở `7 ngày` và `30 ngày`. |
+
+Giới hạn/hoàn tác: chỉ sửa bootstrap `init.sql`, không migration. Database đang chạy không có bảng mới cho tới khi được khởi tạo lại; khi đó endpoint trả 500 và middleware chỉ log warning. Hoàn tác: gỡ middleware, router, module `luu_luong`, bảng trong `init.sql`, phần FE và các tài liệu liên quan cùng lúc.
+
+## Vai trò — ADM-04 (chốt ngày 09/11/2026)
+
+Nguồn: `.handoff/plan-vai-tro-mo-ta.md`, `doc/MISSING.md` FE-MISS-002 và SRS_v4 §2.1–§2.3 trên Drive. Data model v3.1 và API contract v3 trên Drive chưa có `mo_ta`; quyết định này bổ sung trường trong bootstrap, ORM và contract local. Dev cập nhật hai bản Drive riêng.
+
+### D-VT-01. Bộ vai trò cố định và mô tả chỉ đọc
+
+| Điểm | Quyết định |
+|---|---|
+| Phạm vi | Giữ đúng ba mã `quan_tri_vien`, `quan_ly`, `nhan_vien`; giữ CHECK, `RoleCode` và cơ chế phân quyền. Không thêm vai trò động hoặc API tạo/sửa/xóa vai trò. |
+| Dữ liệu | Thêm `"VaiTro".mo_ta varchar(255) NULL`, không default; ORM `VaiTro.mo_ta` là cột thường, không deferred. Không cần `undefer` hay schema riêng. |
+| Response | `VaiTroRead` thêm `mo_ta: str \| None`; `list_roles` và `get_role` dùng schema này. `GET /api/v1/vai_tro` chỉ bổ sung field, giữ quyền admin/quản lý, query, thứ tự ID và phân trang. Hồ sơ nhân viên/auth không bổ sung mô tả. |
+| Nội dung seed | Tóm tắt SRS_v4 §2, mỗi câu dưới 255 ký tự; không dùng mô tả bán hàng hoặc quyền toàn hệ thống trong ảnh. Nội dung ba câu ghi bên dưới. |
+| Nút Tạo | Giữ vị trí, hình dạng; đặt `disabled`, dùng `.btn:disabled { opacity: 0.55 }` có sẵn. Không thêm CSS hoặc tooltip. |
+| Sửa/Xóa | Giữ vô hiệu hóa cho cả ba vai trò hệ thống theo mã vai trò; icon thông tin thể hiện vai trò hệ thống. Không có form hoặc ma trận quyền mới. |
+| Hiển thị | Cột mô tả lấy từ API, null hiển thị `—`; tìm kiếm phía client gồm mô tả. Dữ liệu thật có ba vai trò; hai vai trò bổ sung trong ảnh chỉ minh họa. Không đổi tên seed “Quản lý” hoặc nhãn FE trong tác vụ này. |
+| Theo dõi | Đóng FE-MISS-002, ROL-03/04/06, ROL-Q01..Q05 và QA-10 theo phạm vi chỉ đọc; không nghiệm thu chức năng ghi vai trò. |
+
+Nội dung seed theo P1:
+
+- `quan_tri_vien`: “Quản trị hệ thống và tài khoản người dùng: thêm, vô hiệu hóa và phân quyền tài khoản; không mặc định thực hiện nghiệp vụ kho, sản xuất.”
+- `quan_ly`: “Quản lý nguyên vật liệu, thành phẩm, BOM; nhập kho, duyệt xuất kho, duyệt chứng từ hoàn thành sản xuất, yêu cầu sản xuất và báo cáo kho.”
+- `nhan_vien`: “Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.”
+
+Giới hạn triển khai: chỉ bootstrap database mới/trống bằng `init.sql` và `seed.sql`, không migration hoặc sửa database đang chạy. Vì `NhanVien.role` nạp selectin và `mo_ta` không deferred, backend mới trên DB thiếu cột sẽ trả 500 ở đăng nhập, mọi request có token và API nhân viên/vai trò. Backend phải triển khai cùng database đã có cột; sửa bootstrap hoặc restart/rebuild không cập nhật volume cũ. Dev chủ động chuẩn bị DB mới hoặc tự bổ sung cột/dữ liệu; tác vụ không chạy ALTER/UPDATE trên DB ứng dụng. Hoàn tác phải đồng bộ ORM, response, seed, UI và tài liệu, giữ nguyên dữ liệu đang có.
+
+Kiểm chứng theo xác nhận trong phiên: test API backend chỉ chạy tạm, không giữ file mới trong repo. Hai skill `ui-consistency:adjusting`/`verifying` không có sẵn; dev đồng ý thay bằng đối chiếu toolbar/CSS và Playwright/ảnh ADM-04 trực tiếp.
+
+## Lịch sử thao tác — ADM-01 (chốt 09/11, triển khai 10/11/2026)
+
+### D-HD-01. Lịch sử đầy đủ và audit đăng nhập
+
+Nguồn: `api_contract_v3.1.md` trên Google Drive của project (§4 D-HD-01, §13 GET /lich_su_thao_tac), Claude đọc ngày 10/11/2026; plan `.handoff/plan-fe-miss-004-hoat-dong-gan-day.md`, phản hồi dev 10/11/2026. D-HD-01 thay D-PQ-02; D-PQ-01 tiếp tục chặn admin vào các endpoint nghiệp vụ.
+
+- `quan_tri_vien` và `quan_ly` cùng nhận đủ hai key `du_lieu_truoc`, `du_lieu_sau` (`object | null`) với mọi loại đối tượng, kể cả kho/sản xuất; `nhan_vien` nhận 403. Đây là mở rộng quyền đọc được dev chấp nhận, tương thích ngược do thêm key; không lọc riêng loại đối tượng.
+- Giữ `GET /api/v1/audit`, envelope `{success, data, pagination, message}` và query `page`, `page_size`, `search`, `sort_by`, `sort_order`. Thêm `bo_thao_tac` là một Literal thao tác hợp lệ, gồm `dang_nhap`; sai enum trả 422. Loại thao tác trước COUNT/phân trang cho cả admin/quản lý. Admin sort như quản lý, kể cả hai trường JSON, không chuyển sang `created_at`; search vẫn chỉ dò cột chuỗi.
+- Cả `/auth/dang_nhap` và `/auth/token` ghi đúng một audit sau xác thực thành công: `nhan_vien_id = doi_tuong_id = id người đăng nhập`, `loai_doi_tuong=nhan_vien`, `thao_tac=dang_nhap`; hai snapshot và `ly_do` null. Transaction ghi audit phải commit trước khi cấp token. Append/commit lỗi trả 500, không cấp token; đăng nhập sai mật khẩu, account không tồn tại/bị khóa không ghi audit. Response đăng nhập giữ nguyên.
+- ADM-01 gửi `bo_thao_tac=thu_hoi_quyen` để lần đổi vai trò còn một dòng Phân quyền; dashboard kho giữ query cũ. Dev chốt sau verify lần 1: `frontend/tests/contracts.test.js` đã commit là đặc tả ưu tiên, giữ nguyên file test. Helper `auditFormat.js` export `changedProfileFields`, `formatAuditAction`, `formatAuditDetail` và khớp từng chuỗi: mã kèm họ tên lịch sử; Tạo có `với vai trò "…"`; Phân quyền lấy `ma_vai_tro` từ snapshot và thêm `(trước đó: "…")` nếu biết vai trò cũ; nhãn vai trò tái dùng `ROLE_LABELS` hiện có, không tạo map khác hoặc lấy vai trò hiện tại thay lịch sử. Chỉ liệt kê tên trường hồ sơ đã đổi có mặt ở cả hai snapshot, không hiện giá trị. Snapshot null/vai trò không biết rơi về định danh tài khoản; đối tượng kho giữ dạng `phiếu nhập #2 · đã kiểm tra` (có mã snapshot thì dùng mã). Marker `da_dat_lai_mat_khau` chỉ định dạng theo cùng văn phong, chưa triển khai chức năng FE-MISS-005. Không mở thêm trang/xem chi tiết.
+- Dev đã chốt đồng bộ riêng CHECK `thao_tac` trong `audit/models.py` theo `init.sql`: thêm `dang_nhap`, không đổi phần ORM khác. SQL chỉ bổ sung COMMENT bootstrap, không ALTER/seed DB. CHECK SQL đã có `dang_nhap`; volume tạo trước commit `2ef564c` có thể chưa có CHECK này, khiến đăng nhập trả 500. Không tự cập nhật volume cũ. Hai câu hỏi của verify lần 1 đã được giải quyết.
+- Đổi route/envelope và các filter v3 khác là tác vụ sau. Hoàn tác bằng cách khôi phục đồng bộ code audit/auth/FE và tài liệu của tác vụ; không xóa lịch sử đã lưu, không reset DB.
+
+## Đặt lại mật khẩu — ADM-03 (chốt 10/11/2026)
+
+### D-MK-01. Quản trị viên đặt lại mật khẩu tài khoản
+
+Nguồn: phản hồi dev 10/11/2026 và `.handoff/plan-fe-miss-005-dat-lai-mat-khau.md`. Đã đọc `SRS_v4.txt`, `api_contract_v3.1.md` (§2, §4) và mô hình dữ liệu v3.1 trên Drive ngày 10/11/2026. Đây là bổ sung ngoài SRS_v4/contract v3.1; dev tự cập nhật Drive, tác vụ chỉ sửa tài liệu local.
+
+- Bổ sung API reset và một ô mật khẩu mới trong hàng “Mật khẩu” khi chỉnh sửa trực tiếp, có nút hiện/ẩn, placeholder “Để trống nếu không đổi”. Dùng chung nút `Lưu` và popup `Xác nhận thay đổi` hiện có, không liệt kê nội dung thay đổi. Chế độ xem giữ `••••••••`.
+- Áp dụng mọi tài khoản, gồm chính admin, quản lý, nhân viên và tài khoản bị khóa. Không yêu cầu lý do và không có ô lý do. Chỉ admin có quyền reset; không thay đổi trạng thái/vai trò tài khoản đích.
+- `POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau`, body duy nhất `mat_khau_moi` (SecretStr, 8–1024 ký tự, không trim); từ chối query/trường thừa với 422. Bắt buộc `If-Match`: thiếu 428, cũ 412; không có đích 404, không token 401, không phải admin 403. Response `NhanVienDetailResponse` + `ETag`; ETag từ hồ sơ không gồm hash nên có thể không đổi. Không đổi PATCH hoặc `/auth/doi_mat_khau`, không đổi schema DB.
+- Hash qua thread trước transaction; khóa admin và kiểm tra lại quyền/pwdv, khóa đích và kiểm tra ETag, cập nhật hash và append audit trong cùng transaction. Audit: admin là `nhan_vien_id`, đích là `doi_tuong_id`, `loai_doi_tuong=nhan_vien`, `thao_tac=sua`, trước null, sau đúng `{"da_dat_lai_mat_khau": true}`, lý do null; không chứa mật khẩu/hash. Helper `dashboard/auditFormat.js` hiện có hiển thị “Đặt lại mật khẩu”.
+- FE chỉ gọi bước cần ghi theo thứ tự hồ sơ → vai trò → reset mật khẩu cuối cùng, nối ETag. Giữ nháp khi lỗi, đánh dấu các bước thành công để retry không gửi lại. Mật khẩu rỗng không gửi reset; có nhập dưới 8 ký tự báo lỗi trước popup. Xóa nháp khi vào/thoát sửa, đổi ID, Hủy và lưu xong; không ghi bí mật ra console, URL, query key hoặc localStorage.
+- Admin tự reset không bị đăng xuất: ngay sau reset gọi `login({ten_dang_nhap, mat_khau: mật khẩu mới})` sẵn có, trước mọi invalidate/refetch/cập nhật cache. Login không gắn token cũ; `/auth/me` dùng token mới. Sau login thành công đi tiếp luồng lưu thường và mở `Lưu thành công`; chỉ nếu login lỗi mới `logout("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.")`. Hash mới vô hiệu hóa mọi token cũ của tài khoản đích bằng `pwdv`; tự login tạo thêm audit “Đăng nhập” ngay sau reset, được dev chấp nhận.
+- Không email/OTP, sinh mật khẩu tạm hoặc bắt đổi mật khẩu lần sau; không mở rộng chính sách độ mạnh. Không tác động DB đang chạy. Khi hoàn tác cần đồng bộ endpoint, FE và tài liệu local, giữ lịch sử audit và dữ liệu hiện có.

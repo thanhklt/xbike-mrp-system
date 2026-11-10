@@ -2,13 +2,12 @@ import { canAccessPath } from "../features/auth/permissions.js";
 
 const navigation = {
   quan_tri_vien: [
-    { title: "Chung", items: [["/admin", "Tổng quan"]] },
     {
       title: "Quản trị",
       items: [
-        ["/admin/tai-khoan", "Tài khoản"],
-        ["/admin/vai-tro", "Vai trò"],
-        ["/admin/lich-su", "Lịch sử thao tác"],
+        ["/admin", "Tổng quan"],
+        ["/admin/tai-khoan", "Quản lý tài khoản"],
+        ["/admin/vai-tro", "Quản lý vai trò"],
       ],
     },
   ],

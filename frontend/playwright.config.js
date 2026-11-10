@@ -1,4 +1,12 @@
+import fs from "node:fs";
 import { defineConfig } from "@playwright/test";
+
+const hasSystemChrome = [
+  "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+  `${process.env.LOCALAPPDATA || ""}/Google/Chrome/Application/chrome.exe`,
+].some((candidate) => candidate && fs.existsSync(candidate));
+
 export default defineConfig({
   testDir: "./tests/browser",
   fullyParallel: false,
@@ -6,7 +14,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:5174",
-    channel: "chrome",
+    ...(hasSystemChrome ? { channel: "chrome" } : {}),
     headless: true,
     locale: "vi-VN",
     timezoneId: "UTC",
