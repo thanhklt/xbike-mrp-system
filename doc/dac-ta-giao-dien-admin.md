@@ -90,7 +90,7 @@ Thứ tự từ trên xuống: breadcrumb và tiêu đề **Tổng quan**; một
 - [x] **OV-05** — Có biểu đồ donut “Phân bổ tài khoản theo vai trò”, tổng tài khoản ở tâm; chú giải có màu, tên vai trò, số lượng và tỷ lệ tính từ dữ liệu thật của API (bao gồm cả tài khoản bị khóa).
 - [x] **OV-06** — Có khối “Hoạt động gần đây”, gọi API audit với 5 bản ghi mới nhất, sắp xếp `-created_at`.
 - [x] **OV-07** — Trình bày hoạt động thành bảng 4 cột: “Thời gian”, “Người thực hiện”, “Hành động”, “Chi tiết”.
-- [ ] **OV-08** — Hiển thị tên người thực hiện (đối chiếu từ danh sách nhân viên) và diễn giải hành động từ `AuditLogSummary`; phần mô tả chi tiết ngoài `AuditLogSummary` chưa có trong response dành cho admin (`FE-MISS-004`).
+- [x] **OV-08** — Hiển thị tên người thực hiện từ danh sách nhân viên và dựng câu hành động/chi tiết từ snapshot `AuditLogResponse` theo D-HD-01; nhãn vai trò từ `ma_vai_tro` lịch sử qua `ROLE_LABELS` dùng chung. Chỉ liệt kê tên trường hồ sơ đổi, không hiện giá trị. Căn cứ: `DashboardPage.jsx`, `auditFormat.js`, `contracts.test.js` giữ nguyên theo dev chốt sau verify lần 1; pytest tạm 90/90 và Playwright ADM-01 trong suite admin 11/11 (10/11/2026, API fixture; chưa E2E DB thật).
 
 ### 3.2. Điểm cần xác nhận
 
@@ -99,7 +99,7 @@ Thứ tự từ trên xuống: breadcrumb và tiêu đề **Tổng quan**; một
   - Múi giờ: Asia/Ho_Chi_Minh.
   - Làm mới: khi mở trang, khi đổi tab và khi quay lại cửa sổ; không tự tải định kỳ.
 - [x] **OV-Q02** — Dev đã chốt phân bổ vai trò tính cả tài khoản bị khóa và lấy từ dữ liệu thật của API (`doc/admin-ui-plan.md`).
-- [ ] **OV-Q03** — Chốt nội dung mở rộng và khả năng xem thêm từ bảng hoạt động (`FE-MISS-004`).
+- [x] **OV-Q03** — Dev chốt 10/11/2026 theo plan FE-MISS-004: dựng câu từ snapshot D-HD-01, query Tổng quan loại `thu_hoi_quyen` trước phân trang để mỗi lần đổi vai trò còn một dòng Phân quyền; giữ 5 dòng mới nhất, không thêm thao tác xem thêm. Căn cứ: contract v3.1 §4/§13 (bản trích dev cung cấp), `docs/DECISION.md` D-HD-01 và Playwright ADM-01.
 
 ## 4. ADM-02 — Quản lý tài khoản
 
@@ -177,16 +177,16 @@ Bên dưới chia hai cột: thẻ nhận diện bên trái gồm avatar lớn, 
 - [x] **DET-02** — Dựng trang chi tiết hai cột, thẻ nhận diện và đúng thứ tự 10 trường như ảnh (`AccountDetailView` trong `UsersPage.jsx`).
 - [x] **DET-03** — Có breadcrumb, nút “Quay lại”, “Chỉnh sửa”, “Vô hiệu hóa”/“Mở khóa” đúng vị trí và nhãn.
 - [x] **DET-04** — Có avatar tròn lớn (hiển thị chữ cái khi chưa có ảnh từ API) và badge vai trò/trạng thái kèm icon như ảnh.
-- [x] **DET-05** — Thể hiện hàng “Mật khẩu” bằng chuỗi dấu chấm cố định (`••••••••`) theo quyết định của dev. Không gọi API để lấy mật khẩu/hash hoặc đưa thông tin bí mật vào DOM.
+- [x] **DET-05** — Chế độ xem thể hiện hàng “Mật khẩu” bằng dấu chấm cố định (`••••••••`), không lấy mật khẩu/hash từ API. Chế độ chỉnh sửa có một ô mật khẩu mới, placeholder “Để trống nếu không đổi”, nút hiện/ẩn; xóa giá trị khi Hủy, thoát sửa, đổi tài khoản hoặc lưu thành công. Mật khẩu không được lưu vào URL, query key, console hay localStorage.
 - [x] **DET-06** — Response công khai không trả mật khẩu hoặc hash mật khẩu. Có thể đối chiếu `NhanVienRead` trong `schemas.py`.
-- [x] **DET-07** — Có chỉnh sửa trực tiếp (inline edit) ngay trên 10 hàng của thẻ “Thông tin tài khoản” (`01-chinh-sua-truc-tiep.png`): sửa họ tên, ngày sinh, điện thoại, email, vai trò, ngày vào làm và hệ số lương; giữ chỉ đọc tên đăng nhập, mật khẩu (`••••••••`) và trạng thái; khi bấm `Lưu` và xác nhận ở popup `Xác nhận thay đổi`, frontend gọi các API riêng sẵn có (`PATCH /api/v1/nhan_vien/{id}` với ETag đã xem và `PUT /api/v1/nhan_vien/{id}/vai_tro` nối tiếp với ETag trả về từ request đầu) rồi mở popup `Lưu thành công` (`02-luu-thanh-cong.png`).
+- [x] **DET-07** — Chỉnh sửa trực tiếp trên 10 hàng: hồ sơ, vai trò và mật khẩu mới; tên đăng nhập và trạng thái vẫn chỉ đọc. `Lưu` dùng popup `Xác nhận thay đổi` hiện có, lần lượt gọi các bước cần ghi: `PATCH /api/v1/nhan_vien/{id}` → `PUT /api/v1/nhan_vien/{id}/vai_tro` → `POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau`, nối ETag qua `If-Match`. Mật khẩu rỗng bỏ qua bước reset; có nhập thì 8–1024 ký tự, không trim. Lỗi một phần nêu bước đã lưu/bước thất bại, giữ mật khẩu nháp để thử lại, không gửi lại bước đã thành công. Tự reset thì gọi `login()` với mật khẩu mới ngay sau reset, trước mọi invalidate/refetch; thành công vẫn ở trang chi tiết và mở `Lưu thành công`. Chỉ khi đăng nhập lại lỗi mới logout với “Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.”
 - [x] **DET-08** — Chuẩn hóa hiển thị ngày `dd/MM/yyyy` (`formatDate`) và hệ số lương hai chữ số thập phân (`formatCoefficient`) theo ảnh ở chế độ xem chi tiết.
 - [x] **DET-09** — Giao diện giữ chặn khóa tài khoản quản trị viên và tài khoản của chính người đang đăng nhập; không cho đổi vai trò của tài khoản quản trị viên.
 
 ### 5.2. Khác biệt dữ liệu cần giữ rõ
 
 - [x] **DET-Q01** — Dev đã chốt giữ mã nhân viên do API trả về (`NV-000001`), không đổi thành `NV001` hoặc đổi validation (`doc/admin-ui-plan.md`).
-- [x] **DET-Q02** — Dev đã chốt hàng mật khẩu dùng dấu chấm cố định chỉ đọc (`••••••••`) trong cả chế độ xem lẫn chỉnh sửa trực tiếp (`FE-MISS-005`, `doc/admin-ui-inline-edit-plan.md`).
+- [x] **DET-Q02** — Dev chốt 10/11/2026 (`FE-MISS-005`, D-MK-01): bổ sung API và ô mật khẩu trong chế độ sửa, dùng chung nút `Lưu` và popup xác nhận, không ô lý do; áp dụng mọi tài khoản gồm chính admin và tài khoản bị khóa. Chế độ xem giữ `••••••••`; tự reset đăng nhập lại tự động để tiếp tục phiên. Quyết định này cập nhật giới hạn chỉ đọc trước đây trong `doc/admin-ui-inline-edit-plan.md`.
 - [x] **DET-Q03** — Dev đã chốt dùng avatar chữ cái khi chưa có ảnh nhân viên (`FE-MISS-003`).
 - [x] **DET-Q04** — Hiển thị nút hành động “Vô hiệu hóa” / “Mở khóa” và badge trạng thái “Hoạt động” / “Bị khóa” dựa trên hai trạng thái `hoat_dong` và `bi_khoa` của API.
 

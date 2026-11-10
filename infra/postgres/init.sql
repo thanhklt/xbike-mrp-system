@@ -556,7 +556,7 @@ Không lưu mật khẩu, hash hoặc token trong JSON.
 
 COMMENT ON COLUMN "LichSuThaoTac"."loai_doi_tuong" IS 'nhan_vien / vai_tro / mat_hang / nha_cung_cap / cong_thuc / phieu_nhap / phieu_xuat / yeu_cau_san_xuat / lenh_san_xuat / chung_tu_hoan_thanh_san_xuat / phieu_dieu_chinh_kho / ticket_loi_dieu_chinh';
 
-COMMENT ON COLUMN "LichSuThaoTac"."thao_tac" IS 'tao / sua / xoa_nhap / gui / bat_dau / duyet / tu_choi / ve_nhap / hoan_tat / cap_quyen / thu_hoi_quyen / vo_hieu_hoa / huy / ghi_nhan_loi / nhan_xu_ly / giai_quyet / xac_nhan';
+COMMENT ON COLUMN "LichSuThaoTac"."thao_tac" IS 'tao / sua / xoa_nhap / gui / bat_dau / duyet / tu_choi / ve_nhap / hoan_tat / cap_quyen / thu_hoi_quyen / vo_hieu_hoa / huy / ghi_nhan_loi / nhan_xu_ly / giai_quyet / xac_nhan / dang_nhap';
 
 ALTER TABLE "NhanVien" ADD FOREIGN KEY ("vai_tro_id") REFERENCES "VaiTro" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 

@@ -5,7 +5,7 @@ Module audit sở hữu ORM `LichSuThaoTac` ánh xạ bảng `"LichSuThaoTac"`. 
 
 ## GET /api/v1/audit — Danh sách lịch sử
 
-Bearer JWT bắt buộc; chỉ `quan_tri_vien`, `quan_ly` được đọc. Query dùng dependency chung: page (mặc định 1, tối thiểu 1), page_size (mặc định 20, tối đa 100), search, sort_by (mặc định created_at), sort_order (asc/desc, mặc định desc). Không áp quy tắc reject_query riêng của auth/nhân viên cho route này. Theo [D-PQ-02](../DECISION.md#d-pq-02-audit-rút-gọn-cho-quản-trị-viên), admin thấy mọi dòng và giữ ly_do nhưng không nhận hai key du_lieu_truoc/du_lieu_sau, kể cả audit nhân viên/vai trò. Quản lý nhận đầy đủ hai key, gồm cả giá trị null. Nhân viên nhận 403.
+Bearer JWT bắt buộc; chỉ `quan_tri_vien`, `quan_ly` được đọc. Query dùng dependency chung: page (mặc định 1, tối thiểu 1), page_size (mặc định 20, tối đa 100), search, sort_by (mặc định created_at), sort_order (asc/desc, mặc định desc); thêm `bo_thao_tac: ThaoTac | None` loại một thao tác hợp lệ (gồm `dang_nhap`) trước COUNT/phân trang, sai enum trả 422. Không áp quy tắc reject_query riêng của auth/nhân viên. Theo D-HD-01 (`docs/DECISION.md`, thay D-PQ-02), admin và quản lý đều thấy mọi loại đối tượng và đủ hai key du_lieu_truoc/du_lieu_sau, gồm giá trị null; nhân viên nhận 403.
 
 ```mermaid
 sequenceDiagram
@@ -31,29 +31,23 @@ sequenceDiagram
         R-->>C: 403 FORBIDDEN
     else Xác thực hợp lệ
         A-->>R: Payload với roles hiện tại
-        R->>R: require_roles và validate PageParams
+        R->>R: require_roles, validate PageParams và bo_thao_tac
         alt Role là nhan_vien
             R-->>C: 403 FORBIDDEN
-        else Query số trang/kích thước/chiều sort không hợp lệ
+        else Query số trang/kích thước/chiều sort hoặc enum bo_thao_tac không hợp lệ
             R-->>C: 422 VALIDATION_ERROR
         else Có quyền và input hợp lệ
-            R->>S: list_entries(params, actor)
-            alt Vai trò quan_tri_vien
-                S->>S: Chọn AuditLogSummary, không có du_lieu_truoc/du_lieu_sau
-                opt sort_by là du_lieu_truoc hoặc du_lieu_sau
-                    S->>S: Sao chép params với sort_by=created_at
-                end
-                S->>P: list_entries(params, AuditLogSummary)
-            else Vai trò quan_ly
-                S->>P: list_entries(params, AuditLogResponse)
-            end
-            P->>DB: COUNT và SELECT LichSuThaoTac qua select_page, search chỉ dò cột chuỗi
+            R->>S: list_entries(params, actor, bo_thao_tac)
+            S->>P: list_entries(params, AuditLogResponse, bo_thao_tac)
+            P->>P: Nếu có bo_thao_tac, thêm filter thao_tac != bo_thao_tac
+            P->>DB: select_page COUNT với filter và search cột chuỗi
+            P->>DB: SELECT cùng filter, sort giữ nguyên, OFFSET và LIMIT
             DB-->>P: Tổng và các dòng ORM đầy đủ
-            P->>P: model_validate theo schema được service chọn
-            P-->>S: RecordPage DTO rút gọn hoặc đầy đủ
+            P->>P: model_validate AuditLogResponse đầy đủ
+            P-->>S: RecordPage gồm items và tổng sau filter
             S->>S: create_paginated_response
             S-->>R: PaginatedResponse
-            R-->>C: 200 success, data theo vai trò, pagination, message
+            R-->>C: 200 success, data đầy đủ snapshot, pagination, message
         end
     end
 ```
@@ -67,4 +61,6 @@ là một đối tượng JSON rỗng. Thay đổi chỉ áp dụng khi ORM ghi 
 chuyển đổi các bản ghi JSON null đã tồn tại.
 Trong luồng đổi mật khẩu, `append` chỉ `session.add` record và không commit riêng; transaction nhân viên flush INSERT và commit cùng UPDATE password. Nếu append/commit lỗi, rollback cả hai; xem [auth.md](auth.md). Không log password/hash/token vào dữ liệu audit.
 
-Giới hạn đã chốt: chỉ rút gọn DTO/response, vẫn dùng SELECT toàn bộ ORM trong select_page. Không lọc loại đối tượng cho admin. ly_do vẫn hiển thị và được search, nên admin còn thấy siêu dữ liệu và lý do thao tác nghiệp vụ. Hai cột JSON không tham gia search và admin không được sort theo chúng. Response model union giữ nguyên việc bỏ hẳn key du_lieu_* cho admin.
+Theo D-HD-01, response model dùng duy nhất `PaginatedResponse[AuditLogResponse]`; không lọc loại đối tượng cho admin. `ly_do` vẫn hiển thị và được search; hai cột JSON không tham gia search nhưng admin/quản lý đều sort được như nhau. ADM-01 dùng `bo_thao_tac=thu_hoi_quyen`, dashboard kho không gửi filter này. Không có endpoint `/lich_su_thao_tac` hoặc filter v3 khác trong phạm vi FE-MISS-004.
+
+Luồng đăng nhập dùng public method `NhanVienService.record_login`: append đúng một dòng `dang_nhap` với hai snapshot/ly_do null, commit transaction trước khi auth ký token. Append/commit lỗi trả 500 và không cấp token; không ghi audit cho đăng nhập bị từ chối. CHECK SQL đã có thao tác này từ commit `2ef564c`; volume cũ hơn có thể khiến commit lỗi, không tự ALTER/seed. Xem `auth.md`.

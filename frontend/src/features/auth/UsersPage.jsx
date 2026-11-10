@@ -7,6 +7,7 @@ import {
   Calendar,
   CirclePercent,
   Eye,
+  EyeOff,
   Info,
   KeyRound,
   Layers,
@@ -403,7 +404,7 @@ function AccountListView({ id, roles }) {
 }
 
 function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) {
-  const { user } = useAuth();
+  const { user, login, logout } = useAuth();
   const { confirm, notify, showSuccess } = useFeedback();
   const queryClient = useQueryClient();
   const detail = useDetail(API.employees, id);
@@ -433,6 +434,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
 
   const [values, setValues] = useState(() => extractProfileDraft(activeBaselineRecord));
   const [roleId, setRoleId] = useState(() => String(activeBaselineRecord?.vai_tro_id ?? ""));
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -440,6 +443,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     if (!activeBaselineRecord) return;
     if (!isEditing) {
       editInitializedRef.current = false;
+      setNewPassword("");
+      setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
       setSaveError(null);
@@ -447,6 +452,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     }
     if (!editInitializedRef.current) {
       editInitializedRef.current = true;
+      setNewPassword("");
+      setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
       setSaveError(null);
@@ -454,6 +461,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }, [isEditing, activeBaselineRecord, id]);
 
   function handleStartEdit() {
+    setNewPassword("");
+    setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
     if (base) {
       setValues(extractProfileDraft(base));
@@ -465,6 +474,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }
 
   function handleCancelEdit() {
+    setNewPassword("");
+    setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
     if (base) {
       setValues(extractProfileDraft(base));
@@ -502,6 +513,14 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     if (!baseRecord || busy) return;
 
     const profileDirty = isProfileChanged(baseRecord, values);
+    const passwordDirty = newPassword.length > 0;
+    if (passwordDirty && newPassword.length < 8) {
+      setSaveError(new ApiError("Mật khẩu mới phải có từ 8 đến 1024 ký tự.", {
+        status: 422,
+        code: "VALIDATION_ERROR",
+      }));
+      return;
+    }
     const parsedRoleId = Number(roleId);
     const roleDirty =
       !lockedAdmin &&
@@ -509,7 +528,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       !Number.isNaN(parsedRoleId) &&
       parsedRoleId !== Number(baseRecord.vai_tro_id);
 
-    if (!profileDirty && !roleDirty) {
+    if (!profileDirty && !roleDirty && !passwordDirty) {
       setSaveError(null);
       editInitializedRef.current = false;
       onCancelEdit();
@@ -524,6 +543,9 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       targetRoleId: parsedRoleId,
       needProfileWrite: profileDirty,
       needRoleWrite: roleDirty,
+      needPasswordWrite: passwordDirty,
+      newPassword,
+      savedSteps: [],
     };
 
     confirm({
@@ -545,7 +567,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
 
         setBusy(true);
         setSaveError(null);
-        let profileSavedInThisAttempt = false;
+        let failedStep = "cập nhật hồ sơ";
         let workingRecord = submission.baselineRecord;
         let currentEtag = submission.reviewedEtag;
 
@@ -573,7 +595,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
               body: profilePayload,
               etag: currentEtag,
             });
-            profileSavedInThisAttempt = true;
+            submission.savedSteps.push("thông tin hồ sơ");
             workingRecord = {
               ...workingRecord,
               ...(profileRes?.data || profilePayload),
@@ -591,6 +613,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
           }
 
           if (submission.needRoleWrite) {
+            failedStep = "cập nhật vai trò";
             if (!currentEtag) {
               throw new ApiError(
                 "Phản hồi lưu hồ sơ không trả về ETag mới để tiếp tục cập nhật vai trò.",
@@ -622,11 +645,52 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
               etag: currentEtag,
             };
             updateCache(nextSnap);
+            submission.savedSteps.push("vai trò");
             submission.needRoleWrite = false;
             submission.reviewedEtag = currentEtag;
             submission.baselineRecord = workingRecord;
           }
 
+          if (submission.needPasswordWrite) {
+            failedStep = "đặt lại mật khẩu";
+            const passwordRes = await writeResource({
+              path: `${API.employees}/${submission.id}/dat_lai_mat_khau`,
+              method: "post",
+              body: { mat_khau_moi: submission.newPassword },
+              etag: currentEtag,
+            });
+            // Renew our own token before any cache update can trigger a refetch.
+            if (submission.id === user.id) {
+              try {
+                await login({
+                  ten_dang_nhap: user.ten_dang_nhap,
+                  mat_khau: submission.newPassword,
+                });
+              } catch {
+                submission.newPassword = "";
+                setNewPassword("");
+                setPasswordVisible(false);
+                logout("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
+                return;
+              }
+            }
+            workingRecord = { ...workingRecord, ...(passwordRes?.data || {}) };
+            currentEtag = passwordRes?.etag || currentEtag;
+            updateCache({
+              data: workingRecord,
+              meta: passwordRes?.meta || baseSnapshot?.meta,
+              etag: currentEtag,
+            });
+            submission.needPasswordWrite = false;
+            submission.newPassword = "";
+            submission.reviewedEtag = currentEtag;
+            submission.baselineRecord = workingRecord;
+            submission.savedSteps.push("mật khẩu");
+            setNewPassword("");
+            setPasswordVisible(false);
+          }
+
+          failedStep = "tải lại dữ liệu";
           await queryClient.invalidateQueries({
             queryKey: ["resources"],
           });
@@ -634,13 +698,13 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
           onCancelEdit();
           showSuccess({ title: "Lưu thành công" });
         } catch (failure) {
-          if (profileSavedInThisAttempt) {
+          if (submission.savedSteps.length) {
             await queryClient.invalidateQueries({
               queryKey: ["resources", user?.id, user?.ma_vai_tro, API.employees],
             });
             const partialError = new ApiError(
-              `Đã lưu thông tin hồ sơ, nhưng cập nhật vai trò thất bại: ${
-                failure?.message || "Không thể cập nhật vai trò."
+              `Đã lưu ${submission.savedSteps.join(" và ")}, nhưng ${failedStep} thất bại: ${
+                failure?.message || "Không thể lưu thay đổi."
               }`,
               {
                 status: failure?.status || 500,
@@ -807,7 +871,31 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
                       value={activeBaselineRecord.ten_dang_nhap || "—"}
                       readOnly
                     />
-                    <DetailRow icon={KeyRound} label="Mật khẩu" value="••••••••" readOnly />
+                    <InlineEditRow icon={KeyRound} label="Mật khẩu" htmlFor="inline-mat-khau">
+                      <div className="admin-inline-password">
+                        <input
+                          id="inline-mat-khau"
+                          className="admin-inline-input"
+                          type={passwordVisible ? "text" : "password"}
+                          autoComplete="new-password"
+                          placeholder="Để trống nếu không đổi"
+                          maxLength={1024}
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          disabled={busy}
+                        />
+                        <button
+                          type="button"
+                          className="admin-inline-password-toggle"
+                          aria-label={passwordVisible ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                          aria-pressed={passwordVisible}
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          disabled={busy}
+                        >
+                          {passwordVisible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+                        </button>
+                      </div>
+                    </InlineEditRow>
                     <InlineEditRow icon={Layers} label="Vai trò" htmlFor="inline-vai-tro">
                       <select
                         id="inline-vai-tro"

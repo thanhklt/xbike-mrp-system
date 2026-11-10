@@ -51,6 +51,58 @@ export function trafficSeries(range) {
   };
 }
 
+export function adminActivityEntries() {
+  return [
+    {
+      loai_doi_tuong: "vai_tro",
+      thao_tac: "tao",
+      doi_tuong_id: 2,
+      du_lieu_sau: { ten_vai_tro: "Quản lý kho" },
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "cap_quyen",
+      doi_tuong_id: 5,
+      du_lieu_truoc: { ma_vai_tro: "nhan_vien" },
+      du_lieu_sau: { ma_nhan_vien: "nv005", ho_ten: "Tên lịch sử", ma_vai_tro: "quan_ly" },
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "sua",
+      doi_tuong_id: 3,
+      du_lieu_truoc: { email: "old", so_dien_thoai: "old" },
+      du_lieu_sau: {
+        ma_nhan_vien: "nv003",
+        ho_ten: "Tên lịch sử",
+        email: "private@example.test",
+        so_dien_thoai: "0909999999",
+      },
+    },
+    { loai_doi_tuong: "nhan_vien", thao_tac: "dang_nhap", nhan_vien_id: 3, doi_tuong_id: 3 },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "vo_hieu_hoa",
+      doi_tuong_id: 7,
+      du_lieu_sau: { ma_nhan_vien: "nv007", ho_ten: "Tên lịch sử" },
+      ly_do: "không còn sử dụng",
+    },
+    {
+      loai_doi_tuong: "nhan_vien",
+      thao_tac: "thu_hoi_quyen",
+      doi_tuong_id: 5,
+      du_lieu_truoc: { ma_vai_tro: "nhan_vien" },
+    },
+  ].map((entry, index) => ({
+    id: index + 1,
+    nhan_vien_id: 2,
+    created_at: `2026-11-10T0${8 - index}:00:00Z`,
+    du_lieu_truoc: null,
+    du_lieu_sau: null,
+    ly_do: null,
+    ...entry,
+  }));
+}
+
 export async function installApi(page, { role = "quan_ly", authenticated = true, intercept } = {}) {
   const people = [
     {
@@ -213,6 +265,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
   };
   const state = {
     role,
+    accessToken: "browser-test-token",
     calls: [],
     unexpected: [],
     versions: {},
@@ -412,13 +465,15 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (path === "auth/dang_nhap")
       return respond({
         data: {
-          access_token: "browser-test-token",
+          access_token: state.accessToken,
           token_type: "bearer",
           expires_in: 3600,
           nhan_vien: user,
         },
         meta: {},
       });
+    if (state.accessToken !== "browser-test-token" && call.headers.authorization !== `Bearer ${state.accessToken}`)
+      return respond({ error: { message: "Please sign in again" } }, 401);
     if (path === "auth/me") return respond({ data: user, meta: {} }, 200, { etag: '"user-v1"' });
     if (path === "auth/doi_mat_khau") return respond({ data: { da_doi: true }, meta: {} });
     if (path === "danh_muc_mat_hang")
@@ -512,11 +567,13 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (method === "GET") {
       let matching = records.filter((entry) =>
         Object.entries(call.params).every(([key, value]) =>
-          ["page", "page_size", "sort", "sort_by", "sort_order"].includes(key) ||
-          ["q", "search"].includes(key)
-            ? !["q", "search"].includes(key) ||
-              JSON.stringify(entry).toLowerCase().includes(value.toLowerCase())
-            : String(entry[key]) === value,
+          key === "bo_thao_tac"
+            ? entry.thao_tac !== value
+            : ["page", "page_size", "sort", "sort_by", "sort_order"].includes(key) ||
+                ["q", "search"].includes(key)
+              ? !["q", "search"].includes(key) ||
+                JSON.stringify(entry).toLowerCase().includes(value.toLowerCase())
+              : String(entry[key]) === value,
         ),
       );
       const pageNumber = Number(url.searchParams.get("page") || 1),
@@ -558,6 +615,10 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         { error: { code: "du_lieu_da_thay_doi", message: "Dữ liệu đã thay đổi" }, meta: {} },
         412,
       );
+    if (resource === "nhan_vien" && action === "dat_lai_mat_khau" && method === "POST") {
+      if (id === user.id) state.accessToken = "browser-test-token-renewed";
+      return respond({ data: record, meta: {} }, 200, { etag: version() });
+    }
     state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
     if (method === "PATCH" || method === "PUT") {
       Object.assign(record, body);

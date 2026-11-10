@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { installApi } from "./api-fixture.js";
+import { adminActivityEntries, installApi } from "./api-fixture.js";
 
 test("ADM-01 overview displays 4 KPI cards in order, role distribution including locked accounts, traffic chart per range, and 4-column recent activity", async ({
   page,
@@ -14,6 +14,7 @@ test("ADM-01 overview displays 4 KPI cards in order, role distribution including
       return null;
     },
   });
+  state.resources.audit = adminActivityEntries();
   await page.goto("/admin");
 
   await expect(page.getByRole("heading", { name: "Tổng quan", exact: true })).toBeVisible();
@@ -98,6 +99,32 @@ test("ADM-01 overview displays 4 KPI cards in order, role distribution including
     .evaluateAll((nodes) => nodes.map((node) => node.textContent));
   expect(activityHeaders).toEqual(["Thời gian", "Người thực hiện", "Hành động", "Chi tiết"]);
   await expect(page.locator(".admin-activity-card tbody")).toContainText("Nguyễn Văn An");
+  expect(state.calls.filter((call) => call.path === "audit").map((call) => call.params)).toEqual([
+    {
+      page: "1",
+      page_size: "5",
+      bo_thao_tac: "thu_hoi_quyen",
+      sort_by: "created_at",
+      sort_order: "desc",
+    },
+  ]);
+  await expect(page.locator(".admin-activity-card tbody tr")).toHaveCount(5);
+  await expect(page.locator(".admin-activity-card tbody tr td:last-child")).toHaveText([
+    'Tạo vai trò "Quản lý kho".',
+    'Gán vai trò "Quản lý kho" cho tài khoản nv005 (Tên lịch sử) (trước đó: "Nhân viên").',
+    "Cập nhật thông tin tài khoản nv003 (Tên lịch sử) (số điện thoại, email).",
+    "Đăng nhập thành công vào hệ thống.",
+    "Vô hiệu hóa tài khoản nv007 (Tên lịch sử) do không còn sử dụng.",
+  ]);
+  await expect(page.locator(".admin-activity-card tbody tr td:nth-child(3)")).toHaveText([
+    "Tạo vai trò",
+    "Phân quyền",
+    "Cập nhật tài khoản",
+    "Đăng nhập",
+    "Vô hiệu hóa tài khoản",
+  ]);
+  await expect(page.locator(".admin-activity-card")).not.toContainText("private@example.test");
+  await expect(page.locator(".admin-activity-card")).not.toContainText("0909999999");
 
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -106,6 +133,14 @@ test("ADM-01 overview displays 4 KPI cards in order, role distribution including
   await page.screenshot({ path: "test-results/adm-01-overview-1440x900.png" });
   await page.setViewportSize({ width: 1672, height: 941 });
   await page.screenshot({ path: "test-results/adm-01-overview-1672x941.png" });
+});
+
+test("admin audit history still renders when the API includes both snapshots", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/lich-su");
+  await expect(page.getByRole("heading", { name: "Lịch sử thao tác", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "hoan_tat", exact: true })).toBeVisible();
+  expect(state.calls.filter((call) => call.path === "audit")[0].params.bo_thao_tac).toBeUndefined();
 });
 
 test("ADM-02 account list supports Enter search, immediate filters, page reset, select-all on current page, and only 10 rows per page option", async ({
@@ -326,8 +361,9 @@ test("ADM-03 detail view, inline edit, and ADM-05 confirmation/success popups pr
   await expect(page.getByRole("button", { name: "Đặt lại mật khẩu…" })).toHaveCount(0);
   await expect(page.locator(".admin-detail-row").nth(4).locator("dd")).toHaveText("manager");
   await expect(page.locator(".admin-detail-row").nth(4).locator("input")).toHaveCount(0);
-  await expect(page.locator(".admin-detail-row").nth(5).locator("dd")).toHaveText("••••••••");
-  await expect(page.locator(".admin-detail-row").nth(5).locator("input")).toHaveCount(0);
+  await expect(page.locator("#inline-mat-khau")).toHaveAttribute("type", "password");
+  await expect(page.locator("#inline-mat-khau")).toHaveValue("");
+  await expect(page.locator("#inline-mat-khau")).toHaveAttribute("placeholder", "Để trống nếu không đổi");
   await expect(page.locator(".admin-detail-row").nth(9).locator("input, select")).toHaveCount(0);
 
   await page.screenshot({ path: "test-results/adm-03-inline-edit-1440x900.png" });
@@ -826,7 +862,13 @@ test("ADM-03 regression: cache update scopes strictly to current actor/role and 
     return {
       otherUserCache: queryClient.getQueryData(["resources", 999, "quan_ly", "/nhan_vien/3", {}]),
       diffRoleCache: queryClient.getQueryData(["resources", 1, "quan_ly", "/nhan_vien/3", {}]),
-      currentActorCache: queryClient.getQueryData(["resources", 1, "quan_tri_vien", "/nhan_vien/3", {}]),
+      currentActorCache: queryClient.getQueryData([
+        "resources",
+        1,
+        "quan_tri_vien",
+        "/nhan_vien/3",
+        {},
+      ]),
     };
   });
 
@@ -839,7 +881,170 @@ test("ADM-03 regression: cache update scopes strictly to current actor/role and 
   // Current actor's cache must hold the truthful partial-save baseline
   expect(currentActorCache.data.ho_ten).toBe("Scoped Saved Profile");
   expect(currentActorCache.etag).toBe('"v2"');
-  expect(
-    state.calls.filter((c) => c.method === "PATCH" && c.path === "nhan_vien/3"),
-  ).toHaveLength(1);
+  expect(state.calls.filter((c) => c.method === "PATCH" && c.path === "nhan_vien/3")).toHaveLength(
+    1,
+  );
+});
+
+test("ADM-03 password input toggles, validates, discards on cancel and skips blank resets", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan/2");
+  const passwordRow = page.locator(".admin-detail-row").nth(5);
+  await expect(passwordRow.locator("dd")).toHaveText("••••••••");
+  await expect(passwordRow.locator("input")).toHaveCount(0);
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  const input = page.locator("#inline-mat-khau");
+  await expect(input).toHaveAttribute("autocomplete", "new-password");
+  await expect(input).toHaveAttribute("maxlength", "1024");
+  expect(await input.getAttribute("minlength")).toBeNull();
+  await page.getByRole("button", { name: "Hiện mật khẩu", exact: true }).click();
+  await expect(input).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Ẩn mật khẩu", exact: true }).click();
+  await expect(input).toHaveAttribute("type", "password");
+
+  // Seven characters fail before opening confirmation or issuing any write.
+  await input.fill("1234567");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Mật khẩu mới phải có từ 8 đến 1024 ký tự.");
+  await expect(page.locator("dialog")).toHaveCount(0);
+  expect(state.calls.filter((call) => call.method !== "GET")).toHaveLength(0);
+
+  await input.fill("draft-password");
+  await page.getByRole("button", { name: "Hiện mật khẩu", exact: true }).click();
+  await page.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(passwordRow.locator("dd")).toHaveText("••••••••");
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await expect(input).toHaveValue("");
+  await expect(input).toHaveAttribute("type", "password");
+
+  // Blank password permits a normal profile save without a reset request.
+  await page.getByLabel("Email", { exact: true }).fill("blank-reset@example.test");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
+  expect(state.calls.filter((call) => call.path.endsWith("/dat_lai_mat_khau"))).toHaveLength(0);
+  await page.getByRole("button", { name: "Đóng", exact: true }).click();
+  await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await expect(page.locator("#inline-mat-khau")).toHaveCount(0);
+  await expect(page.locator("dialog")).toHaveCount(0);
+});
+
+for (const changeRole of [false, true]) {
+  test(`ADM-03 reset follows profile${changeRole ? " and role" : ""} with chained If-Match and clears secret`, async ({ page }) => {
+    const state = await installApi(page, { role: "quan_tri_vien" });
+    state.resources.nhan_vien[2].trang_thai = "bi_khoa";
+    await page.goto("/admin/tai-khoan/3?mode=edit");
+    await page.getByLabel("Email", { exact: true }).fill("reset-target@example.test");
+    if (changeRole) await page.getByLabel("Vai trò", { exact: true }).selectOption("2");
+    const password = " new-password-with-spaces ";
+    await page.locator("#inline-mat-khau").fill(password);
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
+    await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
+    const writes = state.calls.filter((call) => call.method !== "GET");
+    expect(writes.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "PATCH nhan_vien/3",
+      ...(changeRole ? ["PUT nhan_vien/3/vai_tro"] : []),
+      "POST nhan_vien/3/dat_lai_mat_khau",
+    ]);
+    expect(writes.map((call) => call.headers["if-match"])).toEqual(changeRole ? ['"v1"', '"v2"', '"v3"'] : ['"v1"', '"v2"']);
+    expect(writes.at(-1).body).toEqual({ mat_khau_moi: password });
+    await expect(page.locator("#inline-mat-khau")).toHaveCount(0);
+    expect(await page.content()).not.toContain(password);
+    expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(password);
+    expect(page.url()).not.toContain(password.trim());
+    await page.getByRole("button", { name: "Đóng", exact: true }).click();
+    await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
+    await expect(page.locator("#inline-mat-khau")).toHaveValue("");
+  });
+}
+
+for (const reopenDialog of [false, true]) {
+  test(`ADM-03 failed password reset preserves draft and retries only reset${reopenDialog ? " after reopening confirmation" : " in confirmation"}`, async ({ page }) => {
+    let failOnce = true;
+    const state = await installApi(page, {
+      role: "quan_tri_vien",
+      intercept: (call) => {
+        if (failOnce && call.path === "nhan_vien/3/dat_lai_mat_khau") {
+          failOnce = false;
+          return { status: 500, json: { error: { message: "Lỗi đặt lại mật khẩu" } } };
+        }
+        return null;
+      },
+    });
+    await page.goto("/admin/tai-khoan/3?mode=edit");
+    await page.getByLabel("Email", { exact: true }).fill("partial-reset@example.test");
+    await page.getByLabel("Vai trò", { exact: true }).selectOption("2");
+    await page.locator("#inline-mat-khau").fill("retry-password");
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    const dialog = page.locator("dialog.confirmation-profile-save");
+    await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Đã lưu thông tin hồ sơ và vai trò, nhưng đặt lại mật khẩu thất bại: Lỗi đặt lại mật khẩu");
+    await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
+    await expect(page.locator("#inline-mat-khau")).toHaveValue("retry-password");
+    if (reopenDialog) {
+      await dialog.getByRole("button", { name: "Hủy", exact: true }).click();
+      await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    }
+    await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+    await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
+    const writes = state.calls.filter((call) => call.method !== "GET");
+    expect(writes.map((call) => call.method)).toEqual(["PATCH", "PUT", "POST", "POST"]);
+    expect(writes.slice(-2).map((call) => call.headers["if-match"])).toEqual(['"v3"', '"v3"']);
+  });
+}
+
+test("ADM-03 self reset logs in immediately with new password before any authenticated refetch", async ({ page }) => {
+  let releaseLogin;
+  const loginGate = new Promise((resolve) => { releaseLogin = resolve; });
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: async (call) => {
+      if (call.path === "auth/dang_nhap") await loginGate;
+      return null;
+    },
+  });
+  await page.goto("/admin/tai-khoan/1?mode=edit");
+  const password = "self-reset-password";
+  await page.locator("#inline-mat-khau").fill(password);
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect.poll(() => state.calls.some((call) => call.path === "auth/dang_nhap")).toBe(true);
+  const resetIndex = state.calls.findIndex((call) => call.path.endsWith("/dat_lai_mat_khau"));
+  expect(state.calls.slice(resetIndex + 1).map((call) => call.path)).toEqual(["auth/dang_nhap"]);
+  const login = state.calls.at(-1);
+  expect(login.body).toEqual({ ten_dang_nhap: "admin", mat_khau: password });
+  expect(login.headers.authorization).toBeUndefined();
+  await expect(page.locator("#inline-mat-khau")).toBeDisabled();
+  releaseLogin();
+  await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/tai-khoan\/1$/);
+  const afterReset = state.calls.slice(resetIndex + 1);
+  expect(afterReset[1].path).toBe("auth/me");
+  for (const call of afterReset.slice(1)) expect(call.headers.authorization).toBe("Bearer browser-test-token-renewed");
+  await expect(page.locator("#inline-mat-khau")).toHaveCount(0);
+  expect(await page.content()).not.toContain(password);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(password);
+  expect(state.unexpected).toEqual([]);
+});
+
+test("ADM-03 self reset login failure logs out with the agreed notice", async ({ page }) => {
+  const state = await installApi(page, {
+    role: "quan_tri_vien",
+    intercept: (call) => call.path === "auth/dang_nhap"
+      ? { status: 500, json: { error: { message: "Lỗi đăng nhập" } } }
+      : null,
+  });
+  await page.goto("/admin/tai-khoan/1?mode=edit");
+  await page.locator("#inline-mat-khau").fill("fallback-password");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(page).toHaveURL(/\/dang-nhap$/);
+  await expect(page.getByRole("status")).toContainText("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
+  await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
+  const resetIndex = state.calls.findIndex((call) => call.path.endsWith("/dat_lai_mat_khau"));
+  expect(state.calls.slice(resetIndex + 1).map((call) => call.path)).toEqual(["auth/dang_nhap"]);
+  expect(await page.content()).not.toContain("fallback-password");
 });

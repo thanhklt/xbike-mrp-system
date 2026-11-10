@@ -2606,6 +2606,31 @@ html[data-admin-theme="true"] {
   cursor: not-allowed;
 }
 
+.admin-inline-password {
+  position: relative;
+  width: 100%;
+}
+
+.admin-inline-password .admin-inline-input {
+  padding-right: 44px;
+}
+
+.admin-inline-password input::-ms-reveal {
+  display: none;
+}
+
+.admin-inline-password-toggle {
+  position: absolute;
+  inset: 0 4px 0 auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d68a59;
+}
+
 .admin-detail-row dt label {
   cursor: pointer;
 }

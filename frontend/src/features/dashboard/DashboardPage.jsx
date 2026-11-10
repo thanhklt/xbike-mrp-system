@@ -1,16 +1,9 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  Ban,
-  BarChart3,
-  CircleCheck,
-  Info,
-  Layers,
-  PieChart,
-  Users,
-} from "lucide-react";
+import { Ban, BarChart3, CircleCheck, Info, Layers, PieChart, Users } from "lucide-react";
 import { API } from "../../lib/api/endpoints.js";
 import { useChoices, useResource } from "../../lib/api/useResources.js";
+import { formatAuditAction, formatAuditDetail } from "./auditFormat.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import {
@@ -45,59 +38,6 @@ function Metric({ label, path, params, href }) {
       {query.isError && <small>Không tải được số liệu</small>}
     </Link>
   );
-}
-
-const AUDIT_ACTION_LABELS = {
-  tao: "Tạo",
-  sua: "Cập nhật",
-  xoa_nhap: "Xóa nháp",
-  gui: "Gửi",
-  bat_dau: "Bắt đầu",
-  duyet: "Duyệt",
-  tu_choi: "Từ chối",
-  ve_nhap: "Chuyển về nháp",
-  hoan_tat: "Hoàn tất",
-  cap_quyen: "Cấp quyền",
-  thu_hoi_quyen: "Thu hồi quyền",
-  vo_hieu_hoa: "Vô hiệu hóa",
-  huy: "Hủy",
-  ghi_nhan_loi: "Ghi nhận lỗi",
-  nhan_xu_ly: "Nhận xử lý",
-  giai_quyet: "Giải quyết",
-  xac_nhan: "Xác nhận",
-};
-
-const AUDIT_OBJECT_LABELS = {
-  nhan_vien: "tài khoản",
-  vai_tro: "vai trò",
-  mat_hang: "mặt hàng",
-  nha_cung_cap: "nhà cung cấp",
-  cong_thuc: "BOM",
-  phieu_nhap: "phiếu nhập",
-  phieu_xuat: "phiếu xuất",
-  yeu_cau_san_xuat: "yêu cầu sản xuất",
-  lenh_san_xuat: "lệnh sản xuất",
-  chung_tu_hoan_thanh_san_xuat: "chứng từ hoàn thành SX",
-  phieu_dieu_chinh_kho: "phiếu điều chỉnh kho",
-  ticket_loi_dieu_chinh: "ticket lỗi điều chỉnh",
-};
-
-function formatAuditAction(entry) {
-  const verb = AUDIT_ACTION_LABELS[entry.thao_tac] || entry.thao_tac;
-  const noun = AUDIT_OBJECT_LABELS[entry.loai_doi_tuong] || entry.loai_doi_tuong;
-  return `${verb} ${noun}`;
-}
-
-function formatAuditDetail(entry, employees = []) {
-  const objectLabel = AUDIT_OBJECT_LABELS[entry.loai_doi_tuong] || entry.loai_doi_tuong;
-  let target = `${objectLabel} #${entry.doi_tuong_id}`;
-  if (entry.loai_doi_tuong === "nhan_vien") {
-    const matched = employees.find((item) => item.id === Number(entry.doi_tuong_id));
-    if (matched) {
-      target = `${matched.ma_nhan_vien}${matched.ho_ten ? ` (${matched.ho_ten})` : ""}`;
-    }
-  }
-  return entry.ly_do ? `${target} · ${entry.ly_do}` : target;
 }
 
 function AdminStatCard({ label, icon, tone, path, params, href }) {
@@ -376,7 +316,10 @@ function TrafficCard() {
 
 function AdminDashboard() {
   const employees = useChoices(API.employees);
-  const logs = useResource(API.audit, auditParams({ page: 1, page_size: 5, sort: "-created_at" }));
+  const logs = useResource(
+    API.audit,
+    auditParams({ page: 1, page_size: 5, sort: "-created_at", bo_thao_tac: "thu_hoi_quyen" }),
+  );
 
   const employeeRows = employees.data || [];
   const totalAccounts = employeeRows.length;

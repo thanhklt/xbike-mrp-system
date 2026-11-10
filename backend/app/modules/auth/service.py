@@ -24,12 +24,15 @@ class AuthService:
         self.employees = employees
 
     async def login(self, username: str, password: str) -> TokenRead:
-        return _issue_token(await self.employees.authenticate_employee(username, password))
+        identity = await self.employees.authenticate_employee(username, password)
+        await self.employees.record_login(identity.profile.id)
+        return _issue_token(identity)
 
     async def authenticate(self, identifier: str, password: str) -> TokenResponse:
         identity = await self.employees.authenticate_employee(
             identifier, password, allow_email=True
         )
+        await self.employees.record_login(identity.profile.id)
         result = _issue_token(identity)
         return TokenResponse(**result.model_dump(exclude={"nhan_vien"}))
 

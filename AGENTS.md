@@ -105,3 +105,5 @@ Nguồn tài liệu đã thống nhất của project:
 | `gitnexus://repo/xbike-mrp-system/clusters` | Các nhóm chức năng |
 | `gitnexus://repo/xbike-mrp-system/processes` | Các luồng thực thi |
 | `gitnexus://repo/xbike-mrp-system/process/{name}` | Chi tiết một luồng thực thi |
+
+- Không xài skill superpower.
