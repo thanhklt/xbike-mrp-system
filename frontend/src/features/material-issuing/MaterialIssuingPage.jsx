@@ -175,6 +175,7 @@ export function MaterialIssuingPage({ issueType }) {
 function IssueEditor({ snapshot, items, base }) {
   const record = snapshot?.data;
   const { user } = useAuth();
+  const employee = user.ma_vai_tro === "nhan_vien";
   const permissions = documentPermissions("issue", user.ma_vai_tro, record, user.id);
   const [search] = useSearchParams();
   const [type, setType] = useState(record?.loai_phieu || search.get("loai_phieu") || "xuat_vat_tu");
@@ -197,6 +198,8 @@ function IssueEditor({ snapshot, items, base }) {
         }),
       ) || [newLine()],
   );
+  const firstLine = record?.chi_tiet[0];
+  const firstItem = items.find((item) => item.id === firstLine?.mat_hang_id);
   const sourcePath = type === "xuat_vat_tu" ? API.orders : API.requests;
   const sources = useChoices(sourcePath, {}, !record && permissions.create);
   const { save, busy, error } = useSave();
@@ -238,10 +241,21 @@ function IssueEditor({ snapshot, items, base }) {
         <>
           <div className="actions">
             <h3>{record.ma_phieu_xuat}</h3>
-            <Badge status={record.trang_thai} />
+            {!employee && <Badge status={record.trang_thai} />}
           </div>
           <InfoGrid
-            entries={[
+            entries={employee ? [
+              ["Mã phiếu xuất", record.ma_phieu_xuat],
+              ["Trạng thái", <Badge status={record.trang_thai} />],
+              [type === "xuat_vat_tu" ? "Lệnh sản xuất" : "Yêu cầu sản xuất", `${type === "xuat_vat_tu" ? "LSX" : "YCSX"} #${sourceId}`],
+              ["Ngày lập", dateTime(record.created_at)],
+              [type === "xuat_vat_tu" ? "Mặt hàng đầu" : "Mã thành phẩm", firstItem?.sku || "—"],
+              ["Số lượng xuất", record.chi_tiet.length === 1
+                ? `${number(firstLine.so_luong)} ${firstItem?.don_vi_tinh || ""}`
+                : `${record.chi_tiet.length} dòng mặt hàng`],
+              ["Loại phiếu", type === "xuat_vat_tu" ? "Xuất vật tư / BTP" : "Xuất thành phẩm"],
+              ["Tổng tiền server chốt", money(record.tong_tien)],
+            ] : [
               ["Người lập", `Nhân viên #${record.nhan_vien_id}`],
               ["Tạo lúc", dateTime(record.created_at)],
               ["Loại phiếu", type === "xuat_vat_tu" ? "Xuất vật tư / BTP" : "Xuất thành phẩm"],

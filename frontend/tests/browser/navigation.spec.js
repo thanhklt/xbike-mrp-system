@@ -38,7 +38,7 @@ for (const [role, paths] of Object.entries(menus)) {
       if (width === 375) await page.getByRole("button", { name: "Mở điều hướng" }).click();
       const sidebar = page.getByRole("navigation", { name: "Điều hướng nghiệp vụ" });
       await expect(sidebar).toBeVisible();
-      const expectedLinks = role === "quan_tri_vien" ? paths : [...paths, "/ho-so"];
+      const expectedLinks = role === "quan_ly" ? [...paths, "/ho-so"] : paths;
       await expect(sidebar.getByRole("link")).toHaveCount(expectedLinks.length);
       expect(
         await sidebar.getByRole("link").evaluateAll((links) => links.map((link) => link.pathname)),
@@ -56,7 +56,7 @@ for (const [role, paths] of Object.entries(menus)) {
         await page.locator(".user-menu summary").click();
         await page.locator(".user-dropdown").getByRole("link", { name: /Hồ sơ & đổi mật khẩu/ }).click();
         await expect(page).toHaveURL(/\/ho-so$/);
-      } else {
+      } else if (role === "quan_ly") {
         await expect(sidebar.getByRole("button", { name: "Đăng xuất", exact: true })).toBeVisible();
         await page.screenshot({ path: `test-results/sidebar-${role}-${width}.png`, fullPage: true });
 
@@ -67,6 +67,16 @@ for (const [role, paths] of Object.entries(menus)) {
             "aria-expanded",
             "false",
           );
+      } else {
+        await expect(sidebar.getByRole("button", { name: "Đăng xuất", exact: true })).toHaveCount(0);
+        await page.screenshot({ path: `test-results/sidebar-${role}-${width}.png`, fullPage: true });
+        if (width === 375) {
+          await page.locator(".admin-sidebar-backdrop").click({ position: { x: 350, y: 450 } });
+          await expect(page.getByRole("button", { name: "Mở điều hướng" })).toHaveAttribute("aria-expanded", "false");
+        }
+        await page.locator(".user-menu summary").click();
+        await page.locator(".user-dropdown").getByRole("link", { name: /Hồ sơ & đổi mật khẩu/ }).click();
+        await expect(page).toHaveURL(/\/ho-so$/);
       }
 
       const otherHomes = Object.entries(menus)
@@ -101,5 +111,5 @@ test("refreshing the server role removes the previous sidebar and denies its cur
   const sidebar = page.getByRole("navigation", { name: "Điều hướng nghiệp vụ" });
   expect(
     await sidebar.getByRole("link").evaluateAll((links) => links.map((link) => link.pathname)),
-  ).toEqual([...menus.nhan_vien, "/ho-so"]);
+  ).toEqual(menus.nhan_vien);
 });

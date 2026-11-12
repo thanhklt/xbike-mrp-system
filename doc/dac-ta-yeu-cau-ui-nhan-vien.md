@@ -83,6 +83,7 @@ Bố cục grid 4 cột (desktop), 2 cột (tablet/mobile), mỗi thẻ có nhã
 ### 4.3. Bố cục Dashboard Grid (Tỷ lệ 3.07fr : 0.77fr)
 - **Cột trái (Panel chính: Yêu cầu sản xuất được giao)**:
   + Tiêu đề panel: `Yêu cầu sản xuất được giao` kèm badge `meta.total`; mô tả yêu cầu được phân công; liên kết "Xem tất cả ->" (chuyển `/nv/yeu-cau`).
+  + Ba tab chỉ lọc các dòng đang hiển thị trong panel: `Tất cả`; `Cần sản xuất` cho yêu cầu ở trạng thái `da_gui`, `cho_bo_sung_vat_tu` hoặc `dang_thuc_hien`; `Chờ duyệt chứng từ` cho yêu cầu có lệnh liên quan (`lenh_san_xuat_ids`) gắn với chứng từ `cho_duyet`. Tab không thay số đếm `meta.total` hoặc lọc toàn bộ dữ liệu phân trang. Không có tab `Sẵn sàng xuất` cho nhân viên.
   + Bảng dữ liệu Yêu cầu (Data Table):
     - Cột 1: `Yêu cầu / Thành phẩm` (Mã YCSX dạng nút bấm màu cam mở modal chi tiết + Tên thành phẩm bên dưới).
     - Cột 2: `SL yêu cầu` (Căn giữa, số to + đơn vị tính).
@@ -142,7 +143,7 @@ Bố cục grid 4 cột (desktop), 2 cột (tablet/mobile), mỗi thẻ có nhã
 - Mô tả phụ: "Theo dõi các yêu cầu được phân công, từ cấp vật tư đến xuất thành phẩm."
 - Khung ghi chú hướng dẫn (Intro Note): Icon thông tin màu cam + "Nhân viên theo dõi tiến độ các yêu cầu được phân công. Quyền lập và phê duyệt phiếu xuất kho thuộc về Quản lý."
 - Công cụ tìm kiếm: Ô Searchbox tìm theo mã yêu cầu (theo hỗ trợ hiện tại của backend API).
-- Bộ lọc trạng thái dùng các trạng thái yêu cầu thực có trong API. Các tab tổng hợp `Sẵn sàng xuất`, `Cần sản xuất`, `Chờ duyệt chứng từ` của preview cần dữ liệu/quy tắc tổng hợp chưa có trong API, ghi nhận tại FE-MISS-011.
+- Bộ lọc trạng thái dùng các trạng thái yêu cầu thực có trong API. Bộ lọc tổng hợp trên toàn bộ kết quả của trang này vẫn cần dữ liệu/quy tắc backend; khác với ba tab lọc cục bộ trên dashboard tại mục 4.3 và được ghi nhận tại FE-MISS-011.
 - Bảng dữ liệu: Danh sách yêu cầu sản xuất của nhân viên. Thao tác "Theo dõi yêu cầu" mở modal chi tiết. Nút tạo phiếu xuất preview là khác biệt ghi nhận tại FE-MISS-007.
 
 ### 6.2. Modal Chi tiết Yêu cầu sản xuất
@@ -171,9 +172,9 @@ Bố cục grid 4 cột (desktop), 2 cột (tablet/mobile), mỗi thẻ có nhã
 ### 7.2. Modal Tạo/Sửa chứng từ hoàn thành
 - Khung thông tin: Icon thông tin + "Nhân viên chỉ ghi nhận sản lượng thực tế. Nhập kho thành phẩm phải được quản lý duyệt/xác nhận riêng."
 - Form Grid:
-  + `Lệnh sản xuất *` (Dropdown select, chỉ hiển thị các lệnh đang thực hiện của nhân viên).
+  + `Lệnh sản xuất *` (Dropdown chỉ hiển thị lệnh đang thực hiện của nhân viên; mở từ chi tiết lệnh thì chọn sẵn và khóa; mở từ nút chung thì cho chọn một lần rồi khóa; giá trị vẫn được gửi khi tạo chứng từ).
   + `Số lượng hoàn thành *` (Input number, min=1).
-  + `Thời điểm hoàn thành` (Input datetime-local).
+  + `Thời điểm hoàn thành` (Input datetime-local tự điền giờ Việt Nam và chỉ đọc khi tạo mới; khi sửa bản nháp hiện có vẫn cho chỉnh sửa).
   + *Ghi chú về khác biệt preview*: Ô nhập `Sản phẩm lỗi` (`badQty`) và textarea `Ghi chú sản xuất` (`docNote`) trong preview chưa có trường tương ứng trong schema backend `HoanThanhCreate` (`extra="forbid"`), được ghi nhận tại FE-MISS-006 chờ dev quyết định; không render ô nhập unsupported rồi âm thầm bỏ qua.
 - Footer: Nút `Hủy` + Nút `Lưu nháp` (hoặc gửi duyệt theo luồng đã hỗ trợ).
 

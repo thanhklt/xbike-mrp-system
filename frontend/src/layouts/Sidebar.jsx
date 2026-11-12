@@ -164,7 +164,7 @@ export function Sidebar({
             ))}
           </div>
         ))}
-        {!adminTheme && (
+        {!darkTheme && (
           <div className={styles.account}>
             <SidebarLink
               path="/ho-so"

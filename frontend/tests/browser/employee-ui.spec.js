@@ -29,6 +29,23 @@ test.describe("Employee UI specification verification (§14-19)", () => {
 
     // Assigned requests and recent completions use the real resource collections.
     await expect(page.getByRole("table", { name: "Yêu cầu sản xuất được giao" })).toBeVisible();
+    const requestTable = page.getByRole("table", { name: "Yêu cầu sản xuất được giao" });
+    const requestTabs = page.getByRole("tablist", { name: "Lọc yêu cầu sản xuất đang hiển thị" });
+    await expect(requestTabs.getByRole("tab")).toHaveCount(3);
+    await expect(requestTable.locator("tbody tr")).toHaveCount(2);
+    await requestTabs.getByRole("tab", { name: "Cần sản xuất" }).click();
+    await expect(requestTable.locator("tbody tr")).toHaveCount(1);
+    await expect(requestTable).toContainText("YCSX-202611-000002");
+    await requestTabs.getByRole("tab", { name: "Chờ duyệt chứng từ" }).click();
+    await expect(requestTable.locator("tbody tr")).toHaveCount(1);
+    await expect(requestTable).toContainText("YCSX-202611-000002");
+    expect(state.calls.some((call) => call.path === "chung_tu_hoan_thanh_sx" && call.params.trang_thai === "cho_duyet")).toBe(true);
+    await requestTabs.getByRole("tab", { name: "Tất cả" }).click();
+    await expect(requestTable.locator("tbody tr")).toHaveCount(2);
+    await requestTabs.getByRole("tab", { name: "Tất cả" }).press("ArrowRight");
+    await expect(requestTabs.getByRole("tab", { name: "Cần sản xuất" })).toHaveAttribute("aria-selected", "true");
+    await requestTabs.getByRole("tab", { name: "Cần sản xuất" }).press("Home");
+    await expect(requestTabs.getByRole("tab", { name: "Tất cả" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("table", { name: "Chứng từ hoàn thành gần đây" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Việc tiếp theo" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Cảnh báo vật tư" })).toBeVisible();
@@ -101,6 +118,9 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await expect(dialog1.locator(".progress")).toBeVisible();
     await expect(dialog1.getByRole("table", { name: "Vật tư của lệnh sản xuất" })).toBeVisible();
     await expect(dialog1.getByRole("table", { name: "Chứng từ hoàn thành của lệnh" })).toBeVisible();
+    await expect(dialog1.locator(".info-grid > div")).toHaveCount(9);
+    await expect(dialog1.locator(".info-grid > div").filter({ hasText: "Trạng thái" })).toContainText("Đã giao");
+    expect(await dialog1.locator(".info-grid > div").first().evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgb(36, 28, 23)");
     const startBtn = dialog1.getByRole("button", { name: "Bắt đầu sản xuất", exact: true });
     await expect(startBtn).toBeVisible();
     await expect(startBtn).toBeEnabled();
@@ -149,6 +169,11 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     ).toBeVisible();
 
     await page.screenshot({ path: "test-results/employee-02-orders-1440x900.png", fullPage: true });
+    await dialog2.getByRole("link", { name: "Tạo chứng từ hoàn thành SX", exact: true }).click();
+    await expect(page).toHaveURL(/\/nv\/hoan-thanh\/moi\?lenh_san_xuat_id=2$/);
+    await expect(page.getByRole("dialog").getByLabel("Lệnh sản xuất", { exact: true })).toHaveValue("2");
+    await expect(page.getByRole("dialog").getByLabel("Lệnh sản xuất", { exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Thời điểm hoàn thành (giờ Việt Nam)")).toHaveAttribute("readonly");
     expect(state.unexpected).toEqual([]);
     expect(stateNegative.unexpected).toEqual([]);
   });
@@ -165,16 +190,27 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await expect(dialog.getByRole("heading", { name: "Tạo chứng từ hoàn thành" })).toBeVisible();
 
     // 1. Create draft (POST)
-    await page.getByRole("dialog").getByLabel("Lệnh sản xuất", { exact: true }).selectOption("2");
+    const orderSelect = dialog.getByLabel("Lệnh sản xuất", { exact: true });
+    await expect(orderSelect).toBeEnabled();
+    await orderSelect.selectOption("2");
+    await expect(orderSelect).toBeDisabled();
+    const finishTime = dialog.getByLabel("Thời điểm hoàn thành (giờ Việt Nam)");
+    await expect(finishTime).toHaveAttribute("readonly");
+    const initialFinishTime = await finishTime.inputValue();
+    expect(initialFinishTime).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/);
     await page.getByLabel("Số lượng hoàn thành đợt này", { exact: true }).fill("5");
     await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
 
+    await expect.poll(() => state.calls.find(
+      (call) => call.path === "chung_tu_hoan_thanh_sx" && call.method === "POST",
+    )).toBeDefined();
     const postCall = state.calls.find(
       (call) => call.path === "chung_tu_hoan_thanh_sx" && call.method === "POST",
     );
     expect(postCall).toBeDefined();
+    expect(postCall.body.lenh_san_xuat_id).toBe(2);
     expect(postCall.body.so_luong_hoan_thanh).toBe(5);
-    expect(postCall.body.finish_time).toContain("+07:00");
+    expect(postCall.body.finish_time).toBe(`${initialFinishTime}:00+07:00`);
 
     // Switches to detail view
     await expect(page).toHaveURL(/\/nv\/hoan-thanh\/3$/);
@@ -182,6 +218,7 @@ test.describe("Employee UI specification verification (§14-19)", () => {
 
     // 2. Edit draft (PATCH)
     const qtyInput = page.getByLabel("Số lượng hoàn thành đợt này", { exact: true });
+    await expect(dialog.getByLabel("Thời điểm hoàn thành (giờ Việt Nam)")).not.toHaveAttribute("readonly");
     await expect(qtyInput).toHaveValue("5");
     await qtyInput.fill("6");
     await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
@@ -351,6 +388,8 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Lưu" })).toHaveCount(0);
     await expect(dialog.locator("input")).toHaveCount(0);
+    await expect(dialog.locator(".info-grid > div")).toHaveCount(7);
+    expect(await dialog.locator(".info-grid").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(2);
 
     await page.screenshot({ path: "test-results/employee-05-inventory-1440x900.png", fullPage: true });
     expect(state.unexpected).toEqual([]);
@@ -633,7 +672,8 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     }));
     expect(cardColors).toEqual({ background: "rgb(34, 28, 24)", text: "rgb(255, 255, 255)" });
     const nav = page.getByRole("navigation", { name: "Điều hướng nghiệp vụ" });
-    await expect(nav.getByRole("link")).toHaveCount(7); // six destinations plus account
+    await expect(nav.getByRole("link")).toHaveCount(6);
+    await expect(page.locator(".user-menu summary")).toBeVisible();
     await expect(page.locator("aside img[src*='employee-bicycle']")).toBeVisible();
 
     await page.goto("/nv/lenh-sx");
@@ -650,6 +690,12 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await page.screenshot({ path: "test-results/employee-issues-1440x900.png", fullPage: true });
     await expect(page.getByRole("link", { name: /Tạo phiếu xuất/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Duyệt phiếu/ })).toHaveCount(0);
+    await page.getByRole("table", { name: "Danh sách phiếu xuất" }).locator("tbody tr").first().getByRole("link", { name: /Xem phiếu/ }).click();
+    const issueDialog = page.locator("dialog.record-dialog");
+    await expect(issueDialog.locator(".info-grid > div")).toHaveCount(8);
+    await expect(issueDialog.locator(".info-grid > div").filter({ hasText: "Trạng thái" })).toBeVisible();
+    expect(await issueDialog.locator(".info-grid").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(2);
+    await page.screenshot({ path: "test-results/employee-issue-detail-1440x900.png", fullPage: true });
     expect(state.calls.filter((call) => call.path === "phieu_xuat" && call.method !== "GET")).toEqual([]);
     expect(state.unexpected).toEqual([]);
   });

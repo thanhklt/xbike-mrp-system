@@ -588,8 +588,20 @@ function WarehouseDashboard() {
     </>
   );
 }
+const employeeRequestTabs = [
+  ["all", "Tất cả"],
+  ["production", "Cần sản xuất"],
+  ["pending", "Chờ duyệt chứng từ"],
+];
+
 function EmployeeDashboard() {
+  const [requestTab, setRequestTab] = useState("all");
   const requests = useResource(API.requests, { page: 1, page_size: 6, sort: "-created_at" });
+  const pendingDocuments = useChoices(
+    API.completions,
+    { trang_thai: "cho_duyet" },
+    requestTab === "pending",
+  );
   const orders = useResource(API.orders, { page: 1, page_size: 3, trang_thai: "da_gui", sort: "-created_at" });
   const pendingMaterials = useResource(API.requests, {
     page: 1,
@@ -600,6 +612,26 @@ function EmployeeDashboard() {
   const items = useChoices(API.items);
   const catalog = items.data || [];
   const product = (id) => catalog.find((item) => item.id === id);
+  const requestRows = requests.data?.data || [];
+  const pendingOrderIds = new Set(pendingDocuments.data?.map((document) => document.lenh_san_xuat_id));
+  const filteredRequests = requestTab === "production"
+    ? requestRows.filter((request) => ["da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien"].includes(request.trang_thai))
+    : requestTab === "pending"
+      ? requestRows.filter((request) => request.lenh_san_xuat_ids?.some((id) => pendingOrderIds.has(id)))
+      : requestRows;
+  function moveRequestTab(event) {
+    const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')];
+    const index = tabs.indexOf(document.activeElement);
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    setRequestTab(employeeRequestTabs[next][0]);
+    tabs[next].focus();
+  }
   return (
     <div className="employee-dashboard">
       <PageHeader
@@ -659,12 +691,31 @@ function EmployeeDashboard() {
           title={<>Yêu cầu sản xuất được giao <span className="employee-count">{requests.data?.meta.total ?? "—"}</span></>}
           action={<Link to="/nv/yeu-cau">Xem tất cả →</Link>}
         >
-          <p className="employee-card-intro">Theo dõi yêu cầu được phân công và tình trạng xuất thành phẩm.</p>
-          <QueryState query={requests}>
-            <DataTable
+          <p className="employee-card-intro">Theo dõi yêu cầu được phân công. Các tab lọc trong những dòng đang hiển thị.</p>
+          <div className="tabs" role="tablist" aria-label="Lọc yêu cầu sản xuất đang hiển thị" onKeyDown={moveRequestTab}>
+            {employeeRequestTabs.map(([value, label]) => (
+              <button
+                key={value}
+                id={`employee-request-tab-${value}`}
+                type="button"
+                role="tab"
+                aria-selected={requestTab === value}
+                aria-controls="employee-request-panel"
+                tabIndex={requestTab === value ? 0 : -1}
+                onClick={() => setRequestTab(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div id="employee-request-panel" role="tabpanel" aria-labelledby={`employee-request-tab-${requestTab}`}>
+            <QueryState query={requests}>
+              {requestTab === "pending" && (pendingDocuments.isPending || pendingDocuments.isError) ? (
+                <QueryState query={pendingDocuments} />
+              ) : <DataTable
               caption="Yêu cầu sản xuất được giao"
-              rows={requests.data?.data}
-              empty="Không có yêu cầu được giao."
+              rows={filteredRequests}
+              empty={requestTab === "all" ? "Không có yêu cầu được giao." : "Không có yêu cầu phù hợp trong các dòng đang hiển thị."}
               columns={[
                 {
                   key: "ma_yeu_cau_san_xuat",
@@ -686,8 +737,9 @@ function EmployeeDashboard() {
                 { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
                 { key: "action", label: "Thao tác", render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Theo dõi →</Link> },
               ]}
-            />
-          </QueryState>
+              />}
+            </QueryState>
+          </div>
         </Card>
         <div className="employee-sidepanels">
           <Card title="Việc tiếp theo">

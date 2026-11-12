@@ -172,6 +172,7 @@ Theo quyết định ngày 11/11/2026 của dev, giao diện nhân viên chuyể
   - API hiện đáp ứng / còn thiếu: Danh sách yêu cầu chỉ lọc theo `YeuCauStatus`; `YeuCauRead` không trả cờ hay số đếm tổng hợp sẵn sàng, còn tồn kho mặt hàng là số dư chung và không xác nhận phần tồn đã dành cho từng yêu cầu. Không suy ra nhóm này từ một trang kết quả hoặc từ phép so sánh số dư đơn giản.
   - Bằng chứng: `backend/app/modules/san_xuat/schemas.py` (`YeuCauStatus`, `YeuCauRead`), router/repository danh sách yêu cầu và `backend/app/modules/mat_hang/schemas.py` (`MatHangRead.so_luong_ton`).
   - Ảnh hưởng và phần tiếp tục làm được: UI dùng KPI và bộ lọc theo trạng thái API thực, giữ danh sách yêu cầu và quyền chỉ đọc của nhân viên; không hiển thị nhãn `Sẵn sàng xuất` khi backend chưa xác nhận.
+  - Theo quyết định dev ngày 12/11/2026, dashboard có ba tab lọc cục bộ trên các dòng đang hiển thị: tất cả; cần sản xuất theo trạng thái yêu cầu; chờ duyệt theo `lenh_san_xuat_ids` nối với chứng từ `cho_duyet`. Đây không phải bộ lọc hay số đếm tổng hợp toàn bộ yêu cầu từ backend và không đóng FE-MISS-011.
   - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung phép tính và bộ lọc/số đếm tổng hợp mức sẵn sàng theo quyền nhân viên không.
   - Phản hồi của dev: Ngày 12/11/2026 dev chọn giữ nghiệp vụ/quyền/API hiện tại và ghi riêng khác biệt preview chờ duyệt.
   - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` tới khi dev quyết định phần khác biệt.

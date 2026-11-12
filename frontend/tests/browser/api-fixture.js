@@ -353,7 +353,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ],
       yeu_cau_san_xuat: [
         request,
-        { ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "da_gui" },
+        { ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "da_gui", lenh_san_xuat_ids: [2] },
       ],
       lenh_san_xuat: [
         order,
@@ -361,13 +361,14 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           ...order,
           id: 2,
           ma_lenh_san_xuat: "LSX-202611-000002",
+          yeu_cau_san_xuat_id: 2,
           trang_thai: "dang_thuc_hien",
           started_at: now,
         },
       ],
       chung_tu_hoan_thanh_sx: [
         completion,
-        { ...completion, id: 2, ma_phieu: "HTSX-202611-000002", trang_thai: "cho_duyet" },
+        { ...completion, id: 2, ma_phieu: "HTSX-202611-000002", lenh_san_xuat_id: 2, trang_thai: "cho_duyet" },
       ],
       phieu_dieu_chinh_kho: [
         {

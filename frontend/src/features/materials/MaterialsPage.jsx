@@ -139,10 +139,11 @@ export function MaterialsPage({ readOnly = false }) {
             readOnly ? (
               <InfoGrid
                 entries={[
-                  ["Tên mặt hàng", snapshot?.data.ten_mat_hang],
-                  ["SKU", snapshot?.data.sku],
+                  ["Mã hàng", snapshot?.data.sku],
                   ["Loại hàng", ITEM_LABELS[snapshot?.data.loai_mat_hang]],
-                  ["Tồn kho", number(snapshot?.data.so_luong_ton)],
+                  ["Tồn kho hiện tại", `${number(snapshot?.data.so_luong_ton)} ${snapshot?.data.don_vi_tinh || ""}`],
+                  ["Tên mặt hàng", snapshot?.data.ten_mat_hang],
+                  ["Mã nội bộ", snapshot?.data.ma_mat_hang],
                   ["Đơn vị tính", snapshot?.data.don_vi_tinh],
                   ["Cập nhật tồn", dateTime(snapshot?.data.ton_kho_updated_at)],
                 ]}

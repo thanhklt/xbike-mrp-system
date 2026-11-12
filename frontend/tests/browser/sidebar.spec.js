@@ -131,13 +131,15 @@ test("desktop collapse does not hide mobile labels and respects reduced motion",
   await expect(sidebar).toHaveCSS("width", "76px");
 });
 
-test("sidebar logout keeps the existing confirmation and cancel preserves the session", async ({
+test("employee topbar logout keeps the existing confirmation and cancel preserves the session", async ({
   page,
 }) => {
   await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv");
   const sidebar = page.getByRole("complementary", { name: "Thanh điều hướng" });
-  await sidebar.getByRole("button", { name: "Đăng xuất", exact: true }).click();
+  await expect(sidebar.getByRole("button", { name: "Đăng xuất", exact: true })).toHaveCount(0);
+  await page.locator(".user-menu summary").click();
+  await page.locator(".user-dropdown").getByRole("button", { name: "Đăng xuất", exact: true }).click();
   const confirmation = page.locator("dialog.confirmation");
   await expect(confirmation).toBeVisible();
   await confirmation.getByRole("button", { name: "Hủy", exact: true }).click();

@@ -166,6 +166,11 @@ function OrderStatusCard({ status, label, active, onClick }) {
 }
 function OrderDetail({ snapshot, items, employees, base, manager }) {
   const record = snapshot.data;
+  const requestLink = (
+    <Link to={`${manager ? "/kho" : "/nv"}/yeu-cau/${record.yeu_cau_san_xuat_id}`}>
+      YCSX #{record.yeu_cau_san_xuat_id}
+    </Link>
+  );
   const materials = useResource(`${API.orders}/${record.id}/vat_tu`);
   const relatedCompletions = useChoices(
     API.completions,
@@ -202,18 +207,14 @@ function OrderDetail({ snapshot, items, employees, base, manager }) {
     <div className="stack">
       <div className="actions">
         <h3>{record.ma_lenh_san_xuat}</h3>
-        <Badge status={record.trang_thai} />
+        {manager && <Badge status={record.trang_thai} />}
       </div>
       <InfoGrid
         entries={[
+          ...(!manager ? [["Yêu cầu sản xuất", requestLink], ["Trạng thái", <Badge status={record.trang_thai} />]] : []),
           ["Sản phẩm", itemName(items, record.mat_hang_id)],
           ["BOM đã chốt", `#${record.bom_id}`],
-          [
-            "Yêu cầu",
-            <Link to={`${manager ? "/kho" : "/nv"}/yeu-cau/${record.yeu_cau_san_xuat_id}`}>
-              YCSX #{record.yeu_cau_san_xuat_id}
-            </Link>,
-          ],
+          ...(manager ? [["Yêu cầu", requestLink]] : []),
           [
             "Lệnh cha",
             record.lenh_san_xuat_cha_id ? (

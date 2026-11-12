@@ -120,6 +120,12 @@ function CompletionEditor({ snapshot, items, base }) {
   };
   const [values, setValues] = useState(initial);
   const orders = useChoices(API.orders, {}, !record && permissions.create);
+  const selectedOrder = orders.data?.find(
+    (order) =>
+      String(order.id) === values.lenh_san_xuat_id &&
+      order.nhan_vien_id === user.id &&
+      order.trang_thai === "dang_thuc_hien",
+  );
   const { save, busy, error } = useSave();
   const navigate = useNavigate();
   const dirty = Boolean(record && JSON.stringify(values) !== JSON.stringify(initial));
@@ -171,7 +177,13 @@ function CompletionEditor({ snapshot, items, base }) {
         <form className="stack" onSubmit={submit}>
           {!record && (
             <QueryState query={orders}>
-              <Field as="select" label="Lệnh sản xuất" required {...field("lenh_san_xuat_id")}>
+              <Field
+                as="select"
+                label="Lệnh sản xuất"
+                required
+                disabled={Boolean(selectedOrder)}
+                {...field("lenh_san_xuat_id")}
+              >
                 <option value="">Chọn lệnh đang thực hiện</option>
                 {orders.data
                   ?.filter(
@@ -201,10 +213,11 @@ function CompletionEditor({ snapshot, items, base }) {
               label="Thời điểm hoàn thành (giờ Việt Nam)"
               required
               type="datetime-local"
+              readOnly={!record}
               {...field("finish_time")}
             />
           </div>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || (!record && !selectedOrder)}>
             Lưu nháp
           </Button>
         </form>

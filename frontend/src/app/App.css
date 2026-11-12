@@ -2800,6 +2800,28 @@ html[data-employee-theme="true"] .record-dialog {
   width: min(640px, calc(100vw - 32px));
 }
 
+html[data-employee-theme="true"] .record-dialog .info-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+html[data-employee-theme="true"] .record-dialog .info-grid > div {
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid #3b2b21;
+  border-radius: 7px;
+  background: #241c17;
+}
+
+html[data-employee-theme="true"] .record-dialog .info-grid dt {
+  color: #bca794;
+}
+
+html[data-employee-theme="true"] .record-dialog .info-grid dd {
+  color: #f4ede6;
+  font-weight: 700;
+}
+
 html[data-admin-theme="true"] .confirmation,
 html[data-employee-theme="true"] .confirmation {
   width: min(492px, calc(100vw - 32px));
@@ -3164,6 +3186,24 @@ html[data-employee-theme="true"] .toast {
   display: grid;
   gap: 20px;
   min-width: 0;
+}
+
+.employee-dashboard .tabs[role="tablist"] {
+  gap: 11px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 12px 0;
+  border-color: #3b2b21;
+}
+
+.employee-dashboard .tabs[role="tablist"] button {
+  flex: 0 0 auto;
+  color: #bca794;
+}
+
+.employee-dashboard .tabs[role="tablist"] button[aria-selected="true"] {
+  color: #f5a66f;
+  border-bottom-color: #eb7a34;
 }
 
 .employee-current-date {
