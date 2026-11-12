@@ -31,9 +31,16 @@ export function MaterialsPage({ readOnly = false }) {
           )
         }
       />
+      {readOnly && (
+        <Notice>
+          Số lượng tồn được đọc từ dữ liệu mặt hàng. Nhân viên chỉ xem, không thể chỉnh sửa trực tiếp tồn kho.
+        </Notice>
+      )}
       <div>
         <Collection
           collection={collection}
+          title={readOnly ? "Danh sách tồn kho" : "Danh sách"}
+          searchPlaceholder={readOnly ? "Tìm mã hoặc tên mặt hàng…" : undefined}
           filters={[
             {
               name: "loai_mat_hang",
@@ -65,8 +72,13 @@ export function MaterialsPage({ readOnly = false }) {
           columns={[
             {
               key: "ma_mat_hang",
-              label: "Mã",
-              render: (row) => <Link to={`${base}/${row.id}`}>{row.ma_mat_hang}</Link>,
+              label: readOnly ? "Mã hàng / SKU" : "Mã",
+              render: (row) => readOnly ? (
+                <>
+                  <Link to={`${base}/${row.id}`}>{row.sku}</Link>
+                  <small>{row.ma_mat_hang}</small>
+                </>
+              ) : <Link to={`${base}/${row.id}`}>{row.ma_mat_hang}</Link>,
             },
             {
               key: "ten_mat_hang",
@@ -78,7 +90,8 @@ export function MaterialsPage({ readOnly = false }) {
                 </>
               ),
             },
-            { key: "sku", label: "SKU" },
+            ...(!readOnly ? [{ key: "sku", label: "SKU" }] : []),
+            ...(readOnly ? [{ key: "loai_mat_hang", label: "Loại", render: (row) => ITEM_LABELS[row.loai_mat_hang] }] : []),
             {
               key: "so_luong_ton",
               label: "Tồn kho",
@@ -128,6 +141,7 @@ export function MaterialsPage({ readOnly = false }) {
                 entries={[
                   ["Tên mặt hàng", snapshot?.data.ten_mat_hang],
                   ["SKU", snapshot?.data.sku],
+                  ["Loại hàng", ITEM_LABELS[snapshot?.data.loai_mat_hang]],
                   ["Tồn kho", number(snapshot?.data.so_luong_ton)],
                   ["Đơn vị tính", snapshot?.data.don_vi_tinh],
                   ["Cập nhật tồn", dateTime(snapshot?.data.ton_kho_updated_at)],

@@ -31,18 +31,40 @@ export function ProductionPage() {
   const catalog = useCatalog();
   const employees = useChoices(API.employees, {}, manager);
   const items = catalog.data?.data || [];
+  const orderStatuses = [
+    ["", "Tất cả lệnh"],
+    ["da_gui", "Đã giao"],
+    ["dang_thuc_hien", "Đang thực hiện"],
+    ["hoan_thanh", "Hoàn thành"],
+  ];
   return (
     <>
       <PageHeader
-        title={manager ? "Lệnh sản xuất" : "Việc được giao"}
+        title="Lệnh sản xuất"
         subtitle={
           manager
             ? "Lệnh gốc và lệnh con được tạo khi gửi yêu cầu thành phẩm. Gán người thực hiện trước khi giao lệnh."
             : "Theo dõi vật tư, bắt đầu công việc và lập chứng từ hoàn thành cho lệnh được giao."
         }
       />
+      {!manager && (
+        <div className="employee-order-stats" role="group" aria-label="Lọc lệnh theo trạng thái">
+          {orderStatuses.map(([status, label]) => (
+            <OrderStatusCard
+              key={status}
+              status={status}
+              label={label}
+              active={(collection.params.trang_thai || "") === status}
+              onClick={() => collection.filter({ trang_thai: status })}
+            />
+          ))}
+        </div>
+      )}
       <Collection
+        key={!manager ? collection.params.trang_thai || "all" : "manager"}
         collection={collection}
+        title={manager ? "Danh sách lệnh" : "Danh sách lệnh sản xuất"}
+        searchPlaceholder={!manager ? "Tìm theo mã lệnh…" : undefined}
         filters={[
           statusFilter(["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]),
           ...dateFilters,
@@ -51,7 +73,12 @@ export function ProductionPage() {
           {
             key: "ma_lenh_san_xuat",
             label: "Mã lệnh",
-            render: (row) => <Link to={`${base}/${row.id}`}>{row.ma_lenh_san_xuat}</Link>,
+            render: (row) => (
+              <>
+                <Link to={`${base}/${row.id}`}>{row.ma_lenh_san_xuat}</Link>
+                {!manager && <small>YCSX #{row.yeu_cau_san_xuat_id}</small>}
+              </>
+            ),
           },
           {
             key: "mat_hang_id",
@@ -59,11 +86,11 @@ export function ProductionPage() {
             render: (row) => (
               <>
                 {itemName(items, row.mat_hang_id)}
-                <small>
-                  {row.lenh_san_xuat_cha_id
+                <small>{manager
+                  ? row.lenh_san_xuat_cha_id
                     ? `Lệnh con của #${row.lenh_san_xuat_cha_id}`
-                    : "Lệnh gốc"}
-                </small>
+                    : "Lệnh gốc"
+                  : items.find((item) => item.id === row.mat_hang_id)?.sku || "—"}</small>
               </>
             ),
           },
@@ -71,15 +98,29 @@ export function ProductionPage() {
             key: "so_luong",
             label: "Tiến độ",
             numeric: true,
-            render: (row) => `${number(row.so_luong_da_hoan_thanh)} / ${number(row.so_luong)}`,
+            render: (row) =>
+              manager ? (
+                `${number(row.so_luong_da_hoan_thanh)} / ${number(row.so_luong)}`
+              ) : (
+                <div className="employee-progress">
+                  <strong>{number(row.so_luong_da_hoan_thanh)} / {number(row.so_luong)}</strong>
+                  <progress
+                    max={row.so_luong}
+                    value={Math.min(row.so_luong_da_hoan_thanh, row.so_luong)}
+                    aria-label={`Đã hoàn thành ${row.so_luong_da_hoan_thanh} trên ${row.so_luong}`}
+                  />
+                </div>
+              ),
           },
           {
             key: "nhan_vien_id",
-            label: "Người thực hiện",
+            label: manager ? "Người thực hiện" : "Bắt đầu",
             render: (row) =>
-              row.nhan_vien_id === user.id
-                ? user.ho_ten || user.ten_dang_nhap
-                : employeeName(employees.data, row.nhan_vien_id),
+              manager
+                ? row.nhan_vien_id === user.id
+                  ? user.ho_ten || user.ten_dang_nhap
+                  : employeeName(employees.data, row.nhan_vien_id)
+                : dateTime(row.started_at),
           },
           {
             key: "trang_thai",
@@ -89,7 +130,7 @@ export function ProductionPage() {
           {
             key: "action",
             label: "Thao tác",
-            render: (row) => <Link to={`${base}/${row.id}`}>Xem vật tư →</Link>,
+            render: (row) => <Link to={`${base}/${row.id}`}>{manager ? "Xem vật tư" : "Xem lệnh"} →</Link>,
           },
         ]}
       />
@@ -109,9 +150,30 @@ export function ProductionPage() {
     </>
   );
 }
+function OrderStatusCard({ status, label, active, onClick }) {
+  const query = useResource(API.orders, {
+    page: 1,
+    page_size: 1,
+    ...(status ? { trang_thai: status } : {}),
+  });
+  return (
+    <button type="button" className="employee-order-stat" aria-pressed={active} onClick={onClick}>
+      <span>{label}</span>
+      <strong>{query.isError || query.isPending ? "—" : number(query.data?.meta.total)}</strong>
+      {query.isError && <small>Không tải được số liệu</small>}
+    </button>
+  );
+}
 function OrderDetail({ snapshot, items, employees, base, manager }) {
   const record = snapshot.data;
   const materials = useResource(`${API.orders}/${record.id}/vat_tu`);
+  const relatedCompletions = useChoices(
+    API.completions,
+    { lenh_san_xuat_id: record.id },
+    !manager,
+  );
+  const pendingQuantity = relatedCompletions.data?.filter((entry) => entry.trang_thai === "cho_duyet")
+    .reduce((total, entry) => total + entry.so_luong_hoan_thanh, 0);
   const { user } = useAuth();
   const { confirm, notify } = useFeedback();
   const mutation = useWrite();
@@ -166,6 +228,7 @@ function OrderDetail({ snapshot, items, employees, base, manager }) {
             "Đã hoàn thành",
             `${number(record.so_luong_da_hoan_thanh)} / ${number(record.so_luong)}`,
           ],
+          ...(!manager ? [["Sản lượng chờ duyệt", pendingQuantity === undefined ? "—" : number(pendingQuantity)]] : []),
           ["Bắt đầu", dateTime(record.started_at)],
           ["Hoàn thành", dateTime(record.completed_at)],
         ]}
@@ -220,6 +283,7 @@ function OrderDetail({ snapshot, items, employees, base, manager }) {
       <h3>Vật tư của lệnh</h3>
       <QueryState query={materials}>
         <DataTable
+          caption="Vật tư của lệnh sản xuất"
           rows={materials.data?.data.chi_tiet.map((line) => ({ ...line, id: line.mat_hang_id }))}
           columns={[
             {
@@ -241,6 +305,23 @@ function OrderDetail({ snapshot, items, employees, base, manager }) {
           </Notice>
         )}
       </QueryState>
+      {!manager && (
+        <>
+          <h3>Chứng từ hoàn thành liên quan</h3>
+          <QueryState query={relatedCompletions}>
+            <DataTable
+              caption="Chứng từ hoàn thành của lệnh"
+              rows={relatedCompletions.data}
+              empty="Chưa có chứng từ cho lệnh này."
+              columns={[
+                { key: "ma_phieu", label: "Chứng từ", render: (row) => <Link to={`/nv/hoan-thanh/${row.id}`}>{row.ma_phieu}</Link> },
+                { key: "so_luong_hoan_thanh", label: "Số lượng", numeric: true },
+                { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
+              ]}
+            />
+          </QueryState>
+        </>
+      )}
       <div className="actions actions-end">
         {manager && record.trang_thai === "nhap" && (
           <Button

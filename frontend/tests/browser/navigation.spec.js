@@ -19,7 +19,14 @@ const menus = {
     "/kho/thong-ke",
     "/kho/lich-su",
   ],
-  nhan_vien: ["/nv", "/nv/lenh-sx", "/nv/hoan-thanh", "/nv/ton-kho"],
+  nhan_vien: [
+    "/nv",
+    "/nv/yeu-cau",
+    "/nv/lenh-sx",
+    "/nv/hoan-thanh",
+    "/nv/phieu-xuat",
+    "/nv/ton-kho",
+  ],
 };
 
 for (const [role, paths] of Object.entries(menus)) {

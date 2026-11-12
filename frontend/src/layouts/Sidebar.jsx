@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   ArrowLeftRight,
   BarChart3,
+  Boxes,
   ClipboardCheck,
   ClipboardList,
   Factory,
+  FileCheck,
   History,
   Home,
   Layers,
@@ -24,6 +26,10 @@ import {
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
 import adminArtworkSource from "../../../doc/ui-spec-admin/tong_quan.png";
+import employeeArtworkSource from "../assets/images/brand/employee-bicycle.png";
+import { API } from "../lib/api/endpoints.js";
+import { useResource } from "../lib/api/useResources.js";
+import { canAccessPath } from "../features/auth/permissions.js";
 import styles from "./Sidebar.module.css";
 
 const sectionIcons = {
@@ -46,12 +52,25 @@ const sectionIcons = {
   ticket: Ticket,
   "thong-ke": BarChart3,
   "ho-so": UserRound,
+  nv: Home,
 };
 
-function SidebarLink({ path, label, onNavigate, adminTheme }) {
+function SidebarLink({ path, label, onNavigate, darkTheme, badge }) {
   const segment = path.split("/").at(-1);
   const Icon =
-    segment === "admin" && adminTheme ? Home : sectionIcons[segment] || LayoutDashboard;
+    path === "/nv" || (segment === "admin" && darkTheme)
+      ? Home
+      : path === "/nv/yeu-cau"
+        ? ClipboardList
+        : path === "/nv/lenh-sx"
+          ? Factory
+          : path === "/nv/hoan-thanh"
+            ? FileCheck
+            : path === "/nv/phieu-xuat"
+              ? Package
+              : path === "/nv/ton-kho"
+                ? Boxes
+                : sectionIcons[segment] || LayoutDashboard;
   return (
     <NavLink
       to={path}
@@ -61,24 +80,50 @@ function SidebarLink({ path, label, onNavigate, adminTheme }) {
       onClick={onNavigate}
       className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ""}`}
     >
-      <Icon size={adminTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
+      <Icon size={darkTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
       <span className={styles.label}>{label}</span>
+      {badge !== undefined && <span className={styles.badge} aria-hidden="true">{badge}</span>}
     </NavLink>
   );
 }
 
-export function Sidebar({ groups, mobileOpen, onNavigate, onSignOut, adminTheme = false }) {
+export function Sidebar({
+  groups,
+  mobileOpen,
+  onNavigate,
+  onSignOut,
+  adminTheme = false,
+  employeeTheme = false,
+}) {
+  const { pathname } = useLocation();
+  const darkTheme = adminTheme || employeeTheme;
+  const assignedRequests = useResource(
+    API.requests,
+    { page: 1, page_size: 1 },
+    employeeTheme && canAccessPath("nhan_vien", pathname),
+  );
   const [collapsed, setCollapsed] = useState(false);
   const toggleLabel = collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng";
   return (
     <aside
       id="main-navigation"
       aria-label="Thanh điều hướng"
-      className={`${styles.root} ${adminTheme ? styles.admin : ""} ${collapsed && !adminTheme ? styles.collapsed : ""} ${mobileOpen ? styles.open : ""}`}
+      className={`${styles.root} ${darkTheme ? styles.admin : ""} ${employeeTheme ? styles.employee : ""} ${collapsed && !darkTheme ? styles.collapsed : ""} ${mobileOpen ? styles.open : ""}`}
     >
-      {adminTheme ? (
+      {darkTheme ? (
         <div className={styles.adminBrand}>
-          <img src={logo} alt="XBIKE MRP System" className={styles.adminLogo} />
+          {employeeTheme ? (
+            <div className={styles.employeeBrand}>
+              <div className={styles.brandLogo} aria-label="XBIKE MRP SYSTEM">
+                XBIKE
+              </div>
+              <div className={styles.brandSubline}>
+                MRP SYSTEM<span className={styles.brandTrademark}>™</span>
+              </div>
+            </div>
+          ) : (
+            <img src={logo} alt="XBIKE MRP System" className={styles.adminLogo} />
+          )}
         </div>
       ) : (
         <div className={styles.toolbar}>
@@ -106,21 +151,27 @@ export function Sidebar({ groups, mobileOpen, onNavigate, onSignOut, adminTheme 
       >
         {groups.map((group) => (
           <div className={styles.group} key={group.title}>
-            {!adminTheme && <div className={styles.groupTitle}>{group.title}</div>}
+            {!darkTheme && <div className={styles.groupTitle}>{group.title}</div>}
             {group.items.map(([path, label]) => (
               <SidebarLink
                 key={path}
                 path={path}
                 label={label}
                 onNavigate={onNavigate}
-                adminTheme={adminTheme}
+                darkTheme={darkTheme}
+                badge={employeeTheme && path === "/nv/yeu-cau" ? assignedRequests.data?.meta.total : undefined}
               />
             ))}
           </div>
         ))}
         {!adminTheme && (
           <div className={styles.account}>
-            <SidebarLink path="/ho-so" label="Hồ sơ & đổi mật khẩu" onNavigate={onNavigate} />
+            <SidebarLink
+              path="/ho-so"
+              label="Hồ sơ & đổi mật khẩu"
+              onNavigate={onNavigate}
+              darkTheme={darkTheme}
+            />
             <button
               type="button"
               className={styles.link}
@@ -128,15 +179,15 @@ export function Sidebar({ groups, mobileOpen, onNavigate, onSignOut, adminTheme 
               title="Đăng xuất"
               onClick={onSignOut}
             >
-              <LogOut size={19} strokeWidth={1.75} aria-hidden="true" />
+              <LogOut size={darkTheme ? 22 : 19} strokeWidth={1.75} aria-hidden="true" />
               <span className={styles.label}>Đăng xuất</span>
             </button>
           </div>
         )}
       </nav>
-      {adminTheme && (
+      {darkTheme && (
         <div className={styles.adminArtwork} aria-hidden="true">
-          <img src={adminArtworkSource} alt="" />
+          <img src={employeeTheme ? employeeArtworkSource : adminArtworkSource} alt="" />
         </div>
       )}
     </aside>

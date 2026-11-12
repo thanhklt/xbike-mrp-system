@@ -121,6 +121,7 @@ export function AppRoutes() {
               <Route path="/nv" element={<DashboardPage />} />
               <Route path="/nv/yeu-cau/:id?" element={<RequestsPage />} />
               <Route path="/nv/lenh-sx/:id?" element={<ProductionPage />} />
+              <Route path="/nv/phieu-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route
                 path="/nv/xuat-nvl/:id?"
                 element={<MaterialIssuingPage issueType="xuat_vat_tu" />}

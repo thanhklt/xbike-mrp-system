@@ -40,8 +40,10 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Yêu cầu thành phẩm" : "Yêu cầu phụ trách"}
-        subtitle="Kiểm tra tồn thành phẩm, lập kế hoạch BOM nhiều cấp và theo dõi lượng đã xuất."
+        title={manager ? "Yêu cầu thành phẩm" : "Yêu cầu sản xuất"}
+        subtitle={manager
+          ? "Kiểm tra tồn thành phẩm, lập kế hoạch BOM nhiều cấp và theo dõi lượng đã xuất."
+          : "Theo dõi yêu cầu được phân công, từ cấp vật tư đến xuất thành phẩm."}
         action={
           manager && (
             <Link className="btn btn-primary" to={`${base}/moi`}>
@@ -50,8 +52,16 @@ export function RequestsPage() {
           )
         }
       />
+      {!manager && (
+        <Notice>
+          Nhân viên theo dõi tiến độ yêu cầu được phân công. Quyền lập và phê duyệt phiếu xuất kho
+          thuộc về Quản lý.
+        </Notice>
+      )}
       <Collection
         collection={collection}
+        title={manager ? "Danh sách yêu cầu" : "Danh sách yêu cầu sản xuất"}
+        searchPlaceholder={!manager ? "Tìm theo mã yêu cầu…" : undefined}
         filters={[
           statusFilter([
             "nhap",
@@ -63,7 +73,27 @@ export function RequestsPage() {
           ]),
           ...dateFilters,
         ]}
-        columns={[
+        columns={!manager ? [
+          {
+            key: "ma_yeu_cau_san_xuat",
+            label: "Yêu cầu / Thành phẩm",
+            render: (row) => (
+              <>
+                <Link to={`${base}/${row.id}`}>{row.ma_yeu_cau_san_xuat}</Link>
+                <small>{itemName(items, row.mat_hang_id)}</small>
+              </>
+            ),
+          },
+          { key: "so_luong", label: "SL yêu cầu", numeric: true },
+          {
+            key: "so_luong_ton",
+            label: "Tồn hiện có",
+            numeric: true,
+            render: (row) => items.find((item) => item.id === row.mat_hang_id)?.so_luong_ton ?? "—",
+          },
+          { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
+          { key: "action", label: "Thao tác", render: (row) => <Link to={`${base}/${row.id}`}>Theo dõi yêu cầu →</Link> },
+        ] : [
           {
             key: "ma_yeu_cau_san_xuat",
             label: "Mã yêu cầu",
@@ -84,7 +114,7 @@ export function RequestsPage() {
           {
             key: "action",
             label: "Thao tác",
-            render: (row) => <Link to={`${base}/${row.id}`}>Mở →</Link>,
+            render: (row) => <Link to={`${base}/${row.id}`}>{manager ? "Mở" : "Theo dõi yêu cầu"} →</Link>,
           },
         ]}
       />
@@ -229,6 +259,10 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
                 `${number(record.so_luong_da_xuat)} / ${number(record.so_luong)}`,
               ],
               ["Còn phải xuất", number(record.so_luong_con_phai_xuat)],
+              ...(!manager ? [
+                ["Mã hàng", items.find((item) => item.id === record.mat_hang_id)?.ma_mat_hang || "—"],
+                ["Tồn kho hiện có", items.find((item) => item.id === record.mat_hang_id)?.so_luong_ton ?? "—"],
+              ] : []),
               ["Tạo lúc", dateTime(record.created_at)],
               ["Hoàn thành lúc", dateTime(record.completed_at)],
             ]}

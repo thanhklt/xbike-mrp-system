@@ -26,7 +26,7 @@ export function CompletionsPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Duyệt chứng từ hoàn thành SX" : "Chứng từ hoàn thành SX"}
+        title={manager ? "Duyệt chứng từ hoàn thành SX" : "Chứng từ hoàn thành"}
         subtitle="Mỗi chứng từ ghi một đợt hoàn thành. Chỉ duyệt mới cộng đầu ra; không trừ vật tư lần nữa."
         action={
           !manager && (
@@ -38,8 +38,26 @@ export function CompletionsPage() {
       />
       <Collection
         collection={collection}
+        title={manager ? "Danh sách chứng từ" : "Chứng từ sản xuất"}
+        searchPlaceholder={!manager ? "Tìm theo mã chứng từ…" : undefined}
         filters={[statusFilter(["nhap", "cho_duyet", "da_duyet", "tu_choi"]), ...dateFilters]}
-        columns={[
+        columns={!manager ? [
+          {
+            key: "ma_phieu",
+            label: "Chứng từ / Lệnh",
+            render: (row) => (
+              <>
+                <Link to={`${base}/${row.id}`}>{row.ma_phieu}</Link>
+                <small>LSX #{row.lenh_san_xuat_id}</small>
+              </>
+            ),
+          },
+          { key: "mat_hang_id", label: "Thành phẩm", render: (row) => itemName(catalog.data?.data, row.mat_hang_id) },
+          { key: "created_at", label: "Ngày tạo", render: (row) => dateTime(row.created_at) },
+          { key: "so_luong_hoan_thanh", label: "Số lượng", numeric: true },
+          { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
+          { key: "action", label: "Thao tác", render: (row) => <Link to={`${base}/${row.id}`}>Xem chi tiết →</Link> },
+        ] : [
           {
             key: "ma_phieu",
             label: "Mã chứng từ",

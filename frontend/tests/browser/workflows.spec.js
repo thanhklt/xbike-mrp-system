@@ -54,7 +54,7 @@ test("the latest /auth/me role takes precedence over the earlier login response"
   await page.getByLabel("Mật khẩu", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await expect(page).toHaveURL(/\/nv$/);
-  await expect(page.getByRole("heading", { name: "Việc được giao", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tổng quan công việc", exact: true })).toBeVisible();
 });
 
 test("admin sees no warehouse menu or snapshot and direct warehouse URL is denied", async ({
@@ -87,7 +87,7 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/phieu-nhap/moi");
-  await page.getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await page.locator("form").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
   await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("1");
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("3");
   await page.getByLabel("Đơn giá dòng 1", { exact: true }).fill("250000");

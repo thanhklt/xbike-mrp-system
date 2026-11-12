@@ -9,6 +9,7 @@ export function Collection({
   columns,
   filters = [],
   search = true,
+  searchPlaceholder = "Tìm mã hoặc tên…",
   title = "Danh sách",
 }) {
   const [draft, setDraft] = useState(collection.params);
@@ -26,7 +27,7 @@ export function Collection({
             label="Tìm kiếm"
             name="q"
             type="search"
-            placeholder="Tìm mã hoặc tên…"
+            placeholder={searchPlaceholder}
             value={draft.q || ""}
             onChange={(event) => setDraft({ ...draft, q: event.target.value })}
           />

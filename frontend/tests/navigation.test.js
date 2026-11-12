@@ -41,8 +41,15 @@ test("missing, unknown and inherited property names never grant a role or menu",
 
 test("employee sidebar focuses on assigned work without revoking read-only document access", () => {
   const paths = navigationFor("nhan_vien").flatMap((group) => group.items.map(([path]) => path));
-  assert.deepEqual(paths, ["/nv", "/nv/lenh-sx", "/nv/hoan-thanh", "/nv/ton-kho"]);
-  for (const path of ["/nv/yeu-cau", "/nv/xuat-nvl", "/nv/xuat-tp", "/nv/phieu"]) {
+  assert.deepEqual(paths, [
+    "/nv",
+    "/nv/yeu-cau",
+    "/nv/lenh-sx",
+    "/nv/hoan-thanh",
+    "/nv/phieu-xuat",
+    "/nv/ton-kho",
+  ]);
+  for (const path of ["/nv/xuat-nvl", "/nv/xuat-tp", "/nv/phieu"]) {
     assert.equal(paths.includes(path), false);
     assert.equal(canAccessPath("nhan_vien", path), true);
   }

@@ -43,17 +43,16 @@ const navigation = {
     },
   ],
   nhan_vien: [
-    { title: "Chung", items: [["/nv", "Tổng quan"]] },
     {
-      title: "Sản xuất",
+      title: "Menu",
       items: [
-        ["/nv/lenh-sx", "Việc được giao"],
-        ["/nv/hoan-thanh", "Chứng từ hoàn thành SX"],
+        ["/nv", "Tổng quan"],
+        ["/nv/yeu-cau", "Yêu cầu sản xuất"],
+        ["/nv/lenh-sx", "Lệnh sản xuất"],
+        ["/nv/hoan-thanh", "Chứng từ hoàn thành"],
+        ["/nv/phieu-xuat", "Tra cứu phiếu xuất"],
+        ["/nv/ton-kho", "Tra cứu tồn kho"],
       ],
-    },
-    {
-      title: "Theo dõi",
-      items: [["/nv/ton-kho", "Tra cứu tồn kho"]],
     },
   ],
 };

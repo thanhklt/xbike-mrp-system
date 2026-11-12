@@ -291,7 +291,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           ma_vai_tro: "nhan_vien",
           ten_vai_tro: "Nhân viên",
           mo_ta:
-            "Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
+            "Kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
         },
       ],
       mat_hang: items,

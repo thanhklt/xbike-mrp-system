@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useChoices, useCollection, useDetail } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { money, dateTime } from "../../lib/format.js";
+import { money, dateTime, itemName, number } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { documentPermissions } from "../auth/permissions.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
@@ -24,13 +24,17 @@ import {
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 export function MaterialIssuingPage({ issueType }) {
   const { id } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
+  const isLookup = location.pathname.startsWith("/nv/phieu-xuat");
   const base = manager
     ? "/kho/phieu-xuat"
-    : issueType === "xuat_thanh_pham"
-      ? "/nv/xuat-tp"
-      : "/nv/xuat-nvl";
+    : isLookup
+      ? "/nv/phieu-xuat"
+      : issueType === "xuat_thanh_pham"
+        ? "/nv/xuat-tp"
+        : "/nv/xuat-nvl";
   const collection = useCollection(API.issues, {
     sort: "-created_at",
     ...(issueType ? { loai_phieu: issueType } : {}),
@@ -43,14 +47,18 @@ export function MaterialIssuingPage({ issueType }) {
         title={
           manager
             ? "Phiếu xuất kho"
-            : issueType === "xuat_thanh_pham"
-              ? "Phiếu xuất thành phẩm"
-              : "Phiếu xuất NVL / BTP"
+            : isLookup
+              ? "Tra cứu phiếu xuất"
+              : issueType === "xuat_thanh_pham"
+                ? "Phiếu xuất thành phẩm"
+                : "Phiếu xuất NVL / BTP"
         }
         subtitle={
           manager
             ? "Lập, gửi và duyệt xuất vật tư hoặc thành phẩm. Chỉ duyệt mới trừ tồn."
-            : "Chỉ xem phiếu liên quan đến công việc được giao. Quản lý kho lập và duyệt phiếu."
+            : isLookup
+              ? "Theo dõi phiếu đã lập và tình trạng phê duyệt."
+              : "Chỉ xem phiếu liên quan đến công việc được giao. Quản lý kho lập và duyệt phiếu."
         }
         action={
           manager && (
@@ -60,8 +68,15 @@ export function MaterialIssuingPage({ issueType }) {
           )
         }
       />
+      {!manager && isLookup && (
+        <Notice>
+          Chỉ xem phiếu xuất liên quan đến công việc được giao. Quản lý kho lập và duyệt phiếu xuất.
+        </Notice>
+      )}
       <Collection
         collection={collection}
+        title={!manager && isLookup ? "Danh sách phiếu xuất" : "Danh sách"}
+        searchPlaceholder={!manager && isLookup ? "Tìm theo mã phiếu xuất…" : undefined}
         filters={[
           statusFilter(["nhap", "cho_duyet", "da_duyet", "tu_choi"]),
           ...(!issueType
@@ -80,7 +95,37 @@ export function MaterialIssuingPage({ issueType }) {
             : []),
           ...dateFilters,
         ]}
-        columns={[
+        columns={!manager && isLookup ? [
+          {
+            key: "ma_phieu_xuat",
+            label: "Phiếu xuất / Tham chiếu",
+            render: (row) => (
+              <>
+                <Link to={`${base}/${row.id}`}>{row.ma_phieu_xuat}</Link>
+                <small>{row.lenh_san_xuat_id ? `LSX #${row.lenh_san_xuat_id}` : `YCSX #${row.yeu_cau_san_xuat_id}`}</small>
+              </>
+            ),
+          },
+          {
+            key: "chi_tiet",
+            label: "Mặt hàng",
+            render: (row) => row.chi_tiet.length
+              ? `${itemName(catalog.data?.data, row.chi_tiet[0].mat_hang_id)}${row.chi_tiet.length > 1 ? ` +${row.chi_tiet.length - 1} mặt hàng` : ""}`
+              : "—",
+          },
+          { key: "loai_phieu", label: "Loại", render: (row) => row.loai_phieu === "xuat_vat_tu" ? "Vật tư / BTP" : "Thành phẩm" },
+          { key: "created_at", label: "Ngày lập", render: (row) => dateTime(row.created_at) },
+          {
+            key: "so_luong",
+            label: "Số lượng / dòng",
+            numeric: true,
+            render: (row) => row.chi_tiet.length === 1
+              ? `${number(row.chi_tiet[0].so_luong)} ${catalog.data?.data.find((item) => item.id === row.chi_tiet[0].mat_hang_id)?.don_vi_tinh || ""}`
+              : `${row.chi_tiet.length} dòng mặt hàng`,
+          },
+          { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
+          { key: "action", label: "Thao tác", render: (row) => <Link to={`${base}/${row.id}`}>Xem phiếu →</Link> },
+        ] : [
           {
             key: "ma_phieu_xuat",
             label: "Mã phiếu",

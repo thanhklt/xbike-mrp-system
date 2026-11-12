@@ -106,6 +106,90 @@ Bảng ánh xạ mã nghiệp vụ đã đối chiếu tại nơi ghi audit (Bư
   - Ảnh đã mở kiểm tra: `frontend/test-results/adm-03-inline-edit-1670x941.png` (có ô mật khẩu và nút mắt, hàng giữ cùng kiểu/chiều cao so với `doc/ui-admin-screenshots/02-inline-edit.png`); có thêm ảnh 1440×900 và 375×812 trong cùng thư mục.
   - Giới hạn: chưa có PostgreSQL test riêng được xác nhận, nên chưa kiểm chứng tự reset/khóa lặp không deadlock và rollback bằng DB thật; test transaction dùng mock. Playwright dùng API fixture, chưa phải E2E backend + PostgreSQL thật. Sequence đã đối chiếu source, chưa render/parse bằng Mermaid vì không có công cụ sẵn có. Không xóa/seed/reset DB, không chỉnh Drive, không commit/push. Không còn câu hỏi mở trong phạm vi FE-MISS-005.
 
+## UI nhân viên — các mục còn mở (11/11/2026)
+
+Theo quyết định ngày 11/11/2026 của dev, giao diện nhân viên chuyển sang chuẩn hóa theo `XBIKE_Employee_Portal_Preview (1).html` (lưu tại `doc/ui-nhan-vien-preview/employee-portal-preview.html`). Dưới đây là các phần giao diện prototype preview có yêu cầu nhưng API hiện tại chưa hỗ trợ hoặc khác biệt về phân quyền backend, được ghi nhận theo đúng FRONTEND_RULES.md:
+
+- [ ] FE-MISS-006 — Khác biệt preview: Trường sản phẩm lỗi (`badQty`) và ghi chú sản xuất (`note`) trong chứng từ hoàn thành
+  - Màn hình / mã yêu cầu / ảnh thiết kế: Chứng từ hoàn thành (`/nv/hoan-thanh`) — form tạo chứng từ (`documentModal`) trong `XBIKE_Employee_Portal_Preview (1).html`.
+  - Thành phần hoặc thao tác bị ảnh hưởng: Ô nhập `Sản phẩm lỗi` (`docBad`) và textarea `Ghi chú sản xuất` (`docNote`).
+  - Thiết kế yêu cầu: Nhân viên ghi nhận cả số lượng đạt (`qty`), số lượng lỗi (`badQty`), và ghi chú ca làm việc khi tạo chứng từ hoàn thành.
+  - API hiện đáp ứng / còn thiếu: `HoanThanhCreate` trong `backend/app/modules/san_xuat/schemas.py` hiện chỉ nhận `lenh_san_xuat_id`, `so_luong_hoan_thanh`, `finish_time` với `extra="forbid"`. Backend chưa có cột/trường cho số lượng lỗi và ghi chú chứng từ.
+  - Bằng chứng: `backend/app/modules/san_xuat/schemas.py` dòng 234–244; router `/chung_tu_hoan_thanh_sx`.
+  - Ảnh hưởng và phần vẫn tiếp tục làm được: Quyết định ngày 12/11/2026 của dev là giữ nguyên nghiệp vụ/quyền/API hiện tại, ghi riêng khác biệt preview để chờ duyệt. Theo FRONTEND_RULES, không hiển thị các ô nhập không được hỗ trợ rồi âm thầm bỏ qua (`extra="forbid"` gây lỗi 422 nếu gửi). Do đó form tạo chứng từ chỉ nhận các trường được API hỗ trợ (`so_luong_hoan_thanh`, `finish_time`). Khác biệt về trường `badQty` và `note` được ghi nhận tại đây chờ dev quyết định mở rộng backend.
+  - Câu hỏi / quyết định cần dev xác nhận: Backend có bổ sung hai trường `so_luong_loi` và `ghi_chu` vào schema `HoanThanhCreate`/database hay giữ ở mức ghi nhận tạm thời trên giao diện.
+  - Phản hồi của dev: Ngày 12/11/2026 dev đã quyết định giữ nguyên nghiệp vụ/quyền/API hiện tại; ghi riêng các khác biệt preview để chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` chờ dev quyết định.
+
+- [ ] FE-MISS-007 — Khác biệt preview: Quyền tạo phiếu xuất thành phẩm (`create-issue`) của Nhân viên
+  - Màn hình / mã yêu cầu / ảnh thiết kế: Tổng quan (`/nv`), Yêu cầu sản xuất (`/nv/yeu-cau`), Tra cứu phiếu xuất (`/nv/phieu-xuat`) — nút `+ Tạo phiếu xuất thành phẩm` và modal `issueModal` trong `XBIKE_Employee_Portal_Preview (1).html`.
+  - Thành phần hoặc thao tác bị ảnh hưởng: Nút mở modal và form gửi phiếu xuất thành phẩm ở trạng thái chờ duyệt.
+  - Thiết kế yêu cầu: Nhân viên được phép lập phiếu xuất thành phẩm cho yêu cầu đã đủ điều kiện (đủ tồn khả dụng hoặc đã duyệt hoàn thành) để gửi quản lý phê duyệt.
+  - API hiện đáp ứng / còn thiếu: Trong `backend/app/modules/phieu_xuat/router.py`, các thao tác ghi phiếu xuất (`POST /api/v1/phieu_xuat`) sử dụng `WriteActor = Annotated[dict, Depends(write_actor)]` giới hạn quyền `quan_ly`. Nếu nhân viên gọi trực tiếp sẽ nhận 403 Forbidden.
+  - Bằng chứng: `backend/app/modules/phieu_xuat/router.py` dòng 47–49; `frontend/src/features/material-issuing/MaterialIssuingPage.jsx`.
+  - Ảnh hưởng và phần vẫn tiếp tục làm được: Quyết định ngày 12/11/2026 của dev là giữ nguyên quyền/API hiện tại. Backend hiện chỉ cấp quyền ghi phiếu xuất cho vai trò `quan_ly`. Không tự tiện dựng nút tạo phiếu xuất khả dụng rồi gửi bị 403, cũng không tự ý chuyển thành yêu cầu khác hay giả lập lưu client. Nhân viên chỉ tra cứu phiếu xuất được phân công (`/nv/phieu-xuat`). Khác biệt về quyền lập phiếu xuất thành phẩm được ghi nhận tại đây chờ dev duyệt mở quyền backend.
+  - Câu hỏi / quyết định cần dev xác nhận: Có mở quyền tạo phiếu xuất nháp / chờ duyệt cho nhân viên (`WriteActor` chấp nhận `nhan_vien` cho phiếu xuất thành phẩm) hay giữ nguyên quyền lập phiếu chỉ dành cho `quan_ly`.
+  - Phản hồi của dev: Ngày 12/11/2026 dev đã quyết định giữ nguyên quyền và API hiện tại; ghi riêng khác biệt preview để chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` chờ dev quyết định.
+
+- [ ] FE-MISS-008 — Khác biệt preview: Mức cảnh báo tồn kho tối thiểu (`min`) và đánh dấu trạng thái tồn thấp/thiếu
+  - Màn hình / mã yêu cầu / ảnh thiết kế: Tra cứu tồn kho (`/nv/ton-kho`) trong `XBIKE_Employee_Portal_Preview (1).html`.
+  - Thành phần hoặc thao tác bị ảnh hưởng: Cột `Tình trạng` hiển thị tag `Đủ tồn tối thiểu` hoặc `Thấp / thiếu` dựa trên so sánh `available < min`.
+  - Thiết kế yêu cầu: Hiển thị mức tồn tối thiểu (`min`) và cảnh báo mặt hàng thiếu tồn.
+  - API hiện đáp ứng / còn thiếu: Schema `MatHangRead` trong `backend/app/modules/mat_hang/schemas.py` có `so_luong_ton`, `don_vi_tinh`, `don_gia`, `is_active` nhưng chưa có trường `ton_kho_toi_thieu` hoặc `min_stock`.
+  - Bằng chứng: `backend/app/modules/mat_hang/schemas.py` dòng 23–38; bảng `"MatHang"` trong `infra/postgres/init.sql`.
+  - Ảnh hưởng và phần vẫn tiếp tục làm được: Quyết định ngày 12/11/2026 của dev là giữ nguyên API hiện tại. Backend `MatHangRead` chỉ trả `so_luong_ton`, không có `min_stock` hay `ton_kho_toi_thieu` và không phân tách số dư khả dụng riêng. Không tự đặt ngưỡng tùy tiện hay gán nhãn khả dụng giả. Bảng tra cứu tồn kho hiển thị đúng `so_luong_ton` thực tế từ API.
+  - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung trường `ton_kho_toi_thieu` vào bảng `"MatHang"` và `MatHangRead` không, hay áp dụng ngưỡng cảnh báo mặc định ở frontend.
+  - Phản hồi của dev: Ngày 12/11/2026 dev đã quyết định giữ nguyên API hiện tại; ghi riêng khác biệt preview để chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` chờ dev quyết định.
+
+- [ ] FE-MISS-009 — Khác biệt preview trên trang Lệnh sản xuất: hạn hoàn thành, tìm theo sản phẩm/SKU và nhóm lọc tổng hợp
+  - Màn hình / mã yêu cầu / ảnh thiết kế: `/nv/lenh-sx`, UI-NV-05, `doc/ui-nhan-vien-preview/orders-1440.png`.
+  - Thành phần bị ảnh hưởng: Cột và mục chi tiết `Hạn hoàn thành`; ô tìm theo mã yêu cầu/tên thành phẩm/SKU; thẻ lọc `Chờ cấp vật tư` và `Chờ duyệt chứng từ`.
+  - Thiết kế yêu cầu: Xem ngày hạn, tìm đa trường và đếm/lọc lệnh theo hai nhóm tổng hợp của preview.
+  - API hiện đáp ứng / còn thiếu: `LenhRead` chỉ có `created_at`, `started_at`, `completed_at`, không có hạn hoàn thành; `q` của danh sách lệnh chỉ lọc `ma_lenh_san_xuat`; `LenhStatus` chỉ có `nhap`, `da_gui`, `dang_thuc_hien`, `hoan_thanh`, `da_huy`.
+  - Bằng chứng: `backend/app/modules/san_xuat/schemas.py` dòng 15, 138–156; `backend/app/modules/san_xuat/repository/lenh_san_xuat.py` dòng 94–95.
+  - Ảnh hưởng và phần tiếp tục làm được: Theo quyết định giữ nghiệp vụ/quyền/API hiện tại, UI hiển thị `started_at`, tìm theo mã lệnh và dùng bốn thẻ đếm/lọc `Tất cả`, `Đã giao`, `Đang thực hiện`, `Hoàn thành` qua `meta.total`; không coi một trang phân trang là toàn bộ lệnh để tự gán nhóm tổng hợp.
+  - Câu hỏi / quyết định cần dev xác nhận: Có mở rộng hợp đồng API cho hạn hoàn thành, tìm đa trường và bộ lọc/aggregate theo trạng thái tổng hợp của preview không.
+  - Phản hồi của dev: Ngày 12/11/2026 dev chọn giữ nghiệp vụ/quyền/API hiện tại và ghi riêng khác biệt preview chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` tới khi dev quyết định phần khác biệt.
+
+- [ ] FE-MISS-010 — Khác biệt preview trong chi tiết Yêu cầu sản xuất: ghi chú xử lý và vật tư BOM tổng hợp
+  - Màn hình / mã yêu cầu / ảnh thiết kế: `/nv/yeu-cau/:id`, UI-NV-06, `doc/ui-nhan-vien-preview/requests-1440.png` và modal chi tiết trong HTML preview.
+  - Thành phần bị ảnh hưởng: Khối ghi chú xử lý và bảng vật tư/BOM ở cấp yêu cầu.
+  - Thiết kế yêu cầu: Xem ghi chú và tổng nhu cầu vật tư liên quan đến toàn bộ yêu cầu ngay trong modal.
+  - API hiện đáp ứng / còn thiếu: `YeuCauRead` không có ghi chú hay danh sách vật tư; `KeHoachRead` trả danh sách lệnh đã chốt nhưng không trả bảng vật tư tổng hợp. API `/lenh_san_xuat/{id}/vat_tu` hỗ trợ xem vật tư theo từng lệnh được phân công.
+  - Bằng chứng: `backend/app/modules/san_xuat/schemas.py` dòng 79–93, 172–175 và router lệnh `/{id}/vat_tu`.
+  - Ảnh hưởng và phần tiếp tục làm được: UI hiển thị trường yêu cầu và cây lệnh có thật; vật tư xem trong chi tiết lệnh khi nhân viên có quyền truy cập, không suy diễn ghi chú hoặc gộp số liệu từ các lệnh ngoài phạm vi được giao.
+  - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung ghi chú và phép đọc vật tư/BOM tổng hợp cấp yêu cầu cùng quy tắc phân quyền tương ứng không.
+  - Phản hồi của dev: Ngày 12/11/2026 dev chọn giữ nghiệp vụ/quyền/API hiện tại và ghi riêng khác biệt preview chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` tới khi dev quyết định phần khác biệt.
+
+- [ ] FE-MISS-011 — Khác biệt preview về các nhóm tổng hợp mức sẵn sàng của yêu cầu sản xuất
+  - Màn hình / mã yêu cầu / ảnh thiết kế: `/nv` và `/nv/yeu-cau`, UI-NV-04/06, `doc/ui-nhan-vien-preview/overview-1440.png` và `requests-1440.png`.
+  - Thành phần bị ảnh hưởng: Thẻ đếm `Sẵn sàng xuất thành phẩm` và các tab `Sẵn sàng xuất`, `Cần sản xuất`, `Chờ duyệt chứng từ` trong preview.
+  - Thiết kế yêu cầu: Đếm và lọc yêu cầu theo mức sẵn sàng tổng hợp từ tồn thành phẩm, lệnh liên quan và chứng từ đã duyệt.
+  - API hiện đáp ứng / còn thiếu: Danh sách yêu cầu chỉ lọc theo `YeuCauStatus`; `YeuCauRead` không trả cờ hay số đếm tổng hợp sẵn sàng, còn tồn kho mặt hàng là số dư chung và không xác nhận phần tồn đã dành cho từng yêu cầu. Không suy ra nhóm này từ một trang kết quả hoặc từ phép so sánh số dư đơn giản.
+  - Bằng chứng: `backend/app/modules/san_xuat/schemas.py` (`YeuCauStatus`, `YeuCauRead`), router/repository danh sách yêu cầu và `backend/app/modules/mat_hang/schemas.py` (`MatHangRead.so_luong_ton`).
+  - Ảnh hưởng và phần tiếp tục làm được: UI dùng KPI và bộ lọc theo trạng thái API thực, giữ danh sách yêu cầu và quyền chỉ đọc của nhân viên; không hiển thị nhãn `Sẵn sàng xuất` khi backend chưa xác nhận.
+  - Câu hỏi / quyết định cần dev xác nhận: Có bổ sung phép tính và bộ lọc/số đếm tổng hợp mức sẵn sàng theo quyền nhân viên không.
+  - Phản hồi của dev: Ngày 12/11/2026 dev chọn giữ nghiệp vụ/quyền/API hiện tại và ghi riêng khác biệt preview chờ duyệt.
+  - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` tới khi dev quyết định phần khác biệt.
+
+- [ ] NV-CHECK-001 — Hoàn tất kiểm chứng accessibility (`UI-11`).
+  - Còn mở: zoom trình duyệt thực tế 200%, lấy mẫu tương phản đầy đủ các trạng thái và các giới hạn dialog nêu trong đặc tả.
+  - Đã có bằng chứng: kiểm tra bàn phím/focus/busy state trong browser fixture; tên mặt hàng dài 167 ký tự xuống dòng và số lượng tồn vẫn hiển thị ở 375px; Astra kiểm tra riêng QuickStock/RecentAudit quản lý tại 375×812 và 1440×812. Viewport thu nhỏ không được coi là bằng chứng zoom trình duyệt thực tế.
+  - Căn cứ đóng mục: thực hiện và ghi kết quả các kiểm tra còn mở; chưa tự đánh dấu hoàn tất.
+- [ ] NV-CHECK-002 — Kiểm chứng phân quyền hai tài khoản và E2E API/PostgreSQL thật (`AUTH-04`, `CHECK-04`).
+  - Ảnh hưởng: chưa xác nhận toàn bộ luồng nhân viên trên backend/database thật, gồm cô lập dữ liệu theo người dùng và transaction.
+  - Bằng chứng hiện có: fixture browser redesign + điều hướng đạt 18/18 ở bản hiện tại. Fixture không chứng minh phân quyền hoặc transaction backend. Chưa có môi trường database test riêng được xác nhận để chạy phần này; không dùng database ứng dụng làm nơi thử ghi.
+  - Căn cứ đóng mục: kiểm tra trên môi trường test phù hợp, ghi kết quả thực tế và giới hạn; không tự seed/reset hoặc thay đổi database đang có dữ liệu.
+- [ ] NV-CHECK-003 — Dev nghiệm thu UI và kết quả triển khai (`UI-13`, `CHECK-05`).
+  - Cần dev xem UI/đặc tả và xác nhận nghiệm thu; kết quả worker review không thay cho nghiệm thu của dev.
+  - Căn cứ đóng mục: phản hồi nghiệm thu rõ ràng từ dev. Chưa tự accept, commit hoặc push.
+
+Bằng chứng triển khai theo thứ tự thời gian: `test-run-full.log` 122/122 và `test-employee-targeted.log` 10/10 thuộc đợt UI nhân viên trước redesign; `test-employee-redesign-current.log` 18/18 gồm 11 kiểm tra nhân viên và 7 kiểm tra điều hướng ba vai trò ở bản hiện tại. Lint, 46 unit tests và build đạt; sau khi thêm nhãn ngày dashboard, lint, build và browser 18/18 được chạy lại. Ảnh tại `frontend/test-results/` do lượt browser cuối tạo ra; đã mở xem ảnh desktop/mobile, dialog và giao diện quản lý. Những chỉnh sửa của đợt redesign này chỉ thuộc frontend/test/tài liệu; diff `backend/Dockerfile` đã có từ trước và không bị sửa trong đợt này. Không có thay đổi hợp đồng API, schema hoặc bootstrap SQL.
+
 ## Mẫu ghi nhận
 
 Mẫu sau chưa phải một vấn đề đã được xác minh:

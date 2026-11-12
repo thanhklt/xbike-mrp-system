@@ -180,9 +180,15 @@ export function linePayload(lines, prices = false) {
     ...(prices ? { don_gia_thuc: Number(line.don_gia_thuc) } : {}),
   }));
 }
-export function SavedLines({ lines = [], items = [], prices = false }) {
+export function SavedLines({
+  lines = [],
+  items = [],
+  prices = false,
+  caption = "Danh sách dòng mặt hàng",
+}) {
   return (
     <DataTable
+      caption={caption}
       rows={lines.map((line, index) => ({ ...line, id: line.id ?? index }))}
       columns={[
         {
