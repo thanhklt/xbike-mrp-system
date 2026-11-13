@@ -268,7 +268,7 @@ Linh kiện chỉ rời kho khi Quản lý kho duyệt, và xuất đúng đủ 
 - Mỗi yêu cầu một phiếu, xuất đủ toàn bộ nhu cầu; nội dung phiếu lấy đúng nhu cầu đã chốt, nhân viên không sửa
 - Gửi phiếu cần xác nhận, chưa trừ tồn
 - Quản lý kho duyệt (có xác nhận): trừ tồn, ghi giá xuất theo đơn giá mặt hàng tại lúc duyệt, kết thúc giữ linh kiện
-- Quản lý kho từ chối phải ghi lý do; tồn không đổi, linh kiện vẫn được giữ; nhân viên đưa phiếu về nháp rồi gửi lại
+- Quản lý kho từ chối phải ghi lý do; tồn không đổi, linh kiện vẫn được giữ; nhân viên gửi lại phiếu ngay từ trạng thái bị từ chối, không qua nháp
 - Quản lý kho không lập phiếu xuất; Nhân viên không duyệt
 - Quản lý kho có màn hình danh sách phiếu xuất riêng, gồm cả phiếu xuất linh kiện và phiếu xuất thành phẩm, mở từ đó để duyệt hoặc từ chối
 
@@ -292,10 +292,10 @@ Thành phẩm chỉ vào kho khi Quản lý kho xác nhận sản xuất xong, �
 - Nhân viên bấm bắt đầu sản xuất sau khi phiếu xuất linh kiện được duyệt; hệ thống ghi thời điểm bắt đầu; tồn không đổi
 - Nhân viên lập chứng từ hoàn thành sản xuất, mỗi yêu cầu một chứng từ
   - Số lượng hoàn thành bằng đúng số cần sản xuất, nhân viên không sửa
-  - Nhân viên nhập thời điểm hoàn thành: không trước lúc bắt đầu, không ở tương lai
+  - Thời điểm hoàn thành do hệ thống ghi, là thời điểm nhân viên xác nhận gửi chứng từ; nhân viên không nhập, không sửa; gửi lại sau khi bị từ chối thì ghi lại theo lần xác nhận mới
 - Gửi chứng từ cần xác nhận, chưa cộng tồn
 - Quản lý kho duyệt: cộng thành phẩm vào kho, số xe vừa làm được giữ cho chính yêu cầu đó; không trừ linh kiện lần nữa
-- Quản lý kho từ chối phải ghi lý do; không cộng tồn; linh kiện đã xuất không được hoàn; nhân viên đưa về nháp, sửa, gửi lại
+- Quản lý kho từ chối phải ghi lý do; không cộng tồn; linh kiện đã xuất không được hoàn; nhân viên gửi lại chứng từ ngay từ trạng thái bị từ chối, không qua nháp
 - Quản lý kho có màn hình danh sách chứng từ hoàn thành sản xuất riêng, lọc theo sản phẩm, nhân viên, khoảng thời gian, trạng thái, mở từ đó để duyệt hoặc từ chối
 
 ## Out of Scope
@@ -393,7 +393,7 @@ Không thao tác nào làm thay đổi kho mà người dùng chưa nhìn thấy
 - Mỗi lần gửi, duyệt, hoàn tất nhập, kiểm tra có giữ hàng, hủy yêu cầu đều mở hộp xác nhận riêng
   - Hộp xác nhận hiển thị: chứng từ, mặt hàng, số lượng, đơn vị tính, tác động tới kho (ghi rõ khi thao tác chưa làm đổi tồn)
   - Đóng hộp xác nhận thì không có gì thay đổi
-- Không sửa chứng từ đang chờ duyệt hoặc đã ghi nhận; chứng từ bị từ chối phải đưa về nháp mới sửa được
+- Không sửa chứng từ đang chờ duyệt, bị từ chối hoặc đã ghi nhận; chứng từ bị từ chối được gửi lại trực tiếp, không có thao tác đưa về nháp
 - Nếu chứng từ bị người khác thay đổi trong lúc đang xác nhận, hệ thống báo và yêu cầu xem lại
 - Tồn kho không bao giờ âm; mỗi chứng từ chỉ ghi nhận vào kho một lần
 - Tiền tính bằng VND
@@ -417,7 +417,7 @@ Mọi thao tác quan trọng đều truy được ai làm, lúc nào, thay đổ
 - Ghi lịch sử cho:
   - Đăng nhập
   - Tạo, sửa, xóa nháp
-  - Gửi, kiểm tra, duyệt, từ chối, đưa về nháp, hoàn tất nhập, bắt đầu sản xuất, hủy yêu cầu
+  - Gửi (kể cả gửi lại sau khi bị từ chối), kiểm tra, duyệt, từ chối, hoàn tất nhập, bắt đầu sản xuất, hủy yêu cầu
   - Thao tác tài khoản, kể cả đổi vai trò và đổi mật khẩu
   - Thao tác dữ liệu nền: tạo, sửa mặt hàng; ngừng, dùng lại thành phẩm; tạo nhà cung cấp; tạo công thức, tạo phiên bản mới, dùng lại, ngừng công thức. Thao tác sửa ghi giá trị trước và sau
 - Mỗi bản ghi có: người thực hiện, thời điểm, đối tượng, trạng thái trước và sau, lý do

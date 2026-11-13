@@ -59,8 +59,8 @@ Nguồn "Đề xuất khi lập UC (chưa xác nhận)" đánh dấu quy tắc c
 
 | Mã | Use-case | Tác nhân | BR liên quan |
 |---|---|---|---|
-| [UC-23](production/UC-23.md) | Lập, sửa, xóa yêu cầu sản xuất nháp | QLK | BR-007, BR-013, BR-015, BR-016 |
-| [UC-24](production/UC-24.md) | Gửi yêu cầu sản xuất | QLK | BR-007, BR-005, BR-015, BR-016 |
+| [UC-23](production/UC-23.md) | Lập và gửi yêu cầu sản xuất | QLK | BR-007, BR-005, BR-015, BR-016 |
+| [UC-24](production/UC-24.md) | Sửa, xóa, gửi yêu cầu sản xuất nháp | QLK | BR-007, BR-005, BR-013, BR-015, BR-016 |
 | [UC-25](production/UC-25.md) | Xem danh sách yêu cầu sản xuất | QLK, NV | BR-007, BR-008, BR-002 |
 | [UC-26](production/UC-26.md) | Kiểm tra yêu cầu sản xuất và giữ hàng | NV | BR-008, BR-005, BR-015, BR-016 |
 | [UC-27](production/UC-27.md) | Xem nhu cầu bổ sung linh kiện | QLK | BR-009, BR-006 |
