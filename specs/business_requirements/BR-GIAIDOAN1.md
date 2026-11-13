@@ -96,9 +96,9 @@ Quản lý kho có một danh mục mặt hàng và nhà cung cấp chính xác,
 - Tạo thành phẩm phải tạo kèm công thức của nó (xem BR-005); linh kiện không cần công thức
 - Mỗi mặt hàng hiển thị ba con số: tồn thực tế, phần đang giữ cho yêu cầu sản xuất, phần còn dùng được
 - Số tồn chỉ thay đổi qua chứng từ đã ghi nhận vào kho, không ai sửa tay
-- Không đổi loại hoặc đơn vị tính của mặt hàng đã được dùng trong công thức hay chứng từ
+- Không đổi loại mặt hàng sau khi tạo; không đổi đơn vị tính của mặt hàng đã được dùng trong công thức hay chứng từ
 - Quản lý kho tạo và xem nhà cung cấp: mã, tên; điện thoại và địa chỉ không bắt buộc
-- Địa chỉ nhà cung cấp gồm tỉnh, phường (chọn từ danh mục đơn vị hành chính; phường phải thuộc tỉnh) và địa chỉ chi tiết
+- Địa chỉ nhà cung cấp gồm tỉnh, phường và địa chỉ chi tiết, do Quản lý kho nhập tay; hệ thống không kiểm tra tính chính xác của tỉnh, phường
 - Nhân viên không xem nhà cung cấp
 
 ## Out of Scope
