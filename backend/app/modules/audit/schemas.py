@@ -13,10 +13,16 @@ class CreationAudit(BaseModel):
     thao_tac: str = "tao"
     du_lieu_sau: dict[str, Any] | None
     du_lieu_truoc: dict[str, Any] | None = None
+    trang_thai_truoc: str | None = None
+    trang_thai_sau: str | None = None
     ly_do: str | None = None
 
 
 ThaoTac = Literal[
+    "tao_phien_ban",
+    "dung_lai_phien_ban",
+    "ngung",
+    "dung_lai",
     "tao",
     "sua",
     "xoa_nhap",
@@ -59,6 +65,8 @@ class AuditLogResponse(BaseModel):
     ]
     doi_tuong_id: int
     thao_tac: ThaoTac
+    trang_thai_truoc: str | None = None
+    trang_thai_sau: str | None = None
     ly_do: str | None
     created_at: datetime
     du_lieu_truoc: dict | None

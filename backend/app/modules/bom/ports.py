@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.modules.bom.schemas import BomListQuery, BomRead, ChiTietBomInput
+from app.modules.mat_hang.schemas import MatHangRead
 from app.shared.records import RecordPage
 
 
@@ -15,7 +16,36 @@ class ActiveBom:
     components: tuple[tuple[int, int], ...]
 
 
+@dataclass(frozen=True)
+class BomContext:
+    item: MatHangRead
+    versions: tuple[BomRead, ...]
+
+    @property
+    def active(self) -> BomRead | None:
+        return next((version for version in self.versions if version.is_active), None)
+
+    def state(self) -> dict:
+        return {
+            "is_active": self.item.is_active,
+            "versions": [
+                {
+                    "id": v.id,
+                    "version": v.version,
+                    "is_active": v.is_active,
+                    "activated": v.kich_hoat_gan_nhat_at.isoformat(),
+                }
+                for v in self.versions
+            ],
+        }
+
+
 class BomRepository(Protocol):
+    async def context(self, item_id: int) -> BomContext | None: ...
+
+    async def context_for_bom(self, bom_id: int) -> BomContext | None: ...
+
+    async def lock_versions(self, item_id: int) -> None: ...
     async def lock_bom_graph(self) -> None: ...
 
     async def list_bom(self, params: BomListQuery) -> RecordPage[BomRead]: ...
