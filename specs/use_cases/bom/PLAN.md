@@ -345,10 +345,32 @@ chọn. Không sửa ngược database hoặc xóa version/audit đã ghi để 
 
 ## Open questions
 
-Không còn câu hỏi nghiệp vụ Q1–Q6; chúng đã được duyệt. Các lựa chọn kỹ thuật trong
-plan này, đặc biệt POST `/{id}/phien_ban` thay POST cũ, request catalog, resource ETag,
-scope mutation/cache và phần audit/catalog phụ thuộc, **chờ dev duyệt plan**.
+Không còn câu hỏi nghiệp vụ Q1–Q6; spec và các lựa chọn kỹ thuật trong plan đã được
+dev duyệt trước triển khai. Dev tiếp tục cho phép khắc phục hai lỗi đã tái hiện
+trong lượt rà soát nhánh feature/bom, theo các task dưới đây.
 
 Giới hạn đã biết: 8 test nền nhân viên chưa pass; chưa xác nhận schema database
 ứng dụng đang chạy; chưa tích hợp sản xuất v4/E2E và frontend. Các trường hợp đó
 không được giải quyết bằng tự mở rộng phạm vi, sửa kỳ vọng test hay thao tác DB thật.
+
+## Khắc phục sau rà soát — 14/11/2026
+
+Đây là sửa code cho đúng plan đã duyệt, không thêm nghiệp vụ hay thay API/schema.
+Nguồn cần đối chiếu: mục C về mutation, mục D về strong ETag và BOM-AC-04/07.
+
+| Task gốc | Kết quả bản sửa | AC / kiểm chứng |
+|---|---|---|
+| T04 | Khôi phục `@asynccontextmanager` trên MatHangMutation.scope | BOM-AC-04, UC-16–19: `test_bom_ac04_mutation_scope_commits_before_cache_publish`, các test atomic/rollback cũ |
+| T06/T07 | Dependency cục bộ get_bom_if_match giữ mọi giá trị header của ba mutation; service so tag dưới khóa như trước | UC-17/18/19, BOM-AC-07: 12 ca `test_bom_ac07_repeated_if_match_rejected_without_writes`, missing/stale/weak/wildcard và happy path hiện có |
+| T09 | Kiểm thử trên PostgreSQL riêng bằng init.sql thực, không wrapper decorator | 118 test BOM/tích hợp pass; toàn suite 118 pass, 8 lỗi nền nhân viên thiếu VaiTroRead.mo_ta; mypy 25 source files pass, Ruff pass |
+| T10 | Cập nhật sequence BOM/PNG, HTTP evidence và bảng truy vết | 6 diagram BOM render thành công; 16 ví dụ HTTP gồm 5 ví dụ bổ sung; [kết quả/truy vết](README.md#8-kết-quả-triển-khai-và-truy-vết-thực-tế) |
+
+File source/test sửa: `mat_hang/mutation.py`, `bom/router.py`,
+`tests/test_bom_service.py`, `tests/test_bom_api.py`. File tài liệu/evidence sửa:
+`docs/sequence/bom.md`, ba PNG mutation BOM tương ứng, `docs/examples/bom-http.json`,
+README/PLAN của BOM. Không đổi core helper dùng chung của chứng từ, service/repository
+nghiệp vụ, frontend, SQL, seed, migration, dependency hoặc database ứng dụng.
+
+Rollback: dev review đúng diff hai runtime file và các test/tài liệu đi kèm; không
+reset branch hoặc dữ liệu. Bỏ riêng decorator sẽ tái tạo lỗi 500; bỏ phần gom header
+sẽ tái tạo lỗi chấp nhận header lặp. Không tự commit/push hoặc chạy migration.

@@ -109,6 +109,52 @@ async def test_bom_ac07_write_preconditions(client, database, value, status):
     assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 2
 
 
+@pytest.mark.parametrize("second", ["same", '"stale"', "*", ""])
+@pytest.mark.parametrize(
+    "method,suffix,body",
+    [
+        ("POST", "/phien_ban", {"chi_tiet": [{"mat_hang_id": 1, "so_luong": 3}]}),
+        ("POST", "/kich_hoat", {}),
+        ("DELETE", "", None),
+    ],
+)
+async def test_bom_ac07_repeated_if_match_rejected_without_writes(
+    client, database, method, suffix, body, second
+):
+    """UC-17/18/19, T06/T07/T09: multiple physical headers are multiple validators."""
+    _, bom = await product(database)
+    path = f"/api/v1/bom/{bom}"
+    if suffix == "/kich_hoat":
+        current = await client.get(path, headers=headers())
+        stopped = await client.delete(
+            path, headers={**headers(), "If-Match": current.headers["etag"]}
+        )
+        assert stopped.status_code == 204, stopped.text
+
+    async def snapshot():
+        return [
+            await scalar(database, f'SELECT jsonb_agg(to_jsonb(t)) FROM "{name}" t')
+            for name in ("Bom", "ChiTietBom", "MatHang", "LichSuThaoTac")
+        ]
+
+    current = await client.get(path, headers=headers())
+    assert current.status_code == 200, current.text
+    tag = current.headers["etag"]
+    before, cached = await snapshot(), database.cache.snapshot()
+    auth = list(headers().items()) + [
+        ("If-Match", tag),
+        ("If-Match", tag if second == "same" else second),
+    ]
+    response = await client.request(method, path + suffix, headers=auth, json=body)
+
+    assert response.status_code == 412, response.text
+    assert set(response.json()) == {"error", "meta"}
+    assert await snapshot() == before
+    assert database.cache.snapshot() is cached
+    after = await client.get(path, headers=headers())
+    assert after.headers["etag"] == tag
+
+
 @pytest.mark.parametrize("user", [2, 3, 4])
 @pytest.mark.parametrize(
     "method,suffix,body",

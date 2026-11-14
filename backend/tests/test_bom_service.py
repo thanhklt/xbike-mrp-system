@@ -65,3 +65,54 @@ async def test_bom_ac01_write_guard_precedes_repository(roles):
         require_manager({"sub": "1", "roles": roles})
         await repo.add()
     repo.add.assert_not_called()
+
+
+async def test_bom_ac04_mutation_scope_commits_before_cache_publish(monkeypatch):
+    """T04: the shared scope must support async with and publish only after commit."""
+    from app.modules.mat_hang.cache import MatHangCache
+    from app.modules.mat_hang.mutation import MatHangMutation
+    from app.modules.mat_hang.schemas import MatHangRead
+
+    events = []
+
+    class Transaction:
+        async def __aenter__(self):
+            events.append("begin")
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            events.append("commit" if exc is None else "rollback")
+
+    cache = MatHangCache()
+    cache.replace([])
+    item = MatHangRead(
+        id=1,
+        ma_mat_hang="MH-000001",
+        ten_mat_hang="Frame",
+        sku="frame",
+        loai_mat_hang="linh_kien",
+        don_vi_tinh="chiec",
+        mau_sac=None,
+        mo_ta=None,
+        don_gia=100,
+        is_active=True,
+        so_luong_ton=0,
+        ton_kho_updated_at=None,
+    )
+    original = cache.publish
+
+    def publish(snapshot):
+        events.append("publish")
+        original(snapshot)
+
+    monkeypatch.setattr(cache, "publish", publish)
+    mutation = MatHangMutation(Transaction(), cache)
+    async with mutation.scope() as changes:
+        mutation.require_active()
+        changes.append(item)
+        events.append("body")
+
+    assert events == ["begin", "body", "commit", "publish"]
+    assert cache.snapshot().by_id[item.id] == item
+    with pytest.raises(RuntimeError, match="Caller must own"):
+        mutation.require_active()

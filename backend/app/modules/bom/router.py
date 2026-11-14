@@ -22,6 +22,21 @@ read_actor = require_roles(["quan_ly", "nhan_vien"])
 write_actor = require_roles(["quan_ly"])
 
 
+def get_bom_if_match(
+    request: Request,
+    if_match: Annotated[
+        str | None,
+        Header(
+            alias="If-Match",
+            description="Single strong ETag from GET detail; required at runtime (428)",
+        ),
+    ] = None,
+) -> str | None:
+    """UC-17/18/19: preserve all validators for the service comparison under lock."""
+    values = request.headers.getlist("if-match")
+    return ", ".join(values) if values else if_match
+
+
 async def reject_body(request: Request) -> None:
     if await request.body():
         raise InvalidInputException(message="Endpoint không nhận request body")
@@ -114,7 +129,7 @@ async def create_version(
     service: Annotated[BomService, Depends(get_bom_service)],
     request_id: Annotated[str, Depends(get_request_id)],
     response: Response,
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_bom_if_match)] = None,
 ) -> BomDetailResponse:
     result, etag = await service.create_version(id, payload, actor, if_match, request_id)
     response.headers["Location"] = f"/api/v1/bom/{result.data.id}"
@@ -133,7 +148,7 @@ async def delete_bom(
     id: Annotated[int, Path(gt=0)],
     actor: Annotated[dict, Depends(write_actor)],
     service: Annotated[BomService, Depends(get_bom_service)],
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_bom_if_match)] = None,
 ) -> Response:
     await service.delete_bom(id, actor, if_match)
     return Response(status_code=204)
@@ -153,7 +168,7 @@ async def activate_bom(
     request_id: Annotated[str, Depends(get_request_id)],
     payload: Annotated[KichHoatBomInput, Body()],
     response: Response,
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_bom_if_match)] = None,
 ) -> BomDetailResponse:
     result, etag = await service.activate_bom(id, actor, if_match, request_id)
     response.headers["ETag"] = etag
