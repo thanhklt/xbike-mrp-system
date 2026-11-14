@@ -3,6 +3,13 @@
 Nguồn: `audit/{router,service,repository,ports,schemas,models}.py`, `app/dependencies.py`, `auth/service.py`, `nhan_vien/service.py`, `core/{persistence,exceptions}.py`.
 Module audit sở hữu ORM `LichSuThaoTac` ánh xạ bảng `"LichSuThaoTac"`. Ghi lịch sử là public method nội bộ `AuditService.append`; không có endpoint HTTP ghi/sửa/xóa lịch sử.
 
+Ảnh: [GET audit](assets/audit/01-danh-sach.png). Với phiếu xuất v4, luồng ghi là
+`PhieuXuatService → AuditService.append → SqlAlchemyAuditRepository.append → PostgreSQL`.
+Repository chỉ `session.add`; transaction của phiếu xuất flush/commit một lần với
+phiếu, giá, tồn, giữ hàng, ledger và tiến độ nguồn. Thêm hai field nullable
+`trang_thai_truoc`, `trang_thai_sau` vào input nội bộ/read DTO và thao tác `gui_lai`.
+Không có audit lần hai khi replay duyệt. Chi tiết xem [phieu_xuat.md](phieu_xuat.md).
+
 ## GET /api/v1/audit — Danh sách lịch sử
 
 Bearer JWT bắt buộc; chỉ `quan_tri_vien`, `quan_ly` được đọc. Query dùng dependency chung: page (mặc định 1, tối thiểu 1), page_size (mặc định 20, tối đa 100), search, sort_by (mặc định created_at), sort_order (asc/desc, mặc định desc); thêm `bo_thao_tac: ThaoTac | None` loại một thao tác hợp lệ (gồm `dang_nhap`) trước COUNT/phân trang, sai enum trả 422. Không áp quy tắc reject_query riêng của auth/nhân viên. Theo D-HD-01 (`docs/DECISION.md`, thay D-PQ-02), admin và quản lý đều thấy mọi loại đối tượng và đủ hai key du_lieu_truoc/du_lieu_sau, gồm giá trị null; nhân viên nhận 403.
@@ -54,7 +61,7 @@ sequenceDiagram
 
 Response dùng envelope nghiệp vụ hiện tại, khác envelope `data/meta` của auth/nhân viên. Không có ETag hoặc transaction ghi cho GET này. SQL lỗi không dự kiến được handler chung trả 500 an toàn. Khi request sai nhiều điều kiện, thứ tự ưu tiên validation/auth không được cố định bởi sơ đồ.
 
-`created_at` là TIMESTAMPTZ; hai trường dữ liệu trước/sau là JSONB. SQL bootstrap tạo hai index phục vụ tìm lịch sử và trigger `trg_audit_bat_bien` chặn UPDATE/DELETE. Tạo bảng bằng ORM đơn thuần không tạo trigger này.
+`created_at` là TIMESTAMPTZ; hai trường dữ liệu trước/sau là JSONB. ORM được đối chiếu ba index v4 và các CHECK trong init.sql; trigger `trg_audit_bat_bien` chặn UPDATE/DELETE. Tạo bảng bằng ORM đơn thuần không tạo trigger này. Quyền đọc và các bộ lọc legacy của endpoint không được refactor trong tác vụ phiếu xuất.
 Theo quyết định ngày 01/11/2026, hai cột `du_lieu_truoc` và `du_lieu_sau` dùng
 `JSONB(none_as_null=True)`: Python `None` được lưu thành SQL `NULL`, còn `{}` vẫn
 là một đối tượng JSON rỗng. Thay đổi chỉ áp dụng khi ORM ghi dữ liệu mới; không
