@@ -4,7 +4,12 @@ from collections.abc import Iterable
 from math import ceil
 from typing import Any
 
-from app.core.errors import ConflictException, InvalidInputException, NotFoundException
+from app.core.errors import (
+    ConflictException,
+    ForbiddenException,
+    InvalidInputException,
+    NotFoundException,
+)
 from app.core.preconditions import make_etag, verify_if_match
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
@@ -17,6 +22,7 @@ from app.modules.mat_hang.schemas import (
     DanhMucMatHangResponse,
     ListMeta,
     MatHangCreate,
+    MatHangListQuery,
     MatHangListResponse,
     MatHangPatch,
     MatHangRead,
@@ -32,35 +38,32 @@ class MatHangReader:
         self.cache = cache
         self.boms = boms
 
-    async def danh_muc(self) -> DanhMucMatHangResponse:
+    @staticmethod
+    def _require_reader(actor: dict) -> None:
+        roles = actor.get("roles")
+        if not isinstance(roles, (list, tuple, set, frozenset)) or not {
+            "quan_tri_vien",
+            "quan_ly",
+            "nhan_vien",
+        }.intersection(roles):
+            raise ForbiddenException()
+
+    async def danh_muc(self, actor: dict) -> DanhMucMatHangResponse:
+        """UC-09: specs/use_cases/catalog/UC-09.md."""
+        self._require_reader(actor)
         items = self.cache.snapshot().items
         return DanhMucMatHangResponse(data=list(items), meta=CatalogMeta(total=len(items)))
 
-    async def list_mat_hang(
-        self,
-        *,
-        q: str | None = None,
-        loai_mat_hang: str | None = None,
-        is_active: bool | None = None,
-        don_vi_tinh: str | None = None,
-        mau_sac: str | None = None,
-        don_gia_min: int | None = None,
-        don_gia_max: int | None = None,
-        page: int = 1,
-        page_size: int = 20,
-        sort: str = "id",
-    ) -> MatHangListResponse:
-        records = filter_items(
-            self.cache.snapshot(),
-            q=q,
-            loai_mat_hang=loai_mat_hang,
-            is_active=is_active,
-            don_vi_tinh=don_vi_tinh,
-            mau_sac=mau_sac,
-            don_gia_min=don_gia_min,
-            don_gia_max=don_gia_max,
-            sort=sort,
-        )
+    async def list_mat_hang(self, params: MatHangListQuery, actor: dict) -> MatHangListResponse:
+        """UC-09: combined filters and stable pagination, catalog/UC-09.md."""
+        self._require_reader(actor)
+        values = params.model_dump(exclude={"page", "page_size"})
+        if params.is_active is not None:
+            if params.loai_mat_hang == "linh_kien":
+                raise InvalidInputException(message="Active state applies only to finished items")
+            values["loai_mat_hang"] = "thanh_pham"
+        records = filter_items(self.cache.snapshot(), **values)
+        page, page_size = params.page, params.page_size
         total = len(records)
         return MatHangListResponse(
             data=records[(page - 1) * page_size : page * page_size],
@@ -69,7 +72,11 @@ class MatHangReader:
             ),
         )
 
-    async def get_mat_hang(self, item_id: int) -> tuple[MatHangRead, str]:
+    async def get_mat_hang(self, item_id: int, actor: dict) -> tuple[MatHangRead, str]:
+        """UC-09: specs/use_cases/catalog/UC-09.md, one item/context snapshot."""
+        self._require_reader(actor)
+        if not 0 < item_id <= 2**31 - 1:
+            raise NotFoundException()
         return await self.boms.item_detail(item_id)
 
 
@@ -163,7 +170,14 @@ class MatHangService:
         require_manager(actor)
         async with self.mutation.scope() as changes:
             before = await self._locked_item(item_id, if_match)
-            update = payload.model_dump(exclude_unset=True)
+            update = {
+                key: value
+                for key, value in payload.model_dump(exclude_unset=True).items()
+                if value != getattr(before, key)
+            }
+            changed = bool(update)
+            if "sku" in update and (await self.repository.get_references(item_id)).has_any:
+                raise ConflictException(message="SKU cannot change after a reference or stock")
             if "don_vi_tinh" in update and update["don_vi_tinh"] != before.don_vi_tinh:
                 refs = await self.repository.get_references(item_id)
                 if refs.has_bom or refs.has_docs:
@@ -183,7 +197,8 @@ class MatHangService:
                 record = await self.repository.update(item_id, update)
                 await self._audit("sua", record, actor, previous)
             result = await self.boms.item_detail(item_id)
-            changes.append(result[0])
+            if changed:
+                changes.append(result[0])
         return result
 
     async def delete_mat_hang(self, item_id: int, if_match: str | None, actor: dict) -> None:
@@ -195,5 +210,5 @@ class MatHangService:
                 raise InvalidInputException(message="Components cannot be stopped")
             if before.is_active:
                 await self.boms.stop_for_item_in_transaction(item_id, actor)
-            after, _ = await self.boms.item_detail(item_id)
-            changes.append(after)
+                after, _ = await self.boms.item_detail(item_id)
+                changes.append(after)

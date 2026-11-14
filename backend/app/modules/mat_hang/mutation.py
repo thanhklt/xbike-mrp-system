@@ -20,6 +20,7 @@ class MatHangMutation:
         if not self._active.get():
             raise RuntimeError("Caller must own the catalog mutation transaction")
 
+    @asynccontextmanager
     async def scope(self) -> AsyncIterator[list[MatHangRead]]:
         if self._active.get():
             raise RuntimeError("Nested catalog mutation would commit the caller's transaction")
@@ -32,13 +33,15 @@ class MatHangMutation:
                     async with self.transaction:
                         changes: list[MatHangRead] = []
                         yield changes
-                        prepared = self.cache.prepare(changes)
+                        if changes:
+                            prepared = self.cache.prepare(changes)
                 except ConflictException:
                     raise
                 except BaseException:
                     if prepared is not None:
                         self.cache.mark_unavailable()
                     raise
-                self.cache.publish(prepared)
+                if prepared is not None:
+                    self.cache.publish(prepared)
             finally:
                 self._active.reset(token)

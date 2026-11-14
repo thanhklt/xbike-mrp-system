@@ -34,7 +34,10 @@ router = APIRouter(
     responses={code: {"model": PhieuNhapErrorResponse} for code in (401, 403, 422, 500)},
 )
 detail_headers = {
-    "ETag": {"schema": {"type": "string"}, "description": "Strong ETag including receipt items"}
+    "ETag": {
+        "schema": {"type": "string"},
+        "description": "Strong ETag including receipt items and current supplier information (UC-44)",
+    }
 }
 
 

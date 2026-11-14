@@ -1,0 +1,243 @@
+{
+  "captured_at": "2026-11-14T13:56:43.835958+00:00",
+  "environment": "isolated PostgreSQL 16, actual init.sql, ASGI/auth dependencies",
+  "note": "Authorization omitted; request IDs are actual generated values.",
+  "examples": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/nha_cung_cap",
+        "headers": {},
+        "body": {
+          "ten_ncc": "  Vendor  ",
+          "so_dien_thoai": "phone",
+          "dia_chi": "address",
+          "phuong": " Ward ",
+          "tinh": " Province "
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "etag": "\"d575aa852199f383cdfea4fe7ae15181a40808ded41a0752185d8732503f9153\"",
+          "location": "/api/v1/nha_cung_cap/1"
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "ma_ncc": "NCC-000001",
+            "ten_ncc": "  Vendor  ",
+            "so_dien_thoai": "phone",
+            "dia_chi": "address",
+            "phuong": " Ward ",
+            "tinh": " Province "
+          },
+          "meta": {
+            "request_id": "7b712e64-12e2-4a8d-b5e0-fee35bac745e"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/nha_cung_cap/1",
+        "headers": {},
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"d575aa852199f383cdfea4fe7ae15181a40808ded41a0752185d8732503f9153\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "ma_ncc": "NCC-000001",
+            "ten_ncc": "  Vendor  ",
+            "so_dien_thoai": "phone",
+            "dia_chi": "address",
+            "phuong": " Ward ",
+            "tinh": " Province "
+          },
+          "meta": {
+            "request_id": "609e5fd7-4ce5-4044-8ea3-20704daf72c2"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/nha_cung_cap?tinh=province",
+        "headers": {},
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": 1,
+              "ma_ncc": "NCC-000001",
+              "ten_ncc": "  Vendor  ",
+              "so_dien_thoai": "phone",
+              "dia_chi": "address",
+              "phuong": " Ward ",
+              "tinh": " Province "
+            }
+          ],
+          "meta": {
+            "request_id": "de7ece2f-0673-4a46-a786-df4e3f519d89",
+            "page": 1,
+            "page_size": 20,
+            "total": 1,
+            "total_pages": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/nha_cung_cap/1",
+        "headers": {
+          "If-Match": "\"d575aa852199f383cdfea4fe7ae15181a40808ded41a0752185d8732503f9153\""
+        },
+        "body": {
+          "ten_ncc": "Updated supplier"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"a37fbb05485ce99c352407093ca9c603e1ad6cc3725edab3fd18478c8614350f\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "ma_ncc": "NCC-000001",
+            "ten_ncc": "Updated supplier",
+            "so_dien_thoai": "phone",
+            "dia_chi": "address",
+            "phuong": " Ward ",
+            "tinh": " Province "
+          },
+          "meta": {
+            "request_id": "19d40dd8-3213-47d8-84ce-9afeabd42b07"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/nha_cung_cap/1",
+        "headers": {
+          "If-Match": "\"a37fbb05485ce99c352407093ca9c603e1ad6cc3725edab3fd18478c8614350f\""
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"a37fbb05485ce99c352407093ca9c603e1ad6cc3725edab3fd18478c8614350f\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "ma_ncc": "NCC-000001",
+            "ten_ncc": "Updated supplier",
+            "so_dien_thoai": "phone",
+            "dia_chi": "address",
+            "phuong": " Ward ",
+            "tinh": " Province "
+          },
+          "meta": {
+            "request_id": "d0efb722-e466-472e-981c-22b7a5b8483c"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/api/v1/nha_cung_cap/1",
+        "headers": {
+          "If-Match": "\"d575aa852199f383cdfea4fe7ae15181a40808ded41a0752185d8732503f9153\""
+        },
+        "body": {}
+      },
+      "response": {
+        "status": 412,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "du_lieu_da_thay_doi",
+            "message": "Dữ liệu đã thay đổi; hãy tải lại",
+            "details": []
+          },
+          "meta": {
+            "request_id": "ae14b2f7-b964-4944-8860-44daccd0c295"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/mat_hang",
+        "headers": {},
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": 1,
+              "ma_mat_hang": "MH-000001",
+              "ten_mat_hang": "Frame",
+              "sku": "frame",
+              "loai_mat_hang": "linh_kien",
+              "don_vi_tinh": "chiec",
+              "mau_sac": null,
+              "mo_ta": null,
+              "don_gia": 100,
+              "is_active": true,
+              "so_luong_ton": 0,
+              "so_luong_dang_giu": 0,
+              "so_luong_con_dung": 0,
+              "ton_kho_updated_at": null
+            },
+            {
+              "id": 2,
+              "ma_mat_hang": "MH-000002",
+              "ten_mat_hang": "Wheel",
+              "sku": "wheel",
+              "loai_mat_hang": "linh_kien",
+              "don_vi_tinh": "bo",
+              "mau_sac": null,
+              "mo_ta": null,
+              "don_gia": 50,
+              "is_active": true,
+              "so_luong_ton": 0,
+              "so_luong_dang_giu": 0,
+              "so_luong_con_dung": 0,
+              "ton_kho_updated_at": null
+            }
+          ],
+          "meta": {
+            "page": 1,
+            "page_size": 20,
+            "total": 2,
+            "total_pages": 1,
+            "request_id": "f11dc2bd-3189-4c9b-91d6-6744244878ee"
+          }
+        }
+      }
+    }
+  ]
+}

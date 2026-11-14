@@ -88,6 +88,8 @@ class SqlAlchemyMatHangRepository:
         for name, value in changes.items():
             setattr(record, name, value)
         await self.session.flush()
+        # UPDATE expires PostgreSQL computed columns; hydrate before synchronous DTO validation.
+        await self.session.refresh(record)
         return MatHangRead.model_validate(record)
 
     async def read_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:

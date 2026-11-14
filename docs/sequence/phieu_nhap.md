@@ -1,6 +1,6 @@
 # Luồng API phiếu nhập
 
-Đối chiếu ngày 03/11/2026 với router, service, repository, schema, ORM và dependency hiện tại trong `backend/app/modules/phieu_nhap/`. Cấu trúc phiếu nhập/tồn nâng theo ERD v3.1 và quyết định của dev; giữ tên bảng snake_case.
+Đối chiếu code phiếu nhập tại `backend/app/modules/phieu_nhap/`; phần đọc NCC được cập nhật ngày 14/11/2026 theo [UC-44 và Q6](../../specs/use_cases/catalog/README.md). Source hiện map bảng PascalCase. Phần tiền/nghiệp vụ ghi phiếu còn theo implementation cũ, chưa xác nhận tương thích đầy đủ SQL v4. Tác vụ Catalog chỉ kiểm chứng đọc phiếu lịch sử và projection NCC, không refactor ghi sổ.
 Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yTLvhQ4peRENCLjbCKhNdGy_L2Xz/view), mục 2, 3, 5, 7, 13, 14 và quy ước mã trong `infra/postgres/init.sql`.
 
 ## Mở sơ đồ từng endpoint
@@ -28,13 +28,14 @@ AuditRepository chỉ `session.add(LichSuThaoTac)`, chưa gửi INSERT ngay tạ
 
 - Sáu endpoint `/phieu_nhap` chỉ dành cho Q (`quan_ly`). JWT, phiên bản mật khẩu và trạng thái tài khoản được kiểm tra ở mỗi request. A không mặc định có quyền Q.
 - Response thành công: `{data, meta}`; danh sách có page/page_size/total/total_pages/request_id. Lỗi: `{error: {code, message, details}, meta: {request_id}}`.
-- GET chi tiết và POST trả strong ETag tính trên toàn bộ PhieuNhapRead, bao gồm các dòng chi tiết được sắp theo ID. `request_id` không tham gia ETag.
+- GET chi tiết và POST trả strong ETag tính trên toàn bộ PhieuNhapRead, gồm chi tiết sắp theo ID và `nha_cung_cap: NhaCungCapRead` hiện tại. Giữ `ncc_id` và các field/kiểu tiền cũ. Sửa NCC làm ETag phiếu đổi dù row phiếu không đổi; client cần GET lại trước ghi. `request_id` không tham gia ETag.
+- Repository hydrate quan hệ NCC view-only bằng SELECT IN, populate_existing cho cả list/detail/locked DTO và response sau ghi. Không tạo cột/snapshot NCC trên phiếu. Audit phiếu loại projection `nha_cung_cap` khỏi snapshot lưu DB; không ghi audit phiếu khi sửa NCC. Không đổi trạng thái, tiền, chi tiết, tồn hoặc ledger của phiếu cũ.
 - POST tạo mới chỉ tạo trạng thái `nhap`, không ghi `ton_kho` hoặc `giao_dich_kho`. PATCH/DELETE chỉ tác động nháp chưa có giao dịch kho. Chỉ action `hoan_tat` cộng tồn, ghi ledger và chuyển trạng thái.
 - PATCH, DELETE và hoàn tất yêu cầu If-Match. Sau khi khóa phiếu, không tìm thấy trả 404, thiếu header trả 428. ETag cũ trả 412; riêng hoàn tất đã thành công cho phép retry với ETag cũ nhưng vẫn cần header. Header lặp trả 422.
 - GET mới giữ khóa FOR SHARE trên phiếu đến khi đọc xong chi tiết để response và ETag cùng một phiên bản. GET không ghi dữ liệu. COUNT và trang danh sách là hai truy vấn, tổng số có thể thay đổi khi có request tạo/xóa đồng thời.
 - Hoàn tất khóa phiếu, chi tiết rồi mặt hàng FOR UPDATE theo ID tăng dần. Cập nhật trực tiếp `MatHang.so_luong_ton` và `ton_kho_updated_at`; không truy vấn hoặc ghi `ton_kho`, không cấp ID tồn hay lấy advisory lock tồn. Các phiếu dùng chung mặt hàng được tuần tự hóa bằng khóa dòng.
 - Trước cộng tồn, số dư phải khớp tổng ledger và số lượng mới không vượt INTEGER. Sai lệch trả 409, không tự sửa số dư. Mỗi chi tiết sinh đúng một `nhap_vat_tu` dương với duy nhất FK nguồn `chi_tiet_phieu_nhap_id`. Tồn, ledger, trạng thái và audit cùng commit hoặc cùng rollback.
-- PostgreSQL cấp ID phiếu và chi tiết bằng IDENTITY. Advisory transaction lock `(20261022, 1)` chỉ bảo vệ mã tháng; mã lớn nhất xét cả bảng và snapshot audit. Migration đồng bộ sequence theo ID đang có và lịch sử; rollback có thể tạo khoảng trống ID.
+- PostgreSQL cấp ID phiếu và chi tiết bằng IDENTITY. Advisory transaction lock `(20261022, 1)` chỉ bảo vệ mã tháng; mã lớn nhất xét cả bảng và snapshot audit. Ghi chu lich su (khong chay migration trong tac vu Catalog): đồng bộ sequence theo ID đang có và lịch sử; rollback có thể tạo khoảng trống ID.
 - Mã `PN-YYYYMM-NNNNNN` do server sinh theo tháng Asia/Ho_Chi_Minh, từ 000001 đến 999999. PostgreSQL chuyển múi giờ, không phụ thuộc tzdata trên máy Windows. Hết dải trả 409, không quay vòng.
 - `created_at` là TIMESTAMPTZ, API mới trả UTC có Z; `ngay_nhap` là DATE bắt buộc, `ghi_chu` nullable. Người lập/NCC/thời gian không được NULL sau nâng cấp. Tiền NULL cũ được giữ nhưng phiếu có giá/tổng không hợp lệ không được hoàn tất.
 - Tiền dùng Decimal/numeric(18,2), giá >= 0, tối đa 9999999999999999.99 và hai chữ số thập phân; request nhận chuỗi hoặc integer, từ chối float/bool. Response tiền là chuỗi hai chữ số. Số lượng/ID vẫn integer nghiêm ngặt trong dải INTEGER. Tổng do server tính.
@@ -74,7 +75,7 @@ sequenceDiagram
             S->>P: list_receipts(params)
             P->>DB: COUNT theo bộ lọc và khoảng ngày UTC
             opt Trang còn dữ liệu
-                P->>DB: SELECT phiếu phân trang FOR SHARE rồi đọc chi tiết liên quan
+                P->>DB: SELECT phiếu FOR SHARE, SELECT IN chi tiết và NCC hiện tại
             end
             DB-->>P: Dữ liệu và tổng số phiếu
             P-->>S: RecordPage
@@ -82,6 +83,7 @@ sequenceDiagram
             R-->>C: 200 PhieuNhapListResponse
         end
     end
+    Note over P,DB: DTO hydrate NCC hien tai qua view-only relationship, khong snapshot
     Note over R,DB: Lỗi nội bộ chưa phân loại trả 500 an toàn, không lộ SQL
 ```
 
@@ -110,7 +112,7 @@ sequenceDiagram
         else Hợp lệ
             R->>S: get_receipt(id, request_id)
             S->>P: get_receipt(id) nếu ID trong dải INTEGER
-            P->>DB: SELECT phiếu FOR SHARE rồi đọc chi tiết
+            P->>DB: SELECT phiếu FOR SHARE, SELECT IN chi tiết và NCC hiện tại
             alt ID không tồn tại hoặc vượt dải
                 S-->>C: 404 khong_tim_thay
             else Có phiếu
@@ -122,6 +124,7 @@ sequenceDiagram
             end
         end
     end
+    Note over P,DB: DTO hydrate NCC hien tai qua view-only relationship, khong snapshot
     Note over R,DB: Chỉ đọc dữ liệu, lỗi nội bộ trả 500 an toàn
 ```
 

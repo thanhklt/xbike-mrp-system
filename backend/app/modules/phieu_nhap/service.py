@@ -85,8 +85,10 @@ class PhieuNhapService:
                 loai_doi_tuong="phieu_nhap",
                 doi_tuong_id=before.id,
                 thao_tac=operation,
-                du_lieu_truoc=before.model_dump(mode="json"),
-                du_lieu_sau=after.model_dump(mode="json") if after is not None else None,
+                du_lieu_truoc=before.model_dump(mode="json", exclude={"nha_cung_cap"}),
+                du_lieu_sau=after.model_dump(mode="json", exclude={"nha_cung_cap"})
+                if after is not None
+                else None,
             )
         )
 
@@ -289,7 +291,7 @@ class PhieuNhapService:
                     nhan_vien_id=int(actor["sub"]),
                     loai_doi_tuong="phieu_nhap",
                     doi_tuong_id=record.id,
-                    du_lieu_sau=record.model_dump(mode="json"),
+                    du_lieu_sau=record.model_dump(mode="json", exclude={"nha_cung_cap"}),
                 )
             )
         return self.detail_response(record, request_id)
