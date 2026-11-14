@@ -27,17 +27,17 @@ Mỗi người dùng chỉ thấy và chỉ làm được đúng phần việc c
 # BR-002: xBike MRP — Quản trị tài khoản người dùng
 
 ## Goal
-Quản trị viên tự quản lý toàn bộ tài khoản (cấp mới, khóa, đổi vai trò, đổi mật khẩu) mà không cần can thiệp kỹ thuật, và mọi thay đổi đều truy được ai làm, vì sao.
+Quản trị viên tự quản lý toàn bộ tài khoản (cấp mới, khóa, đổi vai trò, đổi mật khẩu) mà không cần can thiệp kỹ thuật, và mọi thay đổi đều truy được ai làm, lúc nào.
 
 ## Success Metrics
-- account_change_traceability = 100% (mỗi lần thêm, khóa, mở khóa, đổi vai trò đều có người thực hiện, thời điểm, lý do; mỗi lần đổi mật khẩu có người thực hiện, thời điểm; đo qua lịch sử thao tác)
+- account_change_traceability = 100% (mỗi lần thêm, khóa, mở khóa, đổi vai trò, đổi mật khẩu đều có người thực hiện, thời điểm; lý do được ghi khi Quản trị viên nhập; đo qua lịch sử thao tác)
 - active_admin_count >= 1 (luôn còn ít nhất một Quản trị viên đang hoạt động)
 
 ## In Scope (Giai đoạn 1)
 - Xem, tìm kiếm, lọc, sắp xếp danh sách tài khoản
 - Thêm tài khoản với bất kỳ vai trò nào: Quản trị viên, Quản lý kho, Nhân viên
-- Khóa và mở khóa tài khoản, bắt buộc ghi lý do (khóa thay cho xóa)
-- Đổi vai trò giữa cả ba vai trò: Quản trị viên, Quản lý kho, Nhân viên; bắt buộc ghi lý do
+- Khóa và mở khóa tài khoản (khóa thay cho xóa); không bắt buộc ghi lý do
+- Đổi vai trò giữa cả ba vai trò: Quản trị viên, Quản lý kho, Nhân viên; không bắt buộc ghi lý do
 - Vai trò mới có hiệu lực ngay: mọi phiên đang đăng nhập của tài khoản đó kết thúc, người dùng phải đăng nhập lại
 - Không đổi vai trò của Nhân viên đang được giao yêu cầu sản xuất chưa kết thúc (Nháp, Đã gửi, Chờ bổ sung linh kiện, Đang thực hiện)
 - Đổi mật khẩu cho bất kỳ tài khoản nào, kể cả của chính mình; chỉ Quản trị viên làm được; không cần nhập mật khẩu hiện tại
@@ -93,19 +93,21 @@ Quản lý kho có một danh mục mặt hàng và nhà cung cấp chính xác,
 - Chỉ thành phẩm có trạng thái đang dùng / đã ngừng (ngừng sản xuất); linh kiện không có trạng thái ngừng, chỉ được nhập
 - Quản trị viên, Quản lý kho, Nhân viên đều tra cứu và tìm kiếm nâng cao mặt hàng theo các tiêu chí ở BR-003
 - Thông tin mặt hàng: mã, tên, loại, đơn vị tính, đơn giá (VND), màu sắc, mô tả
+- Mã mặt hàng và mã nhà cung cấp do hệ thống tự cấp khi tạo, không trùng, không sửa; người dùng không nhập mã
 - Tạo thành phẩm phải tạo kèm công thức của nó (xem BR-005); linh kiện không cần công thức
 - Mỗi mặt hàng hiển thị ba con số: tồn thực tế, phần đang giữ cho yêu cầu sản xuất, phần còn dùng được
 - Số tồn chỉ thay đổi qua chứng từ đã ghi nhận vào kho, không ai sửa tay
 - Không đổi loại mặt hàng sau khi tạo; không đổi đơn vị tính của mặt hàng đã được dùng trong công thức hay chứng từ
-- Quản lý kho tạo và xem nhà cung cấp: mã, tên; điện thoại và địa chỉ không bắt buộc
-- Địa chỉ nhà cung cấp gồm tỉnh, phường và địa chỉ chi tiết, do Quản lý kho nhập tay; hệ thống không kiểm tra tính chính xác của tỉnh, phường
+- Quản lý kho tạo, sửa và xem nhà cung cấp: mã (hệ thống cấp), tên, điện thoại, địa chỉ; mọi thông tin đều bắt buộc
+- Địa chỉ nhà cung cấp gồm tỉnh, phường và địa chỉ chi tiết, là thuộc tính của nhà cung cấp, do Quản lý kho nhập tay; hệ thống không kiểm tra tính chính xác của tỉnh, phường
+- Sửa nhà cung cấp được sửa mọi thông tin trừ mã
 - Nhân viên không xem nhà cung cấp
 
 ## Out of Scope
 - Bán thành phẩm (giai đoạn 2)
 - Vành bánh xe, moay-ơ, nan hoa (giai đoạn 2)
 - Tách loại "nguyên vật liệu" riêng khỏi linh kiện (giai đoạn 2)
-- Sửa, xóa nhà cung cấp
+- Xóa nhà cung cấp
 - Xóa hẳn mặt hàng
 - Cảnh báo tồn kho thấp
 - Nhiều kho, vị trí lưu trong kho
@@ -419,7 +421,7 @@ Mọi thao tác quan trọng đều truy được ai làm, lúc nào, thay đổ
   - Tạo, sửa, xóa nháp
   - Gửi (kể cả gửi lại sau khi bị từ chối), kiểm tra, duyệt, từ chối, hoàn tất nhập, bắt đầu sản xuất, hủy yêu cầu
   - Thao tác tài khoản, kể cả đổi vai trò và đổi mật khẩu
-  - Thao tác dữ liệu nền: tạo, sửa mặt hàng; ngừng, dùng lại thành phẩm; tạo nhà cung cấp; tạo công thức, tạo phiên bản mới, dùng lại, ngừng công thức. Thao tác sửa ghi giá trị trước và sau
+  - Thao tác dữ liệu nền: tạo, sửa mặt hàng; ngừng, dùng lại thành phẩm; tạo, sửa nhà cung cấp; tạo công thức, tạo phiên bản mới, dùng lại, ngừng công thức. Thao tác sửa ghi giá trị trước và sau
 - Mỗi bản ghi có: người thực hiện, thời điểm, đối tượng, trạng thái trước và sau, lý do
 - Khi yêu cầu chuyển Chờ bổ sung linh kiện, lưu lại danh sách thiếu tại thời điểm đó
 - Không ai sửa hay xóa lịch sử; không lưu mật khẩu
