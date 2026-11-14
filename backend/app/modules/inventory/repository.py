@@ -9,6 +9,7 @@ from app.core.errors import ConflictException, InsufficientStock
 from app.core.persistence import select_page
 from app.modules.inventory.models import StockLevel, StockMovement
 from app.modules.inventory.ports import (
+    ReceiptStock,
     StockAdjustmentLine,
     StockIssueLine,
     StockReceiptLine,
@@ -149,71 +150,72 @@ class SqlAlchemyInventoryRepository:
             )
         return sorted(movement_ids)
 
-    async def receive_receipt(
-        self, lines: list[StockReceiptLine], actor_id: int, posted_at: datetime
-    ) -> list[int]:
-        part_ids = sorted(line.mat_hang_id for line in lines)
-        stocks = (
-            await self.session.scalars(
-                select(MatHang)
-                .where(MatHang.id.in_(part_ids))
-                .order_by(MatHang.id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-        ).all()
-        by_part = {stock.id: stock for stock in stocks}
-        if len(by_part) != len(set(part_ids)):
-            raise ConflictException(message="Receipt item no longer exists")
-        ledger = dict(
+    async def lock_receipt_stock(self, item_ids: list[int]) -> list[ReceiptStock]:
+        if not item_ids:
+            return []
+        items = (
             (
                 await self.session.execute(
-                    text("""
-                        SELECT mat_hang_id, sum(so_luong_bien_dong)
-                        FROM "GiaoDichKho"
-                        WHERE mat_hang_id IN :part_ids
-                        GROUP BY mat_hang_id
-                    """).bindparams(bindparam("part_ids", expanding=True)),
-                    {"part_ids": part_ids},
+                    text(
+                        """SELECT id,loai_mat_hang,is_active,so_luong_ton,so_luong_dang_giu FROM "MatHang" WHERE id IN :ids ORDER BY id FOR UPDATE"""
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": sorted(set(item_ids))},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        ledger: dict[int, int] = dict(
+            (
+                await self.session.execute(
+                    text(
+                        'SELECT mat_hang_id,sum(so_luong_bien_dong) FROM "GiaoDichKho" WHERE mat_hang_id IN :ids GROUP BY mat_hang_id'
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": item_ids},
                 )
             ).all()
         )
+        return [
+            ReceiptStock(
+                item["id"],
+                item["loai_mat_hang"],
+                item["is_active"],
+                item["so_luong_ton"],
+                item["so_luong_dang_giu"],
+                int(ledger.get(item["id"], 0)),
+            )
+            for item in items
+        ]
+
+    async def receive_receipt(
+        self, lines: list[StockReceiptLine], actor_id: int, posted_at: datetime
+    ) -> list[int]:
+        # The service already validated and holds ordered stock locks in this transaction.
+        movements = []
         for line in sorted(lines, key=lambda line: line.mat_hang_id):
-            stock = by_part[line.mat_hang_id]
-            balance = stock.so_luong_ton
-            if balance != ledger.get(line.mat_hang_id, 0):
-                raise ConflictException(message="Stock balance does not match its ledger")
-            quantity = balance + line.so_luong
-            if quantity > 2**31 - 1:
-                raise ConflictException(message="Stock quantity exceeds PostgreSQL INTEGER range")
-            stock.so_luong_ton = quantity
-            stock.ton_kho_updated_at = (
-                posted_at.replace(tzinfo=timezone.utc) if posted_at.tzinfo is None else posted_at
+            after = await self.session.scalar(
+                text(
+                    """UPDATE "MatHang" SET so_luong_ton=so_luong_ton+:quantity, ton_kho_updated_at=:at WHERE id=:id RETURNING so_luong_ton"""
+                ),
+                {"quantity": line.so_luong, "at": posted_at, "id": line.mat_hang_id},
+            )
+            movements.append(
+                await self.session.scalar(
+                    text(
+                        """INSERT INTO "GiaoDichKho" (mat_hang_id,loai_giao_dich,so_luong_bien_dong,so_luong_ton_sau,chi_tiet_phieu_nhap_id,nhan_vien_id,posted_at) VALUES (:item,'nhap_linh_kien',:quantity,:balance,:source,:actor,:at) RETURNING id"""
+                    ),
+                    {
+                        "item": line.mat_hang_id,
+                        "quantity": line.so_luong,
+                        "balance": after,
+                        "source": line.chi_tiet_phieu_nhap_id,
+                        "actor": actor_id,
+                        "at": posted_at,
+                    },
+                )
             )
         await self.session.flush()
-        movement_ids = []
-        for line in lines:
-            movement_id = await self.session.scalar(
-                text("""
-                    INSERT INTO "GiaoDichKho" (
-                        mat_hang_id, loai_giao_dich, so_luong_bien_dong,
-                        chi_tiet_phieu_nhap_id, nhan_vien_id, posted_at
-                    ) VALUES (
-                        :part_id, 'nhap_vat_tu', :quantity, :detail_id, :actor_id, :posted_at
-                    ) RETURNING id
-                """),
-                {
-                    "part_id": line.mat_hang_id,
-                    "quantity": line.so_luong,
-                    "detail_id": line.chi_tiet_phieu_nhap_id,
-                    "actor_id": actor_id,
-                    "posted_at": posted_at.replace(tzinfo=timezone.utc)
-                    if posted_at.tzinfo is None
-                    else posted_at,
-                },
-            )
-            movement_ids.append(movement_id)
-        return sorted(movement_ids)
+        return sorted(movements)
 
     async def list_stock(self, params: PageParams) -> RecordPage[StockLevelResponse]:
         return await select_page(self.session, StockLevel, StockLevelResponse, params)

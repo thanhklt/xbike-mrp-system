@@ -5,7 +5,7 @@ from app.core.errors import AppException, ConflictException
 
 class ReceiptDependencyInvalid(ConflictException):
     code = "phu_thuoc_khong_hop_le"
-    default_message = "Receipt items must be active raw materials or components"
+    default_message = "Receipt items must be active components"
 
 
 class ReceiptCodeConflict(ConflictException):

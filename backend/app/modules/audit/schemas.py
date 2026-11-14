@@ -11,6 +11,8 @@ class CreationAudit(BaseModel):
     loai_doi_tuong: str
     doi_tuong_id: int
     thao_tac: str = "tao"
+    trang_thai_truoc: str | None = None
+    trang_thai_sau: str | None = None
     du_lieu_sau: dict[str, Any] | None
     du_lieu_truoc: dict[str, Any] | None = None
     ly_do: str | None = None
@@ -59,6 +61,8 @@ class AuditLogResponse(BaseModel):
     ]
     doi_tuong_id: int
     thao_tac: ThaoTac
+    trang_thai_truoc: str | None = None
+    trang_thai_sau: str | None = None
     ly_do: str | None
     created_at: datetime
     du_lieu_truoc: dict | None

@@ -1,11 +1,14 @@
 """Receipt lifecycle with atomic stock posting and audit."""
 
+import json
+import re
 from datetime import datetime, timezone
 from hashlib import sha256
+from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.errors import ConflictException, NotFoundException
+from app.core.errors import ConflictException, ForbiddenException, NotFoundException
 from app.core.transactions import Transaction
 from app.modules.audit.schemas import CreationAudit
 from app.modules.audit.service import AuditService
@@ -20,6 +23,7 @@ from app.modules.phieu_nhap.errors import (
 from app.modules.phieu_nhap.ports import ReceivingRepository
 from app.modules.phieu_nhap.schemas import (
     INT_MAX,
+    ChiTietPhieuNhapCreate,
     GoodsReceiptNoteCreate,
     PhieuNhapActionRead,
     PhieuNhapActionResponse,
@@ -34,6 +38,8 @@ from app.modules.phieu_nhap.schemas import (
 
 
 class PhieuNhapService:
+    """UC-20..22; specs/use_cases/goods_receipt/README.md (GR-AC-01..22)."""
+
     def __init__(
         self,
         repository: ReceivingRepository,
@@ -46,15 +52,27 @@ class PhieuNhapService:
         self.transaction = transaction
         self.inventory = inventory
 
-    async def _locked_receipt(self, record_id: int, if_match: str | None) -> PhieuNhapRead:
+    async def _locked_receipt(self, record_id: int) -> PhieuNhapRead:
         if record_id > INT_MAX:
             raise NotFoundException()
         record = await self.repository.lock_receipt(record_id)
         if record is None:
             raise NotFoundException()
-        if if_match is None:
-            raise ReceiptPreconditionRequired()
         return record
+
+    @staticmethod
+    def _require_manager(actor: dict) -> None:
+        roles = actor.get("roles")
+        if not isinstance(roles, (list, tuple, set, frozenset)) or "quan_ly" not in roles:
+            raise ForbiddenException()
+
+    @staticmethod
+    def _require_if_match(if_match: str | None) -> str:
+        if if_match is None or not if_match.strip():
+            raise ReceiptPreconditionRequired()
+        if not re.fullmatch(r'"[0-9a-f]{64}"', if_match.strip()):
+            raise ReceiptPreconditionFailed()
+        return if_match.strip()
 
     def _check_etag(self, record: PhieuNhapRead, if_match: str) -> None:
         if if_match.strip() != self.detail_response(record, "")[1]:
@@ -70,11 +88,23 @@ class PhieuNhapService:
         parts = await self.repository.lock_parts(part_ids)
         if len(parts) != len(part_ids):
             raise NotFoundException(message="Receipt item not found")
-        if any(
-            part.is_active is not True or part.loai_mat_hang not in ("nguyen_vat_lieu", "linh_kien")
-            for part in parts
-        ):
+        if any(part.is_active is not True or part.loai_mat_hang != "linh_kien" for part in parts):
             raise ReceiptDependencyInvalid()
+
+    async def _validate_stock(self, record: PhieuNhapRead) -> None:
+        stocks = await self.inventory.lock_receipt_stock(
+            [line.mat_hang_id for line in record.chi_tiet]
+        )
+        quantities = {line.mat_hang_id: line.so_luong for line in record.chi_tiet}
+        if {stock.id for stock in stocks} != set(quantities):
+            raise ReceiptDependencyInvalid(message="Receipt item missing")
+        for stock in stocks:
+            if stock.loai_mat_hang != "linh_kien" or stock.is_active is not True:
+                raise ReceiptDependencyInvalid()
+            if stock.so_luong_ton != stock.ledger_balance:
+                raise ConflictException(message="Stock balance differs from ledger")
+            if stock.so_luong_ton + quantities[stock.id] > INT_MAX:
+                raise ConflictException(message="Stock quantity exceeds PostgreSQL INTEGER range")
 
     async def _audit_change(
         self, operation: str, before: PhieuNhapRead, after: PhieuNhapRead | None, actor: dict
@@ -85,6 +115,8 @@ class PhieuNhapService:
                 loai_doi_tuong="phieu_nhap",
                 doi_tuong_id=before.id,
                 thao_tac=operation,
+                trang_thai_truoc=before.trang_thai,
+                trang_thai_sau=after.trang_thai if after else None,
                 du_lieu_truoc=before.model_dump(mode="json"),
                 du_lieu_sau=after.model_dump(mode="json") if after is not None else None,
             )
@@ -98,11 +130,13 @@ class PhieuNhapService:
         actor: dict,
         request_id: str,
     ) -> tuple[PhieuNhapDetailResponse, str]:
+        """UC-20: replace draft content with a checked validator; no-op creates no audit."""
+        self._require_manager(actor)
         async with self.transaction:
-            before = await self._locked_receipt(record_id, if_match)
-            self._check_etag(before, if_match)
+            before = await self._locked_receipt(record_id)
+            self._check_etag(before, self._require_if_match(if_match))
             await self._require_editable(before)
-            changes = {}
+            changes: dict[str, Any] = {}
             items = None
             for field in ("ngay_nhap", "ghi_chu"):
                 if field in payload.model_fields_set and getattr(payload, field) != getattr(
@@ -149,9 +183,11 @@ class PhieuNhapService:
         return self.detail_response(after, request_id)
 
     async def delete_receipt(self, record_id: int, if_match: str | None, actor: dict) -> None:
+        """UC-20: delete only an unchanged draft, preserving audit/code history."""
+        self._require_manager(actor)
         async with self.transaction:
-            before = await self._locked_receipt(record_id, if_match)
-            self._check_etag(before, if_match)
+            before = await self._locked_receipt(record_id)
+            self._check_etag(before, self._require_if_match(if_match))
             await self._require_editable(before)
             await self.repository.delete_draft(record_id)
             await self._audit_change("xoa_nhap", before, None, actor)
@@ -159,13 +195,16 @@ class PhieuNhapService:
     async def complete_receipt(
         self, record_id: int, if_match: str | None, actor: dict, request_id: str
     ) -> tuple[PhieuNhapActionResponse, str]:
+        """UC-21: complete once; stock, ledger, metadata and audit share one transaction."""
+        self._require_manager(actor)
         async with self.transaction:
-            before = await self._locked_receipt(record_id, if_match)
+            before = await self._locked_receipt(record_id)
+            validator = self._require_if_match(if_match)
             postings = await self.repository.receipt_postings(record_id)
             already_posted = before.trang_thai == "hoan_thanh"
             if already_posted:
                 expected = {
-                    (item.id, item.mat_hang_id, item.so_luong, "nhap_vat_tu")
+                    (item.id, item.mat_hang_id, item.so_luong, "nhap_linh_kien")
                     for item in before.chi_tiet
                 }
                 actual = {
@@ -184,7 +223,7 @@ class PhieuNhapService:
                 after = before
                 movement_ids = [entry.id for entry in postings]
             else:
-                self._check_etag(before, if_match)
+                self._check_etag(before, validator)
                 if postings:
                     raise ReceiptReferenced()
                 try:
@@ -192,11 +231,11 @@ class PhieuNhapService:
                         ncc_id=before.ncc_id,
                         ngay_nhap=before.ngay_nhap,
                         chi_tiet=[
-                            {
-                                "mat_hang_id": item.mat_hang_id,
-                                "so_luong": item.so_luong,
-                                "don_gia_thuc": item.don_gia_thuc,
-                            }
+                            ChiTietPhieuNhapCreate(
+                                mat_hang_id=item.mat_hang_id,
+                                so_luong=item.so_luong,
+                                don_gia_thuc=item.don_gia_thuc,
+                            )
                             for item in before.chi_tiet
                         ],
                     )
@@ -211,16 +250,25 @@ class PhieuNhapService:
                     raise ConflictException(
                         message="Draft totals are inconsistent; correct it before completing"
                     )
-                await self._validate_parts([item.mat_hang_id for item in before.chi_tiet])
+                await self._validate_stock(before)
                 # The ledger trigger requires a completed source in this same transaction.
-                after = await self.repository.mark_completed(record_id)
+                posted_at = datetime.now(timezone.utc)
+                completed = await self.repository.mark_completed(
+                    record_id,
+                    expected_version=before.phien_ban,
+                    actor_id=int(actor["sub"]),
+                    completed_at=posted_at,
+                )
+                if completed is None:
+                    raise ReceiptPreconditionFailed()
+                after = completed
                 movement_ids = await self.inventory.receive_receipt(
                     [
                         StockReceiptLine(item.id, item.mat_hang_id, item.so_luong)
                         for item in before.chi_tiet
                     ],
                     int(actor["sub"]),
-                    datetime.now(timezone.utc),
+                    posted_at,
                 )
                 await self._audit_change("hoan_tat", before, after, actor)
         detail, etag = self.detail_response(after, request_id)
@@ -233,12 +281,18 @@ class PhieuNhapService:
     def detail_response(
         record: PhieuNhapRead, request_id: str
     ) -> tuple[PhieuNhapDetailResponse, str]:
-        etag = f'"{sha256(record.model_dump_json().encode()).hexdigest()}"'
+        canonical = json.dumps(
+            record.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        )
+        etag = f'"{sha256(canonical.encode()).hexdigest()}"'
         return PhieuNhapDetailResponse(data=record, meta=ResponseMeta(request_id=request_id)), etag
 
     async def list_receipts(
-        self, params: PhieuNhapListQuery, request_id: str
+        self, params: PhieuNhapListQuery, actor: dict, request_id: str
     ) -> PhieuNhapListResponse:
+        """UC-22: QLK-only list in one read-only snapshot, including count and lines."""
+        self._require_manager(actor)
+        await self.repository.begin_read_snapshot()
         result = await self.repository.list_receipts(params)
         return PhieuNhapListResponse(
             data=result.items,
@@ -252,8 +306,11 @@ class PhieuNhapService:
         )
 
     async def get_receipt(
-        self, record_id: int, request_id: str
+        self, record_id: int, actor: dict, request_id: str
     ) -> tuple[PhieuNhapDetailResponse, str]:
+        """UC-22: QLK-only immutable read with a validator for the same snapshot."""
+        self._require_manager(actor)
+        await self.repository.begin_read_snapshot()
         if record_id > INT_MAX:
             raise NotFoundException()
         record = await self.repository.get_receipt(record_id)
@@ -264,6 +321,8 @@ class PhieuNhapService:
     async def create_receipt(
         self, payload: PhieuNhapCreate, actor: dict, request_id: str
     ) -> tuple[PhieuNhapDetailResponse, str]:
+        """UC-20: create a component receipt draft without stock writes."""
+        self._require_manager(actor)
         async with self.transaction:
             if payload.ncc_id is not None and not await self.repository.lock_supplier(
                 payload.ncc_id
@@ -275,7 +334,6 @@ class PhieuNhapService:
                 for item in payload.chi_tiet
             ]
             draft = GoodsReceiptNoteCreate(
-                ma_phieu_nhap="",
                 nhan_vien_id=int(actor["sub"]),
                 ncc_id=payload.ncc_id,
                 ngay_nhap=payload.ngay_nhap,
@@ -289,6 +347,7 @@ class PhieuNhapService:
                     nhan_vien_id=int(actor["sub"]),
                     loai_doi_tuong="phieu_nhap",
                     doi_tuong_id=record.id,
+                    trang_thai_sau=record.trang_thai,
                     du_lieu_sau=record.model_dump(mode="json"),
                 )
             )
