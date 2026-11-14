@@ -1,18 +1,22 @@
 """Separate read and append contracts for the audit trail."""
 
-from typing import Protocol, TypeVar
+from datetime import datetime
+from typing import Protocol
 
-from app.modules.audit.schemas import AuditLogResponse, CreationAudit, ThaoTac
-from app.shared.pagination import PageParams
+from app.modules.audit.schemas import AuditListQuery, AuditRecord, CreationAudit
 from app.shared.records import RecordPage
-
-T = TypeVar("T", bound=AuditLogResponse)
 
 
 class AuditRepository(Protocol):
     async def list_entries(
-        self, params: PageParams, schema: type[T], *, bo_thao_tac: ThaoTac | None = None
-    ) -> RecordPage[T]: ...
+        self,
+        params: AuditListQuery,
+        *,
+        created_from: datetime | None,
+        created_before: datetime | None,
+    ) -> RecordPage[AuditRecord]: ...
+
+    async def get_entry(self, entry_id: int) -> AuditRecord | None: ...
 
     async def append(self, entry: CreationAudit) -> None: ...
 
