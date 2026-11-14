@@ -82,6 +82,9 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 ## YeuCauSanXuat
 
 - id, ma_yeu_cau_san_xuat (YCSX-YYYYMM-xxxxxx), mat_hang_id (thành phẩm), so_luong (> 0)
+- loai_yeu_cau ("dap_ung" | "cho_kho"), mặc định "dap_ung"; không đổi sau khi gửi
+  - dap_ung: dùng thành phẩm có sẵn trước; Hoàn thành khi phiếu xuất thành phẩm được duyệt
+  - cho_kho: sản xuất bổ sung tồn; không dùng thành phẩm có sẵn (so_luong_can_san_xuat = so_luong); không có phiếu xuất thành phẩm; Hoàn thành khi chứng từ hoàn thành được duyệt
 - han_hoan_thanh (ngày; chỉ để theo dõi, sắp xếp), nhan_vien_id (QLK lập), nhan_vien_duoc_giao_id (đúng một nhân viên)
 - trang_thai ("nhap" | "da_gui" | "cho_bo_sung_linh_kien" | "dang_thuc_hien" | "hoan_thanh" | "da_huy")
 - bom_id: phiên bản công thức chốt lúc gửi, không đổi sau đó
@@ -90,8 +93,8 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 - huy_at, nguoi_huy_id, ly_do_huy
 - phien_ban (khóa lạc quan)
 - Yêu cầu sản xuất kiêm lệnh sản xuất, không có lệnh riêng
-- Chỉ lập cho thành phẩm đang dùng; gửi khi có hạn, nhân viên được giao đang hoạt động, thành phẩm đang dùng
-- Sửa, xóa chỉ khi "nhap"; sau khi gửi không đổi thành phẩm, số lượng, nhân viên, hạn
+- Chỉ lập cho thành phẩm đang dùng; gửi khi có hạn, nhân viên được giao đang hoạt động, thành phẩm đang dùng (cả hai loại)
+- Sửa, xóa chỉ khi "nhap"; sau khi gửi không đổi loại, thành phẩm, số lượng, nhân viên, hạn
 - Bắt đầu sản xuất (ghi started_at, tồn không đổi): chỉ sau khi phiếu xuất linh kiện được duyệt
 - Hủy: chỉ QLK, bắt buộc lý do, chỉ khi chưa có PhieuXuat nào "da_duyet"; trả toàn bộ GiuHang, tồn thực tế không đổi
 - Có nhiều: NhuCauLinhKien, GiuHang, PhieuXuat (tối đa 1 mỗi loại); có tối đa 1 ChungTuHoanThanhSx
@@ -111,8 +114,8 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 - trang_thai ("dang_giu" | "da_xuat" | "da_tra")
 - chung_tu_hoan_thanh_sx_id (khi loai_giu = "thanh_pham_san_xuat"), phieu_xuat_id (khi "da_xuat")
 - created_at, ket_thuc_at
-- Kiểm tra: giữ thành phẩm có sẵn; giữ toàn bộ linh kiện chỉ khi đủ tất cả, thiếu thì không giữ linh kiện nào
-- Duyệt chứng từ hoàn thành: tạo dòng "thanh_pham_san_xuat"
+- Kiểm tra: giữ thành phẩm có sẵn (chỉ yêu cầu dap_ung); giữ toàn bộ linh kiện chỉ khi đủ tất cả, thiếu thì không giữ linh kiện nào
+- Duyệt chứng từ hoàn thành: yêu cầu dap_ung tạo dòng "thanh_pham_san_xuat"; yêu cầu cho_kho không giữ
 - Duyệt phiếu xuất: các dòng tương ứng → "da_xuat"; hủy yêu cầu: mọi dòng "dang_giu" → "da_tra"
 - Từ chối phiếu xuất không đổi phần giữ
 - Tổng các dòng "dang_giu" của một mặt hàng = MatHang.so_luong_dang_giu
@@ -127,7 +130,7 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 - phien_ban (khóa lạc quan)
 - Mỗi yêu cầu tối đa một phiếu mỗi loại; xuất đủ toàn bộ, nhân viên không sửa nội dung
 - Lập phiếu linh kiện: yêu cầu "dang_thuc_hien" và so_luong_can_san_xuat > 0
-- Lập phiếu thành phẩm: so_luong_can_san_xuat = 0, hoặc ChungTuHoanThanhSx đã "da_duyet"
+- Lập phiếu thành phẩm: chỉ yêu cầu dap_ung, khi so_luong_can_san_xuat = 0 hoặc ChungTuHoanThanhSx đã "da_duyet"
 - Duyệt: trừ tồn, ghi giá theo MatHang.don_gia lúc duyệt, kết thúc giữ hàng; phiếu thành phẩm ⇒ yêu cầu "hoan_thanh"
 - Từ chối bắt buộc lý do; gửi lại thẳng "tu_choi" → "cho_duyet", không về nháp
 - Hủy yêu cầu: phiếu "nhap" bị xóa hẳn, phiếu "cho_duyet" → "tu_choi" với lý do "Yêu cầu đã hủy"
@@ -148,7 +151,9 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 - created_at, updated_at, nguoi_xu_ly_id (QLK), xu_ly_at, ly_do_tu_choi
 - phien_ban (khóa lạc quan)
 - Lập sau khi bắt đầu sản xuất (YeuCauSanXuat.started_at có giá trị)
-- Duyệt: cộng thành phẩm vào kho và giữ cho chính yêu cầu; không trừ linh kiện lần nữa
+- Duyệt: cộng thành phẩm vào kho; không trừ linh kiện lần nữa
+  - Yêu cầu dap_ung: giữ số xe vừa làm cho chính yêu cầu
+  - Yêu cầu cho_kho: không giữ, số xe vừa làm thành phần còn dùng được; yêu cầu "hoan_thanh"
 - Từ chối bắt buộc lý do, không cộng tồn, linh kiện đã xuất không hoàn; gửi lại thẳng "tu_choi" → "cho_duyet"
 
 ## GiaoDichKho

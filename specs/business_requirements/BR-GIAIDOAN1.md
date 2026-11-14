@@ -179,15 +179,20 @@ Quản lý kho giao việc đáp ứng một lượng thành phẩm cho đúng m
 - request_status_visibility = 100% (Quản lý kho xem được trạng thái của mọi yêu cầu)
 
 ## In Scope (Giai đoạn 1)
-- Yêu cầu gồm: thành phẩm, số lượng, hạn hoàn thành, nhân viên được giao
+- Yêu cầu gồm: loại yêu cầu, thành phẩm, số lượng, hạn hoàn thành, nhân viên được giao
+- Hai loại yêu cầu, chọn khi lập, không đổi sau khi gửi:
+  - Đáp ứng yêu cầu: giao một lượng thành phẩm; dùng thành phẩm có sẵn trước, kết thúc bằng xuất thành phẩm (BR-012)
+  - Sản xuất cho kho: sản xuất đúng số lượng để bổ sung tồn thành phẩm; không dùng thành phẩm có sẵn, không có phiếu xuất thành phẩm; Hoàn thành khi chứng từ hoàn thành được duyệt (BR-011)
 - Yêu cầu sản xuất kiêm luôn lệnh sản xuất; không có lệnh sản xuất riêng
 - Quản lý kho sửa, xóa yêu cầu khi còn nháp
 - Chỉ lập yêu cầu cho thành phẩm đang dùng
-- Gửi yêu cầu cần xác nhận; chỉ gửi được khi đã có hạn hoàn thành, nhân viên được giao đang hoạt động và thành phẩm đang dùng
+- Gửi yêu cầu cần xác nhận; chỉ gửi được khi đã có hạn hoàn thành, nhân viên được giao đang hoạt động và thành phẩm đang dùng (áp dụng cho cả hai loại)
 - Gửi chuyển việc cho nhân viên và chốt phiên bản công thức đang dùng vào yêu cầu (xem BR-005); chưa tính nhu cầu, chưa giữ hàng, chưa đổi tồn
 - Hạn hoàn thành chỉ dùng để theo dõi và sắp xếp
 - Trạng thái: Nháp → Đã gửi → Chờ bổ sung linh kiện hoặc Đang thực hiện → Hoàn thành; hoặc Đã hủy (xem BR-013)
-- Quản lý kho xem được mọi yêu cầu
+  - Đáp ứng yêu cầu: Hoàn thành khi phiếu xuất thành phẩm được duyệt (BR-012)
+  - Sản xuất cho kho: Hoàn thành khi chứng từ hoàn thành sản xuất được duyệt (BR-011)
+- Quản lý kho xem được mọi yêu cầu, lọc theo loại
 
 ## Out of Scope
 - Quản lý kho tính thử nhu cầu trước khi gửi
@@ -212,10 +217,11 @@ Nhân viên biết ngay yêu cầu của mình làm được tới đâu: dùng 
 - Nhân viên chỉ thấy yêu cầu giao cho mình; mặc định yêu cầu cũ nhất lên đầu (chỉ là thứ tự hiển thị, không bắt buộc làm theo)
 - "Còn dùng được" = tồn thực tế trừ phần đang giữ cho các yêu cầu khác
 - Kiểm tra lần đầu:
-  - Dùng thành phẩm còn dùng được trước; số cần sản xuất = số yêu cầu − thành phẩm dùng được (không âm)
+  - Yêu cầu đáp ứng: dùng thành phẩm còn dùng được trước; số cần sản xuất = số yêu cầu − thành phẩm dùng được (không âm)
+  - Yêu cầu sản xuất cho kho: không dùng thành phẩm có sẵn; số cần sản xuất = số yêu cầu
   - Tính nhu cầu linh kiện theo công thức đã chốt lúc gửi (BR-007)
   - Chốt lại: số cần sản xuất, nhu cầu linh kiện, phần thành phẩm giữ cho yêu cầu
-  - Đủ thành phẩm: Đang thực hiện, đi thẳng tới xuất thành phẩm
+  - Đủ thành phẩm (chỉ yêu cầu đáp ứng): Đang thực hiện, đi thẳng tới xuất thành phẩm
   - Đủ toàn bộ linh kiện: giữ toàn bộ linh kiện cho yêu cầu, Đang thực hiện
   - Thiếu linh kiện: không giữ linh kiện nào, chuyển Chờ bổ sung linh kiện. Đây chính là cách báo Quản lý kho cần nhập, không lập phiếu đề nghị riêng
 - Kiểm tra lại (yêu cầu đang Chờ bổ sung): so nhu cầu đã chốt với hàng còn dùng được; đủ thì giữ linh kiện và chuyển Đang thực hiện
@@ -296,7 +302,9 @@ Thành phẩm chỉ vào kho khi Quản lý kho xác nhận sản xuất xong, �
   - Số lượng hoàn thành bằng đúng số cần sản xuất, nhân viên không sửa
   - Thời điểm hoàn thành do hệ thống ghi, là thời điểm nhân viên xác nhận gửi chứng từ; nhân viên không nhập, không sửa; gửi lại sau khi bị từ chối thì ghi lại theo lần xác nhận mới
 - Gửi chứng từ cần xác nhận, chưa cộng tồn
-- Quản lý kho duyệt: cộng thành phẩm vào kho, số xe vừa làm được giữ cho chính yêu cầu đó; không trừ linh kiện lần nữa
+- Quản lý kho duyệt: cộng thành phẩm vào kho; không trừ linh kiện lần nữa
+  - Yêu cầu đáp ứng: số xe vừa làm được giữ cho chính yêu cầu đó
+  - Yêu cầu sản xuất cho kho: số xe vừa làm không giữ cho ai, thành phần còn dùng được; yêu cầu chuyển Hoàn thành
 - Quản lý kho từ chối phải ghi lý do; không cộng tồn; linh kiện đã xuất không được hoàn; nhân viên gửi lại chứng từ ngay từ trạng thái bị từ chối, không qua nháp
 - Quản lý kho có màn hình danh sách chứng từ hoàn thành sản xuất riêng, lọc theo sản phẩm, nhân viên, khoảng thời gian, trạng thái, mở từ đó để duyệt hoặc từ chối
 
@@ -310,13 +318,14 @@ Thành phẩm chỉ vào kho khi Quản lý kho xác nhận sản xuất xong, �
 # BR-012: xBike MRP — Xuất thành phẩm và hoàn thành yêu cầu
 
 ## Goal
-Yêu cầu sản xuất chỉ được đóng khi toàn bộ số xe yêu cầu đã xuất kho có duyệt.
+Yêu cầu sản xuất đáp ứng chỉ được đóng khi toàn bộ số xe yêu cầu đã xuất kho có duyệt.
 
 ## Success Metrics
-- completed_request_with_unissued_goods = 0
+- completed_request_with_unissued_goods = 0 (chỉ tính yêu cầu đáp ứng)
 - request_stuck_waiting_finished_goods = 0
 
 ## In Scope (Giai đoạn 1)
+- Chỉ áp dụng cho yêu cầu đáp ứng; yêu cầu sản xuất cho kho không có phiếu xuất thành phẩm (BR-007, BR-011)
 - Nhân viên lập phiếu xuất thành phẩm khi: yêu cầu không cần sản xuất (đủ thành phẩm từ đầu), hoặc chứng từ hoàn thành đã được duyệt
 - Mỗi yêu cầu một phiếu, đúng số lượng yêu cầu, nhân viên không sửa
 - Gửi phiếu cần xác nhận, chưa trừ tồn
