@@ -7,7 +7,7 @@ Ngày lập: 13/11/2026. Trạng thái: **đã chốt 11 quyết định ngày 1
 | Nguồn | Vị trí |
 |---|---|
 | BR giai đoạn 1 (BR-001 … BR-016) | `specs/business_requirements/BR-GIAIDOAN1.md` |
-| 43 use-case (UC-01 … UC-43) | `specs/use_cases/{context}/UC-xx.md` |
+| 44 use-case (UC-01 … UC-44) | `specs/use_cases/{context}/UC-xx.md` |
 | Data model cũ v3.1 | Drive `sgu-httt-source-of-true/xbike_mrp_data_model_v3.1_mermaid.md` |
 | Schema đang chạy | `infra/postgres/init.sql` (đúng v3.1 + `VaiTro.mo_ta`, `LuuLuongTruyCap`) |
 
@@ -41,7 +41,7 @@ Ngày lập: 13/11/2026. Trạng thái: **đã chốt 11 quyết định ngày 1
 | Bảng | Thay đổi | Nguồn |
 |---|---|---|
 | `NhanVien` | + `phien_ban_dang_nhap` (kết thúc mọi phiên khi khóa, đổi vai trò, đổi mật khẩu); + `created_at` | BR-001, BR-002, UC-05 R4, UC-07 R5, UC-08 R6 |
-| `NhaCungCap` | `ten_ncc` → NOT NULL; `dia_chi`, `phuong`, `tinh` giữ là thuộc tính văn bản nhập tay của NCC (không tách bảng danh mục, không kiểm tra); + `created_at` | BR-004, UC-14 R1–R3 |
+| `NhaCungCap` | `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh` → NOT NULL; `dia_chi`, `phuong`, `tinh` là thuộc tính văn bản nhập tay của NCC (không tách bảng danh mục, không kiểm tra); sửa được trừ `ma_ncc`; + `created_at` | BR-004, UC-14 R1–R3, UC-44 |
 | `MatHang` | `loai_mat_hang` chỉ còn `thanh_pham`, `linh_kien`; `is_active` chỉ được `false` với thành phẩm; + `so_luong_dang_giu`, + cột sinh `so_luong_con_dung`; + `created_at` | BR-004, UC-09 R6, UC-12 R1 |
 | `Bom` | Bỏ `start_time`/`end_time`; + `created_at`, + `kich_hoat_gan_nhat_at` để tìm "phiên bản đang dùng gần nhất" | BR-005, UC-12 R5, UC-18 |
 | `PhieuNhap` | `tong_tien` → bigint; + `updated_at`, `hoan_thanh_at`, `nguoi_hoan_thanh_id`, `phien_ban` | BR-006, BR-015, UC-21 |
@@ -51,7 +51,7 @@ Ngày lập: 13/11/2026. Trạng thái: **đã chốt 11 quyết định ngày 1
 | `ChiTietPhieuXuat` | Giá xuất chỉ ghi lúc duyệt | BR-010, UC-35 R2 |
 | `ChungTuHoanThanhSx` | `lenh_san_xuat_id` → `yeu_cau_san_xuat_id` UNIQUE; + `nguoi_xu_ly_id`, `xu_ly_at`, `ly_do_tu_choi`, `updated_at`, `phien_ban` | BR-011, UC-30 – UC-32 |
 | `GiaoDichKho` | Bỏ `chi_tiet_phieu_dieu_chinh_id` và loại `dieu_chinh_ton_kho`; đổi mã loại sang `nhap_linh_kien`, `xuat_linh_kien`; + `so_luong_ton_sau` | BR-014, UC-41, UC-42 |
-| `LichSuThaoTac` | Cập nhật danh mục đối tượng/thao tác; + `trang_thai_truoc`, `trang_thai_sau`; bắt buộc lý do cho một số thao tác | BR-016, UC-43 |
+| `LichSuThaoTac` | Cập nhật danh mục đối tượng/thao tác; + `trang_thai_truoc`, `trang_thai_sau`; bắt buộc lý do cho từ chối, hủy | BR-016, UC-43 |
 
 Giữ nguyên: `VaiTro`, `ChiTietBom`, `LuuLuongTruyCap` (bảng kỹ thuật, ngoài BR).
 
@@ -86,17 +86,17 @@ erDiagram
   }
   NhaCungCap {
     int id PK "IDENTITY"
-    varchar ma_ncc UK "NOT NULL; NCC-xxxxxx"
+    varchar ma_ncc UK "NOT NULL; NCC-xxxxxx; he thong cap"
     varchar ten_ncc "NOT NULL; SUA"
-    varchar so_dien_thoai "NULL"
-    varchar dia_chi "NULL; so nha, duong"
-    varchar phuong "NULL"
-    varchar tinh "NULL"
+    varchar so_dien_thoai "NOT NULL; SUA"
+    varchar dia_chi "NOT NULL; so nha, duong; SUA"
+    varchar phuong "NOT NULL; SUA"
+    varchar tinh "NOT NULL; SUA"
     timestamptz created_at "NOT NULL; DEFAULT now(); MOI"
   }
   MatHang {
     int id PK "IDENTITY"
-    varchar ma_mat_hang UK "NOT NULL; MH-xxxxxx"
+    varchar ma_mat_hang UK "NOT NULL; MH-xxxxxx; he thong cap"
     varchar ten_mat_hang "NOT NULL"
     varchar sku UK "NOT NULL"
     varchar loai_mat_hang "NOT NULL; thanh_pham | linh_kien"
@@ -321,11 +321,13 @@ Chỉ ghi ràng buộc và ý nghĩa; kiểu/nullable đã có trong ERD.
 
 | Ràng buộc | Nội dung | Nguồn |
 |---|---|---|
-| `ma_ncc` | UNIQUE, `CHECK ~ '^NCC-[0-9]{6}$'` (giữ; chốt duy nhất 13/11/2026) | init.sql, UC-14 |
-| `ten_ncc` | NOT NULL, `CHECK (btrim(ten_ncc) <> '')` | BR-004, UC-14 R1 |
-| `dia_chi`, `phuong`, `tinh` | Văn bản nhập tay, đều NULL được; lọc UC-13 theo giá trị `tinh`, `phuong` | BR-003, BR-004, UC-13 R2–R3 |
-| Không kiểm tra tỉnh/phường | Không CHECK, không trigger, không danh mục: hệ thống không kiểm tính chính xác hay việc phường thuộc tỉnh | UC-14 R3 (sửa 13/11/2026) |
-| Không UPDATE/DELETE | Service không cung cấp sửa, xóa | BR-004, UC-14 R4 |
+| `ma_ncc` | UNIQUE, `CHECK ~ '^NCC-[0-9]{6}$'` (giữ; chốt duy nhất 13/11/2026). Hệ thống cấp khi tạo: `'NCC-' \|\| lpad(id::text, 6, '0')`; API tạo không nhận trường này; không sửa (chốt 14/11/2026) | init.sql, BR-004, UC-14 R6 |
+| `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh` | Đều NOT NULL, mỗi cột có `CHECK (btrim(...) <> '')` (chốt 14/11/2026) | BR-004, UC-14 R1, UC-44 R3 |
+| `dia_chi`, `phuong`, `tinh` | Văn bản nhập tay; lọc UC-13 theo giá trị `tinh`, `phuong` | BR-003, BR-004, UC-13 R2–R3 |
+| Không kiểm tra tỉnh/phường | Không CHECK nội dung, không trigger, không danh mục: hệ thống không kiểm tính chính xác hay việc phường thuộc tỉnh | UC-14 R3 (sửa 13/11/2026) |
+| UPDATE | QLK sửa `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh`; không sửa `ma_ncc`. Ghi `LichSuThaoTac` thao tác `sua` kèm `du_lieu_truoc`/`du_lieu_sau`; không có trường nào đổi thì không UPDATE, không ghi lịch sử (chốt 14/11/2026) | BR-004, BR-016, UC-44 R6–R7 |
+| Không chụp lên phiếu nhập | `PhieuNhap` chỉ lưu `ncc_id`; mọi phiếu, kể cả đã hoàn tất, hiển thị thông tin nhà cung cấp hiện tại (chốt 14/11/2026) | UC-44 R8 |
+| Không DELETE | Service không cung cấp xóa | BR-004, UC-14 R4 |
 
 **`MatHang`**
 
@@ -340,7 +342,7 @@ Chỉ ghi ràng buộc và ý nghĩa; kiểu/nullable đã có trong ERD.
 | `loai_mat_hang` | Bất biến sau khi tạo; không có tính năng đổi loại (chốt 13/11/2026) | UC-11 R1 |
 | Khóa ĐVT | Không đổi `don_vi_tinh` khi mặt hàng đã có trong `ChiTietBom`, `Bom`, chi tiết chứng từ hoặc `YeuCauSanXuat` (service; có thể thêm trigger) | BR-004, UC-11 R1 |
 | `is_active` của thành phẩm | `true` khi và chỉ khi có `Bom` đang dùng; đổi cùng transaction với `Bom.is_active` | BR-005, UC-12 R3–R5, UC-19 |
-| `ma_mat_hang` | Bất biến sau khi tạo; API sửa không nhận trường này (chốt 13/11/2026) | UC-11 R5 |
+| `ma_mat_hang` | Hệ thống cấp khi tạo: `'MH-' \|\| lpad(id::text, 6, '0')`; API tạo và API sửa đều không nhận trường này (chốt 14/11/2026). Bất biến sau khi tạo (chốt 13/11/2026) | BR-004, UC-10 R3, UC-11 R5 |
 | `sku` | Giữ `UNIQUE NOT NULL` như v3.1 (chốt 13/11/2026) | init.sql |
 | Mã/tên/ĐVT/đơn giá | Giữ `ck_mat_hang_ma`, `ck_mat_hang_ten`, `don_gia >= 0` | init.sql |
 
@@ -484,8 +486,8 @@ Giao dịch chỉ sinh từ phiếu nhập hoàn tất, phiếu xuất đã duy�
 | `loai_doi_tuong` | `CHECK IN ('nhan_vien','mat_hang','nha_cung_cap','cong_thuc','phieu_nhap','phieu_xuat','yeu_cau_san_xuat','chung_tu_hoan_thanh_san_xuat')` | BR-016 |
 | `thao_tac` | `CHECK IN ('dang_nhap','tao','sua','xoa_nhap','gui','gui_lai','kiem_tra','duyet','tu_choi','hoan_tat','bat_dau','huy','khoa','mo_khoa','doi_vai_tro','doi_mat_khau','ngung','dung_lai','tao_phien_ban','dung_lai_phien_ban')` | BR-016, UC-43 R1–R2 |
 | `trang_thai_truoc`, `trang_thai_sau` | Trạng thái đối tượng trước/sau thao tác, để lọc nhanh | BR-016 |
-| `du_lieu_truoc`, `du_lieu_sau` | Thao tác sửa ghi giá trị từng trường trước/sau. Không bao giờ chứa mật khẩu | BR-016, UC-11 R4 |
-| `ck_lstt_ly_do` | `thao_tac NOT IN ('khoa','mo_khoa','doi_vai_tro','tu_choi','huy') OR btrim(ly_do) <> ''` | BR-002, BR-010, BR-011, BR-013 |
+| `du_lieu_truoc`, `du_lieu_sau` | Thao tác sửa ghi giá trị từng trường trước/sau. Không bao giờ chứa mật khẩu | BR-016, UC-11 R4, UC-44 R6 |
+| `ck_lstt_ly_do` | `thao_tac NOT IN ('tu_choi','huy') OR btrim(ly_do) <> ''`. Khóa, mở khóa, đổi vai trò không bắt buộc lý do; nếu nhập thì lưu vào `ly_do` (chốt 14/11/2026) | BR-002, BR-010, BR-011, BR-013 |
 | Danh sách thiếu | Khi kiểm tra chuyển `cho_bo_sung_linh_kien`: `du_lieu_sau.danh_sach_thieu = [{mat_hang_id, ma_mat_hang, ten_mat_hang, don_vi_tinh, so_luong_can, so_luong_con_dung, so_luong_thieu}]` | BR-016, UC-26 R10, R12 |
 | Đăng nhập | `loai_doi_tuong = 'nhan_vien'`, `doi_tuong_id` = chính người đăng nhập | BR-016, UC-01 R4 |
 | Index | `(loai_doi_tuong, doi_tuong_id)`, `(nhan_vien_id, created_at)`, `(thao_tac, created_at)` | UC-43 R5 |
@@ -539,7 +541,7 @@ stateDiagram-v2
 |---|---|
 | UC-01 – UC-08 | `NhanVien`, `VaiTro`, `YeuCauSanXuat` (kiểm tra đổi vai trò), `LichSuThaoTac` |
 | UC-09 – UC-12 | `MatHang`, `Bom`, `ChiTietBom`, `LichSuThaoTac` |
-| UC-13 – UC-14 | `NhaCungCap`, `LichSuThaoTac` |
+| UC-13 – UC-14, UC-44 | `NhaCungCap`, `LichSuThaoTac` |
 | UC-15 – UC-19 | `Bom`, `ChiTietBom`, `MatHang`, `LichSuThaoTac` |
 | UC-20 – UC-22 | `PhieuNhap`, `ChiTietPhieuNhap`, `NhaCungCap`, `GiaoDichKho`, `MatHang` |
 | UC-23 – UC-25 | `YeuCauSanXuat`, `Bom`, `MatHang`, `NhanVien` |
@@ -566,8 +568,12 @@ stateDiagram-v2
 | 9 | Địa chỉ nhà cung cấp | `dia_chi`, `phuong`, `tinh` là thuộc tính văn bản nhập tay của `NhaCungCap`; không có bảng `Tinh`/`Phuong`; hệ thống không kiểm tra tính chính xác. BR-004 và UC-14 R3 đã sửa theo |
 | 10 | Phiếu xuất bị từ chối | Gửi lại thẳng `tu_choi → cho_duyet`, không qua nháp (khớp BR-010, BR-015; UC-34 – UC-39 dùng bộ luồng cũ) |
 | 11 | Đổi loại mặt hàng | Không có tính năng này; `loai_mat_hang` bất biến (BR-004 và UC-11 R1 đã sửa) |
+| 12 | Ai cấp mã mặt hàng, mã nhà cung cấp (14/11/2026) | Hệ thống cấp từ `id` (`MH-` / `NCC-` + 6 chữ số); người dùng không nhập mã. Giữ `id` làm khóa chính và khóa ngoại; mã chỉ là định danh nghiệp vụ. BR-004, UC-10 R3, UC-14 R6 đã sửa |
+| 13 | Lý do khi khóa, mở khóa, đổi vai trò (14/11/2026) | Không bắt buộc; nếu nhập thì lưu vào `LichSuThaoTac.ly_do`. BR-002, UC-05 R1, UC-06 R1, UC-07 R2 đã sửa |
+| 14 | Thông tin nhà cung cấp (14/11/2026) | `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh` đều bắt buộc, NOT NULL; địa chỉ là thuộc tính của `NhaCungCap`. BR-004, UC-13, UC-14 R1 đã sửa |
+| 15 | Sửa nhà cung cấp (14/11/2026) | QLK sửa được mọi thông tin trừ `ma_ncc`; ghi lịch sử kèm giá trị trước/sau; lưu không thay đổi thì không ghi lịch sử; phiếu nhập luôn hiện thông tin nhà cung cấp hiện tại, không chụp lại. Thêm UC-44; BR-004, BR-016, UC-14 R4, UC-43 R2 đã sửa |
 
 ## 7. Việc tiếp theo (chưa làm)
 
-- Cập nhật `infra/postgres/init.sql`, `seed.sql` (gồm công thức cho 4 thành phẩm), ORM và API theo bản đã chốt. Theo AGENTS.md §6, chỉ bootstrap DB mới/trống, không migration.
+- Cập nhật `infra/postgres/init.sql`, `seed.sql` (gồm công thức cho 4 thành phẩm; mã mặt hàng, nhà cung cấp khớp quy tắc sinh từ `id`), ORM và API theo bản đã chốt. API tạo mặt hàng, nhà cung cấp bỏ trường mã; frontend bỏ ô nhập mã. Nhà cung cấp: các cột thông tin NOT NULL (seed phải đủ điện thoại, địa chỉ), thêm API và màn hình sửa (UC-44). Khóa, mở khóa, đổi vai trò: API bỏ bắt buộc lý do. Theo AGENTS.md §6, chỉ bootstrap DB mới/trống, không migration.
 - Chuyển file này thành DBML/Mermaid trên Drive nếu dev muốn thay bản v3.1.

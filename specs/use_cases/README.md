@@ -36,6 +36,7 @@ Nguồn "Đề xuất khi lập UC (chưa xác nhận)" đánh dấu quy tắc c
 | [UC-12](catalog/UC-12.md) | Ngừng / dùng lại thành phẩm | QLK | BR-004, BR-005, BR-007, BR-016 |
 | [UC-13](catalog/UC-13.md) | Tra cứu nhà cung cấp | QTV, QLK | BR-003, BR-004 |
 | [UC-14](catalog/UC-14.md) | Tạo nhà cung cấp | QLK | BR-004, BR-016 |
+| [UC-44](catalog/UC-44.md) | Sửa nhà cung cấp | QLK | BR-004, BR-003, BR-016 |
 
 ## `bom` — Công thức sản phẩm (BOM) một cấp
 
