@@ -615,7 +615,7 @@ GET không ghi audit hoặc commit. Chi tiết xác thực dùng get_auth_identi
 
 ## POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau — Admin đặt lại mật khẩu
 
-Bổ sung D-MK-01 (10/11/2026), ngoài SRS_v4/contract v3.1. Body duy nhất `mat_khau_moi` là SecretStr 8–1024 ký tự, không trim; không nhận query. Path ID nguyên dương. Không cần lý do, cho phép đích ở mọi vai trò/trạng thái và đích là chính admin. Không có nhánh lỗi nghiệp vụ 409.
+Nguồn: [UC-08 — Đổi mật khẩu tài khoản](../../specs/use_cases/identity_access/UC-08.md), Main 2–6, R1–R7, A1–A6; thay hành vi cũ của D-MK-01 theo D1–D4. Body duy nhất `mat_khau_moi` là SecretStr 6–1024 ký tự, không trim; không nhận mật khẩu hiện tại hoặc field dư/query. Path ID nguyên dương. Không cần lý do, cho phép đích ở mọi vai trò/trạng thái và đích là chính admin. Không có nhánh lỗi nghiệp vụ 409 riêng; vi phạm ràng buộc DB trong transaction vẫn trả 409.
 
 ```mermaid
 sequenceDiagram
@@ -677,12 +677,15 @@ sequenceDiagram
                         N-->>C: 412 du_lieu_da_thay_doi
                     else ETag hợp lệ
                         N->>P: set_password_hash(id đích, new_hash)
-                        P->>DB: UPDATE NhanVien.mat_khau
-                        N->>U: append(CreationAudit)
+                        P->>DB: UPDATE NhanVien SET mat_khau=new_hash, phien_ban_dang_nhap=phien_ban_dang_nhap+1
+                        N->>U: append(CreationAudit doi_mat_khau)
                         U->>DB: INSERT LichSuThaoTac, cùng session/transaction
-                        alt Cập nhật / audit / commit lỗi
-                            N->>DB: ROLLBACK
-                            R-->>C: 500
+                        alt Vi phạm ràng buộc khi ghi hoặc commit
+                            N->>DB: ROLLBACK hash, phiên bản và audit
+                            R-->>C: 409 trang_thai_khong_hop_le
+                        else Cập nhật / audit / commit lỗi khác
+                            N->>DB: ROLLBACK hash, phiên bản và audit
+                            R-->>C: 500 loi_noi_bo
                         else Thành công
                             N->>DB: COMMIT
                             N->>N: _result(employee, actor, request_id)
@@ -697,6 +700,6 @@ sequenceDiagram
 ```
 
 - Auth và input là dependency FastAPI; khi cùng sai, sơ đồ không quy định ưu tiên lỗi. Các khóa nằm trong cùng transaction/session, kể cả khi khóa đích trùng dòng admin.
-- Audit: `nhan_vien_id=admin`, `doi_tuong_id=id đích`, `loai_doi_tuong=nhan_vien`, `thao_tac=sua`, `du_lieu_truoc=null`, `du_lieu_sau={"da_dat_lai_mat_khau": true}`, `ly_do=null`; không mật khẩu/hash. Append dùng service audit thực sự có trong code; transaction do service nhân viên sở hữu.
-- Response là hồ sơ đầy đủ cho admin, không phân trang, không trả mật khẩu/hash. ETag có thể không đổi vì biểu diễn hồ sơ không chứa hash. Token cũ của đích bị 401 qua kiểm tra `pwdv` ở request sau; tài khoản khóa vẫn bị khóa.
-- FE lưu hồ sơ → vai trò → reset; nếu tự reset thì gọi `login()` ngay trước mọi invalidate/refetch, `/auth/me` dùng token mới, giữ trang chi tiết và popup thành công. Login lỗi mới logout kèm thông báo đã chốt. Không thêm tầng/token response riêng cho endpoint này.
+- Audit: `nhan_vien_id=admin`, `doi_tuong_id=id đích`, `loai_doi_tuong=nhan_vien`, `thao_tac=doi_mat_khau`, `du_lieu_truoc=null`, `du_lieu_sau={"da_doi_mat_khau": true}`, `ly_do=null`; không mật khẩu/hash/token; thời điểm do `LichSuThaoTac.created_at` mặc định `now()`. Append dùng service audit thực sự có trong code; transaction do service nhân viên sở hữu.
+- Response là hồ sơ đầy đủ cho admin, không phân trang, không trả mật khẩu/hash. ETag có thể không đổi vì biểu diễn hồ sơ không chứa hash. Mọi token cũ của đích bị 401 qua kiểm tra `pwdv`/`pbdn` ở request sau; phiên bản tăng đúng 1 trong cùng UPDATE với hash và cùng transaction với audit; tài khoản khóa vẫn bị khóa.
+- FE lưu hồ sơ → vai trò → reset; tự đổi mật khẩu thành công gọi `logout("Đã đổi mật khẩu. Vui lòng đăng nhập lại.")` rồi dừng trước cache/refetch, chuyển về `/dang-nhap`; đổi cho người khác giữ phiên QTV, cập nhật cache và báo thành công. Không tự đăng nhập lại hoặc cấp token mới. Đóng phần nhập/hủy xác nhận không gửi request (A5); lưu lỗi giữ mật khẩu, phiên bản và lịch sử cũ (A6).

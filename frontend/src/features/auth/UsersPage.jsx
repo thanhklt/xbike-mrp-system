@@ -41,6 +41,11 @@ import { PASSWORD_MIN_LENGTH, buildCreateAccountBody, creatableRoles } from "./a
 import { canChangeAccountState, lockRequestBody, stateConfirmOptions } from "./accountState.js";
 import { endsOwnSession, roleChangeBody, roleOptions } from "./accountRole.js";
 import {
+  endsOwnSessionAfterPasswordReset,
+  passwordResetBody,
+  passwordTooShort,
+} from "./accountPassword.js";
+import {
   ACCOUNT_SEARCH_LABEL,
   ACCOUNT_SORT_OPTIONS,
   DEFAULT_ACCOUNT_SORT,
@@ -430,7 +435,7 @@ function AccountListView({ id, roles }) {
 }
 
 function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) {
-  const { user, login, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { confirm, notify, showSuccess } = useFeedback();
   const queryClient = useQueryClient();
   const detail = useDetail(API.employees, id);
@@ -544,8 +549,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
 
     const profileDirty = isProfileChanged(baseRecord, values);
     const passwordDirty = newPassword.length > 0;
-    if (passwordDirty && newPassword.length < 8) {
-      setSaveError(new ApiError("Mật khẩu mới phải có từ 8 đến 1024 ký tự.", {
+    if (passwordDirty && passwordTooShort(newPassword)) {
+      setSaveError(new ApiError(`Mật khẩu mới phải có từ ${PASSWORD_MIN_LENGTH} đến 1024 ký tự.`, {
         status: 422,
         code: "VALIDATION_ERROR",
       }));
@@ -686,28 +691,21 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             submission.baselineRecord = workingRecord;
           }
 
+          // UC-08 Đổi mật khẩu tài khoản — Main 5–6; A2, A6: lưu mật khẩu mới và đăng xuất khi tự đổi (specs/use_cases/identity_access/UC-08.md)
           if (submission.needPasswordWrite) {
             failedStep = "đặt lại mật khẩu";
             const passwordRes = await writeResource({
               path: `${API.employees}/${submission.id}/dat_lai_mat_khau`,
               method: "post",
-              body: { mat_khau_moi: submission.newPassword },
+              body: passwordResetBody(submission.newPassword),
               etag: currentEtag,
             });
-            // Renew our own token before any cache update can trigger a refetch.
-            if (submission.id === user.id) {
-              try {
-                await login({
-                  ten_dang_nhap: user.ten_dang_nhap,
-                  mat_khau: submission.newPassword,
-                });
-              } catch {
-                submission.newPassword = "";
-                setNewPassword("");
-                setPasswordVisible(false);
-                logout("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
-                return;
-              }
+            if (endsOwnSessionAfterPasswordReset(submission.id, user.id)) {
+              submission.newPassword = "";
+              setNewPassword("");
+              setPasswordVisible(false);
+              logout("Đã đổi mật khẩu. Vui lòng đăng nhập lại.");
+              return;
             }
             workingRecord = { ...workingRecord, ...(passwordRes?.data || {}) };
             currentEtag = passwordRes?.etag || currentEtag;

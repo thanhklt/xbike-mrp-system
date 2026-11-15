@@ -180,81 +180,10 @@ sequenceDiagram
 
 Theo [UC-02 — Đăng xuất](../../specs/use_cases/identity_access/UC-02.md), D1a chỉ kết thúc phiên phía client, không có endpoint đăng xuất. Sau khi người dùng xác nhận, client xóa token khỏi `localStorage`, hủy truy vấn, xóa cache và chuyển về `/dang-nhap`; đóng hộp hỏi giữ nguyên phiên và trang hiện tại (A3). Khi mở lại trang cần đăng nhập, `Protected` chuyển về trang đăng nhập nếu không còn token, kể cả khi còn hồ sơ cũ trong bộ nhớ (R1, A1).
 
-API cần đăng nhập vẫn kiểm tra token và tài khoản như `GET /api/v1/auth/me` ở trên: thiếu/hỏng/hết hạn token, phiên bản mật khẩu hoặc phiên bản đăng nhập cũ trả 401 `chua_xac_thuc` với `WWW-Authenticate: Bearer`; tài khoản khóa trả 403 `tai_khoan_bi_vo_hieu_hoa`. Client nhận 401 hoặc mã tài khoản khóa từ request có Bearer token sẽ kết thúc phiên; thao tác đăng xuất vẫn xóa phiên phía client khi token đã hết hiệu lực (A2). Không ghi lịch sử đăng xuất. Cơ chế `phien_ban_dang_nhap` được triển khai tại UC-06 D1/A3, thay lịch triển khai UC-07 trong quyết định D2 của plan UC-01; UC-07/UC-08 sẽ dùng lại.
+API cần đăng nhập vẫn kiểm tra token và tài khoản như `GET /api/v1/auth/me` ở trên: thiếu/hỏng/hết hạn token, phiên bản mật khẩu hoặc phiên bản đăng nhập cũ trả 401 `chua_xac_thuc` với `WWW-Authenticate: Bearer`; tài khoản khóa trả 403 `tai_khoan_bi_vo_hieu_hoa`. Client nhận 401 hoặc mã tài khoản khóa từ request có Bearer token sẽ kết thúc phiên; thao tác đăng xuất vẫn xóa phiên phía client khi token đã hết hiệu lực (A2). Không ghi lịch sử đăng xuất. Cơ chế `phien_ban_dang_nhap` được triển khai tại UC-06 D1/A3, thay lịch triển khai UC-07 trong quyết định D2 của plan UC-01; UC-07/UC-08 dùng lại khi đổi vai trò/đổi mật khẩu.
 
 Giới hạn D1a: đăng xuất không thu hồi JWT trên server; token còn hạn đã được sao chép vẫn dùng được đến khi hết hạn (TTL hiện tại 60 phút), trừ khi bị từ chối bởi kiểm tra tài khoản, phiên bản mật khẩu hoặc phiên bản đăng nhập hiện có.
 
-## POST /api/v1/auth/doi_mat_khau
-
-JSON gồm `mat_khau_hien_tai` dài 1–1024 và `mat_khau_moi` dài 8–1024 ký tự, giữ nguyên Unicode/khoảng trắng. Không nhận field dư/query; không cần If-Match. Payload xác thực được kiểm tra như `/me` trước khi gọi action.
-
-```mermaid
-sequenceDiagram
-    actor C as Client
-    participant R as auth.router và dependencies
-    participant A as auth.service
-    participant N as nhan_vien.service
-    participant P as nhan_vien.repository
-    participant T as SqlAlchemyTransaction
-    participant U as audit.service
-    participant AP as audit.repository
-    participant DB as PostgreSQL
-    C->>R: POST /api/v1/auth/doi_mat_khau, Bearer JWT, JSON
-    R->>A: current_payload(token)
-    A->>N: get_auth_identity(id, pwdv, session_version=pbdn hoặc 0)
-    N->>P: Đọc account và role hiện tại
-    P->>DB: SELECT NhanVien và VaiTro
-    DB-->>N: Credentials qua repository
-    N-->>A: AuthIdentity hoặc lỗi 401/403
-    A-->>R: Payload hiện tại hoặc lỗi
-    alt JWT/account không hợp lệ
-        R-->>C: 401 hoặc 403
-    else Body/query không hợp lệ
-        R-->>C: 422 du_lieu_khong_hop_le
-    else Xác thực và input hợp lệ
-        R->>A: change_password(payload, current, new)
-        A->>N: change_password(id, current, new, credential_version, session_version=pbdn hoặc 0)
-        N->>T: Enter transaction trên session hiện tại
-        N->>P: lock_credentials_by_id(id)
-        P->>DB: SELECT NhanVien FOR UPDATE, populate_existing
-        P->>DB: Tải VaiTro
-        DB-->>N: Credentials mới nhất qua repository
-        N->>N: Kiểm tra account, role, pwdv, pbdn và mật khẩu hiện tại
-        alt Account/password/pwdv/pbdn không hợp lệ
-            N->>T: Exit với exception
-            T->>DB: ROLLBACK
-            N-->>C: 401 hoặc 403
-        else Kiểm tra hợp lệ
-            N->>N: Hash password mới bằng Argon2id trong worker thread
-            N->>P: set_password_hash(id, new_hash)
-            P->>DB: UPDATE NhanVien
-            N->>U: append(CreationAudit an toàn)
-            U->>AP: append(entry)
-            AP->>AP: session.add LichSuThaoTac, chờ flush
-            alt Append lỗi
-                U-->>N: Exception
-                N->>T: Exit với exception
-                T->>DB: ROLLBACK cả password và audit
-                N-->>C: 500 loi_noi_bo
-            else Append thành công
-                N->>T: Exit thành công
-                T->>DB: Flush INSERT LichSuThaoTac và COMMIT
-                alt Vi phạm ràng buộc khi commit
-                    T->>DB: ROLLBACK
-                    T-->>C: 409 trang_thai_khong_hop_le
-                else Lỗi DB khác khi commit
-                    T->>DB: ROLLBACK
-                    T-->>C: 500 loi_noi_bo
-                else Commit thành công
-                    N-->>A: None
-                    A-->>R: Thành công
-                    R-->>C: 200 data.da_doi=true, meta.request_id
-                end
-            end
-        end
-    end
-```
-
-Audit lưu `loai_doi_tuong=nhan_vien`, `thao_tac=sua`, `du_lieu_sau={da_doi_mat_khau: true}`; không lưu password/hash/token. Không phát token mới. Tất cả token có password version cũ bị từ chối ở request tiếp theo. Hai action đồng thời dùng cùng token được tuần tự hóa bằng khóa dòng; chỉ bên đầu tiên commit thành công, bên sau nhận 401.
+Theo [UC-08 — Đổi mật khẩu tài khoản](../../specs/use_cases/identity_access/UC-08.md), R3 và D1, endpoint tự đổi mật khẩu `POST /api/v1/auth/doi_mat_khau` đã gỡ; gọi lại trả 404. Trang Hồ sơ chỉ hiển thị thông tin nhân viên. Chỉ QTV đổi mật khẩu trong quản trị tài khoản qua `POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau`, kể cả của chính mình, không cần mật khẩu hiện tại. Đổi mật khẩu tăng `phien_ban_dang_nhap` trong cùng UPDATE với hash và cùng transaction với audit `doi_mat_khau`; mọi token cũ bị 401 qua kiểm tra `pwdv`/`pbdn`. QTV tự đổi cũng kết thúc phiên và phải đăng nhập lại; API không cấp token mới.
 
 Mọi response auth thành công/lỗi do handler auth xử lý có `Cache-Control: no-store`, `Pragma: no-cache`; lỗi 401 thêm `WWW-Authenticate: Bearer`. Exception không dự kiến được trả 500 an toàn; lỗi DB khi đọc không được đưa chi tiết nội bộ ra client. Đăng nhập thành công commit audit trong `record_login` trước khi cấp token; GET không ghi/commit. Dependency đóng session khi kết thúc request.

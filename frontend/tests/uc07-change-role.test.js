@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { endsOwnSession, roleChangeBody, roleOptions } from "../src/features/auth/accountRole.js";
+import {
+  endsOwnSessionAfterPasswordReset,
+  passwordResetBody,
+  passwordTooShort,
+} from "../src/features/auth/accountPassword.js";
+import { PASSWORD_MIN_LENGTH } from "../src/features/auth/accountForm.js";
 import { canAccessPath } from "../src/features/auth/permissions.js";
 
 const users = readFileSync(new URL("../src/features/auth/UsersPage.jsx", import.meta.url), "utf8");
@@ -35,6 +41,7 @@ function editAction({ own = false, writeError, reason = "  Phân công mới  " 
       return { data: { ...record, vai_tro_id: 3, ma_vai_tro: "nhan_vien" }, etag: '"new"' };
     },
     roleChangeBody, endsOwnSession, roles: { data: roles },
+    PASSWORD_MIN_LENGTH, passwordTooShort, passwordResetBody, endsOwnSessionAfterPasswordReset,
     logout: (message) => logouts.push(message), login: async () => {},
     setNewPassword: () => {}, setPasswordVisible: () => {},
     showSuccess: (options) => successes.push(options),

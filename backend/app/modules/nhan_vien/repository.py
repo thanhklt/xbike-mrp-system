@@ -114,9 +114,13 @@ class SqlAlchemyNhanVienRepository:
         )
         return employee_credentials(user) if user is not None else None
 
+    # UC-08 Đổi mật khẩu tài khoản — Main 5: tăng phiên bản cùng UPDATE với hash (specs/use_cases/identity_access/UC-08.md)
     async def set_password_hash(self, employee_id: int, password_hash: str) -> None:
         await self.session.execute(
-            update(NhanVien).where(NhanVien.id == employee_id).values(mat_khau=password_hash)
+            update(NhanVien).where(NhanVien.id == employee_id).values(
+                mat_khau=password_hash,
+                phien_ban_dang_nhap=NhanVien.phien_ban_dang_nhap + 1,
+            )
         )
 
     async def get_for_update(self, employee_id: int) -> EmployeeRecord | None:

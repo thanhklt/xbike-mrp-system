@@ -1,7 +1,6 @@
 export const API = {
   login: "/auth/dang_nhap",
   me: "/auth/me",
-  password: "/auth/doi_mat_khau",
   employees: "/nhan_vien",
   roles: "/vai_tro",
   items: "/mat_hang",

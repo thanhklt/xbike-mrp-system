@@ -184,7 +184,7 @@ class DoiVaiTroInput(BaseModel):
 class DatLaiMatKhauInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024, repr=False)
+    mat_khau_moi: SecretStr = Field(min_length=6, max_length=1024, repr=False)
 
 
 class LyDoTuyChonInput(BaseModel):

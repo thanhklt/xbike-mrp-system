@@ -231,6 +231,7 @@ async def unlock_entry(
     return result
 
 
+# UC-08 Đổi mật khẩu tài khoản — Main 2–6; A1–A4, A6: nhận mật khẩu mới trong quản trị tài khoản (specs/use_cases/identity_access/UC-08.md)
 @router.post(
     "/{id}/dat_lai_mat_khau",
     response_model=NhanVienDetailResponse,

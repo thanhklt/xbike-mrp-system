@@ -15,13 +15,6 @@ class LoginInput(BaseModel):
     mat_khau: Password
 
 
-class DoiMatKhauInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    mat_khau_hien_tai: Password
-    mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024)
-
-
 class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
@@ -39,15 +32,6 @@ class LoginResponse(BaseModel):
 
 class MeResponse(BaseModel):
     data: NhanVienRead
-    meta: ResponseMeta
-
-
-class PasswordChanged(BaseModel):
-    da_doi: Literal[True] = True
-
-
-class PasswordChangeResponse(BaseModel):
-    data: PasswordChanged
     meta: ResponseMeta
 
 

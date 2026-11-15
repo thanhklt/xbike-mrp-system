@@ -165,37 +165,6 @@ class NhanVienService:
             raise UnauthorizedException(message="Please sign in again")
         return _identity(user)
 
-    async def change_password(
-        self,
-        employee_id: int,
-        current_password: str,
-        new_password: str,
-        *,
-        credential_version: str,
-        session_version: int = 0,
-    ) -> None:
-        async with self.transaction:
-            user = await self.repository.lock_credentials_by_id(employee_id)
-            if user is None:
-                raise UnauthorizedException(message="Employee no longer exists")
-            _require_active(user)
-            _require_current_password(user, credential_version)
-            if type(session_version) is not int or session_version != user.phien_ban_dang_nhap:
-                raise UnauthorizedException(message="Please sign in again")
-            if not await asyncio.to_thread(verify_password, current_password, user.password_hash):
-                raise InvalidCredentialsException()
-            new_hash = await asyncio.to_thread(get_password_hash, new_password)
-            await self.repository.set_password_hash(user.id, new_hash)
-            await self.audit.append(
-                CreationAudit(
-                    nhan_vien_id=user.id,
-                    loai_doi_tuong="nhan_vien",
-                    doi_tuong_id=user.id,
-                    thao_tac="sua",
-                    du_lieu_sau={"da_doi_mat_khau": True},
-                )
-            )
-
     # UC-03 Xem danh sách tài khoản — Main 2–4; R1, A1–A3 (specs/use_cases/identity_access/UC-03.md)
     async def list_employees(
         self,
@@ -363,6 +332,7 @@ class NhanVienService:
                 await self._audit(actor, employee, "sua", before=before)
         return self._result(employee, actor, request_id)
 
+    # UC-08 Đổi mật khẩu tài khoản — Main 4–6; A2, A6: QTV đổi mật khẩu và ghi audit cùng transaction (specs/use_cases/identity_access/UC-08.md)
     async def reset_password(
         self,
         employee_id: int,
@@ -382,9 +352,9 @@ class NhanVienService:
                     nhan_vien_id=int(actor["sub"]),
                     loai_doi_tuong="nhan_vien",
                     doi_tuong_id=employee.id,
-                    thao_tac="sua",
+                    thao_tac="doi_mat_khau",
                     du_lieu_truoc=None,
-                    du_lieu_sau={"da_dat_lai_mat_khau": True},
+                    du_lieu_sau={"da_doi_mat_khau": True},
                     ly_do=None,
                 )
             )

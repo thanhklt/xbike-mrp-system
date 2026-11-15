@@ -67,14 +67,3 @@ class AuthService:
             session_version=payload.get("pbdn", 0),
         )
         return identity.profile
-
-    async def change_password(
-        self, payload: dict, current_password: str, new_password: str
-    ) -> None:
-        await self.employees.change_password(
-            int(payload["sub"]),
-            current_password,
-            new_password,
-            credential_version=payload.get("pwdv"),
-            session_version=payload.get("pbdn", 0),
-        )

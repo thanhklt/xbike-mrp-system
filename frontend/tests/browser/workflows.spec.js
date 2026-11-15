@@ -187,23 +187,16 @@ test("planning is explicit and submitting the plan requires a confirmation", asy
   await expect(page.getByText("plan-test-token", { exact: true })).toHaveCount(0);
 });
 
-test("changing password invalidates the local session and returns to login", async ({ page }) => {
+// UC-08 AC-6: Hồ sơ không còn form tự đổi mật khẩu, không gửi request ghi
+test("profile displays employee information without a password form", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/ho-so");
-  await page.getByLabel("Mật khẩu hiện tại", { exact: true }).fill("old-password");
-  await page.getByLabel("Mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByLabel("Nhập lại mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByRole("button", { name: "Đổi mật khẩu", exact: true }).click();
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Đổi mật khẩu", exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/dang-nhap$/);
-  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-  expect(state.calls.find((call) => call.path === "auth/doi_mat_khau").body).toEqual({
-    mat_khau_hien_tai: "old-password",
-    mat_khau_moi: "new-password",
-  });
+  await expect(page.getByRole("heading", { name: "Hồ sơ", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hồ sơ nhân viên", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mật khẩu hiện tại", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Đổi mật khẩu", exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
 });
 
 test("unsupported supplier actions are disabled with visible reasons", async ({ page }) => {

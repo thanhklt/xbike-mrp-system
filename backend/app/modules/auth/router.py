@@ -8,12 +8,9 @@ from app.core.request_context import get_request_id, reject_query
 from app.dependencies import get_auth_service, get_current_user_payload
 from app.modules.auth.schema import (
     AuthErrorResponse,
-    DoiMatKhauInput,
     LoginInput,
     LoginResponse,
     MeResponse,
-    PasswordChanged,
-    PasswordChangeResponse,
     TokenResponse,
 )
 from app.modules.auth.service import AuthService
@@ -71,20 +68,3 @@ async def get_current_user(
     user = await service.get_current_user(payload)
     response.headers["ETag"] = f'"{sha256(user.model_dump_json().encode()).hexdigest()}"'
     return MeResponse(data=user, meta=ResponseMeta(request_id=request_id))
-
-
-@router.post(
-    "/doi_mat_khau", response_model=PasswordChangeResponse, dependencies=[Depends(reject_query)]
-)
-async def doi_mat_khau(
-    credentials: DoiMatKhauInput,
-    payload: Annotated[dict, Depends(get_current_user_payload)],
-    service: Annotated[AuthService, Depends(get_auth_service)],
-    request_id: Annotated[str, Depends(get_request_id)],
-) -> PasswordChangeResponse:
-    await service.change_password(
-        payload,
-        credentials.mat_khau_hien_tai.get_secret_value(),
-        credentials.mat_khau_moi.get_secret_value(),
-    )
-    return PasswordChangeResponse(data=PasswordChanged(), meta=ResponseMeta(request_id=request_id))

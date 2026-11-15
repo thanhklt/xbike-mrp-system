@@ -351,7 +351,7 @@ def test_session_mapping_and_credentials(password_hash):
     assert credentials.phien_ban_dang_nhap == 7
 
 
-# UC-06 D1: current_payload, get_current_user và đổi mật khẩu truyền đúng phiên bản
+# UC-06 D1: current_payload và get_current_user truyền đúng phiên bản
 async def test_auth_propagates_session_version(api):
     api.stored[5] = api.stored[5].model_copy(update={"phien_ban_dang_nhap": 2})
     payload = decode_access_token(api.headers(5)["Authorization"].removeprefix("Bearer "))
@@ -359,13 +359,8 @@ async def test_auth_propagates_session_version(api):
     stale = {**payload, "pbdn": 1}
     with pytest.raises(UnauthorizedException, match="Please sign in again"):
         await api.auth.get_current_user(stale)
-    with pytest.raises(UnauthorizedException, match="Please sign in again"):
-        await api.auth.change_password(stale, PASSWORD, "UC06-new-password")
     api.repo.set_password_hash.assert_not_awaited()
     api.audit.append.assert_not_awaited()
-    await api.auth.change_password(payload, PASSWORD, "UC06-new-password")
-    api.repo.set_password_hash.assert_awaited_once()
-    assert api.repo.set_password_hash.await_args.args[0] == 5
     assert api.stored[5].phien_ban_dang_nhap == 2
 
 

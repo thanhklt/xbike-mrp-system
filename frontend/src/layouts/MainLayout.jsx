@@ -23,7 +23,7 @@ function adminBreadcrumbs(pathname) {
   if (pathname === "/admin/tai-khoan") return [{ label: "Quản lý tài khoản" }];
   if (pathname === "/admin/vai-tro") return [{ label: "Quản lý vai trò" }];
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
-  if (pathname === "/ho-so") return [{ label: "Hồ sơ & đổi mật khẩu" }];
+  if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
 }
 
@@ -79,7 +79,7 @@ export function MainLayout() {
       </summary>
       <div className="user-dropdown">
         <NavLink to="/ho-so">
-          <UserRound size={16} /> Hồ sơ & đổi mật khẩu
+          <UserRound size={16} /> Hồ sơ
         </NavLink>
         <button type="button" onClick={signOut}>
           <LogOut size={16} /> Đăng xuất
