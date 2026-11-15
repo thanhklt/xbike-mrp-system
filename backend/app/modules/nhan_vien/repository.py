@@ -1,10 +1,10 @@
 """SQLAlchemy employee queries; ORM objects do not leave this adapter."""
 
-from sqlalchemy import Integer, cast, column, false, func, or_, select, table, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import column, false, func, or_, select, table, update
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import DuplicateCodeException, DuplicateUsernameException, InvalidWorkflowState
+from app.core.errors import DuplicateUsernameException, InvalidWorkflowState
 from app.modules.nhan_vien.models import NhanVien, VaiTro
 from app.modules.nhan_vien.schemas import (
     MAX_EMPLOYEE_ID,
@@ -134,21 +134,10 @@ class SqlAlchemyNhanVienRepository:
         )
         return employee_record(user) if user is not None else None
 
-    # UC-04 Thêm tài khoản — Main 5, R6: max mã toàn bảng, kể cả tài khoản khóa (specs/use_cases/identity_access/UC-04.md)
-    async def next_employee_code(self) -> str:
-        maximum = await self.session.scalar(
-            select(func.max(cast(func.right(NhanVien.ma_nhan_vien, 6), Integer)))
-        )
-        next_number = (maximum or 0) + 1
-        if next_number > 999999:
-            raise InvalidWorkflowState(message="Đã hết mã nhân viên khả dụng")
-        return f"NV-{next_number:06d}"
-
-    # UC-04 Thêm tài khoản — Main 5; A3: phân biệt trùng tên đăng nhập và mã (specs/use_cases/identity_access/UC-04.md)
+    # UC-04 Thêm tài khoản — Main 5, R6; A3: trigger cấp mã từ id, bắt hết dải/trùng tên (specs/use_cases/identity_access/UC-04.md)
     async def create(self, employee: NewEmployee) -> EmployeeRecord:
         user = NhanVien(
             ten_dang_nhap=employee.ten_dang_nhap,
-            ma_nhan_vien=employee.ma_nhan_vien,
             vai_tro_id=employee.vai_tro_id,
             mat_khau=employee.password_hash,
             trang_thai="hoat_dong",
@@ -170,10 +159,10 @@ class SqlAlchemyNhanVienRepository:
                 constraint = constraint or getattr(diagnostic, "constraint_name", None)
                 if "ten_dang_nhap" in str(constraint or original):
                     raise DuplicateUsernameException() from exc
-                if "ma_nhan_vien" in str(constraint or original):
-                    raise DuplicateCodeException(
-                        message="Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại"
-                    ) from exc
+            raise
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "P0001" and "NV-NNNNNN" in str(exc.orig):
+                raise InvalidWorkflowState(message="Đã hết mã nhân viên khả dụng") from exc
             raise
         # Read normalized database values (notably NUMERIC(5, 2)) so the ETag
         # returned by POST matches an immediate GET of the persisted resource.

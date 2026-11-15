@@ -1,22 +1,25 @@
 """Employee code allocation and HTTP contract, without any database connection."""
 
 from contextlib import AbstractAsyncContextManager
-from dataclasses import replace
+from dataclasses import asdict, replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import DBAPIError
 
-from app.core.errors import DuplicateCodeException
+from app.core.errors import InvalidWorkflowState
 from app.core.exceptions import register_exception_handlers
 from app.core.security import password_version
 from app.dependencies import get_current_user_payload, get_nhan_vien_service
+from app.modules.nhan_vien.models import NhanVien
+from app.modules.nhan_vien.ports import NhanVienRepository
 from app.modules.nhan_vien.repository import SqlAlchemyNhanVienRepository
 from app.modules.nhan_vien.router import router
-from app.modules.nhan_vien.schemas import EmployeeRecord, NhanVienCreate, VaiTroRead
+from app.modules.nhan_vien.schemas import EmployeeRecord, NewEmployee, NhanVienCreate, VaiTroRead
 from app.modules.nhan_vien.service import NhanVienService
 
 BODY = {"ten_dang_nhap": "new.employee", "mat_khau": "test-password", "vai_tro_id": 3}
@@ -50,27 +53,9 @@ class Transaction(AbstractAsyncContextManager):
         return False
 
 
-class CodeSession:
-    """Evaluate the aggregate over memory and inspect the actual PostgreSQL query."""
-
-    def __init__(self, employees, events):
-        self.employees = employees
-        self.events = events
-
-    async def scalar(self, statement):
-        sql = str(
-            statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-        )
-        assert 'max(CAST(right("NhanVien".ma_nhan_vien, 6) AS INTEGER))' in sql
-        assert 'FROM "NhanVien"' in sql and "WHERE" not in sql
-        self.events.append("max")
-        return max((int(employee[0][-6:]) for employee in self.employees), default=None)
-
-
-def feature(monkeypatch, employees):
+def feature(monkeypatch, generated_code="NV-000009"):
     events = []
-    repo, audit = AsyncMock(), AsyncMock()
-    allocator = SqlAlchemyNhanVienRepository(CodeSession(employees, events))
+    repo, audit = AsyncMock(spec=NhanVienRepository), AsyncMock()
 
     async def lock(_id):
         events.append("admin_lock")
@@ -82,7 +67,7 @@ def feature(monkeypatch, employees):
         events.append("insert")
         return replace(
             RECORD,
-            ma_nhan_vien=employee.ma_nhan_vien,
+            ma_nhan_vien=generated_code,
             vai_tro_id=employee.vai_tro_id,
             ma_vai_tro=repo.get_role.return_value.ma_vai_tro,
         )
@@ -92,7 +77,6 @@ def feature(monkeypatch, employees):
         id=3, ma_vai_tro="nhan_vien", ten_vai_tro="Nhân viên", mo_ta=None
     )
     repo.find_by_username.return_value = None
-    repo.next_employee_code.side_effect = allocator.next_employee_code
     repo.create.side_effect = create
     monkeypatch.setattr(
         "app.modules.nhan_vien.service.get_password_hash", lambda _password: "test-hash"
@@ -101,24 +85,14 @@ def feature(monkeypatch, employees):
     return service, repo, audit, events
 
 
-# UC-04 R6: mã max+1 kể cả tài khoản khóa, rỗng và biên; cấp dưới khóa trong transaction
-@pytest.mark.parametrize(
-    "employees,expected",
-    [
-        ([("NV-000008", "hoat_dong")], "NV-000009"),
-        ([("NV-000003", "hoat_dong"), ("NV-000008", "bi_khoa")], "NV-000009"),
-        ([], "NV-000001"),
-        ([("NV-999998", "bi_khoa")], "NV-999999"),
-    ],
-)
-async def test_code_includes_locked_accounts_and_is_allocated_under_admin_lock(
-    monkeypatch, employees, expected
-):
-    service, repo, audit, events = feature(monkeypatch, employees)
+# UC-04 R6: dữ liệu tạo không có mã; response/lịch sử dùng mã repository trả về trong transaction
+@pytest.mark.parametrize("expected", ["NV-000001", "NV-000009", "NV-999999"])
+async def test_response_and_audit_use_repository_generated_code(monkeypatch, expected):
+    service, repo, audit, events = feature(monkeypatch, expected)
     response, etag = await service.create_employee(NhanVienCreate(**BODY), ACTOR, "req")
     assert response.data.ma_nhan_vien == expected and etag.startswith('"')
-    assert events == ["begin", "admin_lock", "max", "insert", "commit"]
-    assert repo.create.call_args.args[0].ma_nhan_vien == expected
+    assert events == ["begin", "admin_lock", "insert", "commit"]
+    assert "ma_nhan_vien" not in asdict(repo.create.call_args.args[0])
     assert "ma_nhan_vien" not in repo.create.call_args.args[0].profile
     assert audit.append.call_args.args[0].du_lieu_sau["ma_nhan_vien"] == expected
 
@@ -135,7 +109,7 @@ async def post(service, body):
 
 # UC-04 A4: gửi kèm mã nhân viên bị từ chối trước mọi truy cập repository
 async def test_client_employee_code_is_rejected_with_422(monkeypatch):
-    service, repo, _, events = feature(monkeypatch, [])
+    service, repo, _, events = feature(monkeypatch)
     response = await post(service, {**BODY, "ma_nhan_vien": "NV-000008"})
     assert response.status_code == 422
     assert "ma_nhan_vien" in response.text
@@ -145,20 +119,26 @@ async def test_client_employee_code_is_rejected_with_422(monkeypatch):
 
 
 # UC-04 R6: hết dải trả 409, rollback và không tạo tài khoản/lịch sử
-async def test_exhaustion_returns_409_without_create_or_audit(monkeypatch):
-    service, repo, audit, events = feature(monkeypatch, [("NV-999999", "bi_khoa")])
+async def test_exhaustion_returns_409_without_account_or_audit(monkeypatch):
+    service, repo, audit, events = feature(monkeypatch)
+
+    async def exhausted(_employee):
+        events.append("insert")
+        raise InvalidWorkflowState(message="Đã hết mã nhân viên khả dụng")
+
+    repo.create.side_effect = exhausted
     response = await post(service, BODY)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "trang_thai_khong_hop_le"
     assert response.json()["error"]["message"] == "Đã hết mã nhân viên khả dụng"
-    assert events == ["begin", "admin_lock", "max", "rollback"]
-    repo.create.assert_not_awaited()
+    assert events == ["begin", "admin_lock", "insert", "rollback"]
+    repo.create.assert_awaited_once()
     audit.append.assert_not_awaited()
 
 
 # UC-04 R6: API trả mã tự cấp cùng Location, ETag và không lộ mật khẩu
 async def test_create_http_returns_generated_code_location_and_etag(monkeypatch):
-    service, _, _, _ = feature(monkeypatch, [("NV-000008", "bi_khoa")])
+    service, _, _, _ = feature(monkeypatch)
     response = await post(service, BODY)
     assert response.status_code == 201
     assert response.json()["data"]["ma_nhan_vien"] == "NV-000009"
@@ -169,7 +149,7 @@ async def test_create_http_returns_generated_code_location_and_etag(monkeypatch)
 
 # UC-04 AC-1: cho phép tạo thêm QTV với mã tự cấp và lịch sử
 async def test_can_create_second_admin(monkeypatch):
-    service, repo, audit, events = feature(monkeypatch, [])
+    service, repo, audit, events = feature(monkeypatch, "NV-000001")
     repo.get_role.return_value = VaiTroRead(
         id=1, ma_vai_tro="quan_tri_vien", ten_vai_tro="Quản trị viên", mo_ta=None
     )
@@ -177,19 +157,67 @@ async def test_can_create_second_admin(monkeypatch):
     assert response.status_code == 201
     assert response.json()["data"]["ma_vai_tro"] == "quan_tri_vien"
     assert response.json()["data"]["ma_nhan_vien"] == "NV-000001"
-    assert events == ["begin", "admin_lock", "max", "insert", "commit"]
-    repo.next_employee_code.assert_awaited_once()
+    assert events == ["begin", "admin_lock", "insert", "commit"]
     audit.append.assert_awaited_once()
 
 
-# UC-04 R6: trùng mã khi tạo đồng thời trả 409, rollback và không ghi lịch sử
-async def test_concurrent_code_conflict_returns_409(monkeypatch):
-    service, repo, audit, events = feature(monkeypatch, [])
-    message = "Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại"
-    repo.create.side_effect = DuplicateCodeException(message=message)
-    response = await post(service, BODY)
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "ma_bi_trung"
-    assert response.json()["error"]["message"] == message
-    assert events == ["begin", "admin_lock", "max", "rollback"]
-    audit.append.assert_not_awaited()
+# UC-04 R6: ORM bỏ mã khỏi INSERT và repository đọc mã DB sinh sau flush/refresh
+async def test_repository_omits_code_and_returns_database_values():
+    session = AsyncMock()
+    session.add = Mock()
+    events = []
+
+    async def flush():
+        events.append("flush")
+        user = session.add.call_args.args[0]
+        assert "ma_nhan_vien" not in user.__dict__
+        assert NhanVien.__table__.c.ma_nhan_vien.server_default is not None
+        statement = NhanVien.__table__.insert().values(
+            ten_dang_nhap=user.ten_dang_nhap,
+            vai_tro_id=user.vai_tro_id,
+            mat_khau=user.mat_khau,
+            trang_thai=user.trang_thai,
+        )
+        assert "ma_nhan_vien" not in statement.compile(dialect=postgresql.dialect()).params
+
+    async def refresh(user):
+        events.append("refresh")
+        for name, value in asdict(RECORD).items():
+            if name != "ma_vai_tro":
+                setattr(user, name, value)
+        user.role = SimpleNamespace(ma_vai_tro=RECORD.ma_vai_tro)
+
+    session.flush.side_effect = flush
+    session.refresh.side_effect = refresh
+    result = await SqlAlchemyNhanVienRepository(session).create(
+        NewEmployee("new.employee", 3, "hash", {})
+    )
+    assert result == RECORD
+    assert events == ["flush", "refresh"]
+    session.refresh.assert_awaited_once_with(session.add.call_args.args[0])
+
+
+# UC-04 R6: chỉ P0001 kèm NV-NNNNNN được ánh xạ hết dải; giữ nguyên lỗi DB khác
+@pytest.mark.parametrize(
+    "sqlstate,message,is_exhausted",
+    [
+        ("P0001", "Hết dải mã nhân viên NV-NNNNNN", True),
+        ("P0001", "Không được sửa mã nhân viên", False),
+        ("23514", "NV-NNNNNN check violation", False),
+    ],
+)
+async def test_repository_maps_only_employee_code_exhaustion(sqlstate, message, is_exhausted):
+    session = AsyncMock()
+    session.add = Mock()
+    original = RuntimeError(message)
+    original.sqlstate = sqlstate
+    error = DBAPIError("INSERT", {}, original)
+    session.flush.side_effect = error
+    with pytest.raises(InvalidWorkflowState if is_exhausted else DBAPIError) as caught:
+        await SqlAlchemyNhanVienRepository(session).create(NewEmployee("new", 3, "hash", {}))
+    if is_exhausted:
+        assert caught.value.message == "Đã hết mã nhân viên khả dụng"
+        assert caught.value.__cause__ is error
+    else:
+        assert caught.value is error
+    session.refresh.assert_not_awaited()

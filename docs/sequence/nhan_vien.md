@@ -136,7 +136,7 @@ GET không ghi audit hoặc commit. Ngoài các nhánh trên, lỗi không dự 
 
 ## POST /api/v1/nhan_vien — Tạo nhân viên
 
-Nguồn nghiệp vụ: [UC-04 — Thêm tài khoản](../../specs/use_cases/identity_access/UC-04.md), Main 2–6, R1–R7, A1–A7; D1–D4 trong [plan UC-04](../plans/UC-04.md).
+Nguồn nghiệp vụ: [UC-04 — Thêm tài khoản](../../specs/use_cases/identity_access/UC-04.md), Main 2–6, R1–R7, A1–A7; [plan UC-04](../plans/UC-04.md) và [plan cấp mã bằng trigger](../plans/UC-04-ma-nv-trigger.md) thay D1, nhánh trùng mã của D2 bằng data model #17.
 
 NhanVienCreate bắt buộc `ten_dang_nhap` trim 1–255 ký tự; `mat_khau` 6–1024 ký tự không trim; `vai_tro_id` integer dương signed 32-bit. Chọn được cả `quan_tri_vien`, `quan_ly`, `nhan_vien`. Hồ sơ nullable là tùy chọn: `ho_ten`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`. `he_so_luong` là decimal JSON string 0–999.99, tối đa 2 số thập phân; ngày YYYY-MM-DD. `ly_do` tùy chọn, trim, tối đa 1000 ký tự, rỗng thành null; chỉ dùng cho lịch sử. Server tự cấp `ma_nhan_vien`, đặt `hoat_dong`; gửi kèm mã hoặc field dư trả 422. Không cần If-Match, không nhận query.
 
@@ -195,22 +195,26 @@ sequenceDiagram
             T->>DB: ROLLBACK
             R-->>C: 409 ten_dang_nhap_bi_trung
         end
-        N->>P: next_employee_code()
-        P->>DB: SELECT max(CAST(right(ma_nhan_vien, 6) AS INTEGER)) toàn NhanVien
-        P->>P: max+1#59; rỗng bắt đầu NV-000001
-        break Vượt NV-999999
-            N->>T: __aexit__(InvalidWorkflowState)
-            T->>DB: ROLLBACK
-            R-->>C: 409 trang_thai_khong_hop_le, Đã hết mã nhân viên khả dụng
-        end
         rect rgb(245, 245, 245)
-            N->>P: create(NewEmployee)
-            P->>DB: INSERT NhanVien hoat_dong, flush, refresh và tải role
-            break Unique username/mã vi phạm khi tạo đồng thời
-                N->>T: __aexit__(DuplicateUsernameException hoặc DuplicateCodeException)
+            N->>P: create(NewEmployee không có ma_nhan_vien)
+            P->>DB: flush INSERT NhanVien hoat_dong, không truyền mã
+            DB->>DB: Identity cấp id, BEFORE INSERT cap_ma_nhan_vien()
+            break id vượt 999999
+                DB-->>P: P0001, Hết dải mã nhân viên NV-NNNNNN
+                P-->>N: InvalidWorkflowState
+                N->>T: __aexit__(error)
                 T->>DB: ROLLBACK
-                R-->>C: 409 ten_dang_nhap_bi_trung hoặc ma_bi_trung (thử lại)
+                R-->>C: 409 trang_thai_khong_hop_le, Đã hết mã nhân viên khả dụng
             end
+            DB->>DB: Gán ma_nhan_vien = NV- + lpad(id, 6, 0)
+            break Unique username vi phạm khi tạo đồng thời
+                P-->>N: DuplicateUsernameException
+                N->>T: __aexit__(error)
+                T->>DB: ROLLBACK
+                R-->>C: 409 ten_dang_nhap_bi_trung
+            end
+            P->>DB: refresh NhanVien và tải role
+            P-->>N: EmployeeRecord với mã DB sinh
             N->>AU: append tao, actor_id, id mới, hồ sơ an toàn, ly_do
             AU->>AR: append(entry), session.add
             Note over AR,DB: created_at do PostgreSQL đặt mặc định khi lưu
@@ -230,9 +234,9 @@ sequenceDiagram
 Location trỏ GET chi tiết mới; ETag từ hồ sơ trả về, meta có `request_id`. Response QTV đủ hồ sơ và vai trò, không chứa mật khẩu/hash hoặc `ly_do`. Không cấp JWT khi tạo; tài khoản mới đăng nhập qua UC-01 và xuất hiện trong danh sách UC-03. Đóng phần nhập trước khi lưu không gửi POST.
 
 - Tài khoản và audit `tao` dùng chung transaction. Audit có người thực hiện, đối tượng mới, thời điểm do DB đặt, lý do tùy chọn; không lưu mật khẩu thô/hash.
-- Cấp mã đọc toàn bảng, kể cả tài khoản khóa, dưới khóa dòng của QTV thực hiện. Hai QTV khác nhau có thể lấy cùng mã; unique `ma_nhan_vien` chặn bản ghi sau, trả 409 `ma_bi_trung` với thông báo “Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại”. Không có retry tự động hoặc trigger cấp mã.
+- Trigger `cap_ma_nhan_vien()` cấp mã từ `id` identity (`NV-` + 6 chữ số). Hai QTV tạo đồng thời nhận id khác nhau nên không tranh cùng mã. `id > 999999` ném P0001 chứa `NV-NNNNNN`; repository chuyển thành 409 `trang_thai_khong_hop_le`, “Đã hết mã nhân viên khả dụng”; rollback, không ghi lịch sử. Trigger chặn UPDATE đổi `id` hoặc mã. Sequence có thể có khoảng trống sau rollback.
 - Username trùng trước cấp mã hoặc lúc INSERT đều trả 409 `ten_dang_nhap_bi_trung`, “Tên đăng nhập đã tồn tại”. Username/mã bất biến sau tạo.
-- Thay đổi hợp đồng API: client bỏ `ma_nhan_vien` (gửi trường cũ sẽ nhận 422), mật khẩu từ 6 ký tự, nhận thêm `ly_do` tùy chọn. Caller `EmployeeForm` đã được cập nhật. Không sửa schema/bootstrap hoặc database đang chạy.
+- Hợp đồng API UC-04 giữ nguyên: client không gửi `ma_nhan_vien` (gửi sẽ nhận 422), mật khẩu từ 6 ký tự, `ly_do` tùy chọn. `init.sql`/`seed.sql` chỉ cập nhật bootstrap cho DB mới/trống; database đã khởi tạo không tự nhận trigger và chưa được thay đổi trong tác vụ này.
 
 
 ## PATCH /api/v1/nhan_vien/{id} — Sửa hồ sơ
