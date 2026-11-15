@@ -74,6 +74,11 @@ class InvalidWorkflowState(ConflictException):
     default_message = "Trạng thái không cho phép thao tác này"
 
 
+class LastActiveAdminException(ConflictException):
+    code = "quan_tri_vien_cuoi_cung"
+    default_message = "Không khóa được Quản trị viên đang hoạt động cuối cùng"
+
+
 class InvalidAssignee(ConflictException):
     code = "nguoi_duoc_giao_khong_hop_le"
     default_message = "Người phụ trách phải là nhân viên đang hoạt động"

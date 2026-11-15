@@ -38,6 +38,7 @@ import {
 } from "../../lib/format.js";
 import { useAuth } from "./AuthProvider.jsx";
 import { PASSWORD_MIN_LENGTH, buildCreateAccountBody, creatableRoles } from "./accountForm.js";
+import { canChangeAccountState, lockRequestBody, stateConfirmOptions } from "./accountState.js";
 import {
   ACCOUNT_SEARCH_LABEL,
   ACCOUNT_SORT_OPTIONS,
@@ -83,11 +84,9 @@ function isProfileChanged(record, values) {
   });
 }
 
+// UC-05 Khóa tài khoản — Main 2–3, 5; A1, A3: xác nhận lý do tùy chọn và gửi thao tác khóa (specs/use_cases/identity_access/UC-05.md)
 function promptAccountStateChange({ record, etag, currentUserId, confirm, notify, queryClient, onError }) {
-  if (!record) return;
-  if (record.ma_vai_tro === "quan_tri_vien" || record.id === currentUserId) {
-    return;
-  }
+  if (!canChangeAccountState(record)) return;
   if (!etag) {
     onError?.(
       new ApiError("Chưa tải được phiên bản dữ liệu để xác nhận. Vui lòng tải lại.", {
@@ -98,20 +97,25 @@ function promptAccountStateChange({ record, etag, currentUserId, confirm, notify
     return;
   }
   const unlock = record.trang_thai === "bi_khoa";
+  const options = stateConfirmOptions(record);
   confirm({
-    title: unlock ? "Mở khóa tài khoản" : "Khóa tài khoản",
+    title: options.title,
     description: `${record.ma_nhan_vien} · ${record.ho_ten || record.ten_dang_nhap}`,
     reason: true,
-    danger: !unlock,
+    reasonOptional: options.reasonOptional,
+    danger: options.danger,
     impact:
       "Bảo toàn hồ sơ, công việc và chứng từ đã lập. Khóa tài khoản chặn mọi request tiếp theo.",
     onConfirm: async (reason) => {
       await writeResource({
-        path: `${API.employees}/${record.id}${unlock ? "/mo_khoa" : ""}`,
-        method: unlock ? "post" : "delete",
-        body: { ly_do: reason },
+        path: `${API.employees}/${record.id}${options.pathSuffix}`,
+        method: options.method,
+        body: unlock ? { ly_do: reason } : lockRequestBody(reason),
         etag,
       });
+      if (!unlock && record.id === currentUserId) {
+        await queryClient.invalidateQueries({ queryKey: ["session"] });
+      }
       await queryClient.invalidateQueries({ queryKey: ["resources"] });
       notify(unlock ? "Đã mở khóa tài khoản." : "Đã khóa tài khoản.");
     },
@@ -184,6 +188,7 @@ function AccountListView({ id, roles }) {
     );
   }
 
+  // UC-05 Khóa tài khoản — Main 1–2: đọc phiên bản hiện tại và mở xác nhận trên dòng (specs/use_cases/identity_access/UC-05.md)
   async function handleRowStateAction(row) {
     if (loadingRowId !== null) return;
     setRowError(null);
@@ -191,10 +196,6 @@ function AccountListView({ id, roles }) {
     try {
       const snapshot = await readResource(`${API.employees}/${row.id}`);
       const freshRecord = snapshot?.data || row;
-      if (freshRecord.ma_vai_tro === "quan_tri_vien" || freshRecord.id === user.id) {
-        await queryClient.invalidateQueries({ queryKey: ["resources"] });
-        return;
-      }
       promptAccountStateChange({
         record: freshRecord,
         etag: snapshot?.etag,
@@ -324,8 +325,7 @@ function AccountListView({ id, roles }) {
                   rows.map((row, index) => {
                     const stt = String((page - 1) * pageSize + index + 1).padStart(2, "0");
                     const displayName = row.ho_ten || "Chưa có họ tên";
-                    const lockedAdmin = row.ma_vai_tro === "quan_tri_vien";
-                    const canChangeState = !lockedAdmin && row.id !== user.id;
+                    const canChangeState = canChangeAccountState(row);
                     const isLocked = row.trang_thai === "bi_khoa";
                     return (
                       <tr key={row.id}>
@@ -454,7 +454,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
 
   const activeBaselineRecord = editBaselineRef.current?.data || record;
   const lockedAdmin = activeBaselineRecord?.ma_vai_tro === "quan_tri_vien";
-  const canChangeState = activeBaselineRecord && !lockedAdmin && activeBaselineRecord.id !== user.id;
+  const canChangeState = canChangeAccountState(activeBaselineRecord);
   const isLocked = activeBaselineRecord?.trang_thai === "bi_khoa";
 
   const [values, setValues] = useState(() => extractProfileDraft(activeBaselineRecord));

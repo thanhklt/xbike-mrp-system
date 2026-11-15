@@ -15,6 +15,7 @@ from app.modules.nhan_vien.schemas import (
     EmployeeSort,
     EmployeeStatus,
     LyDoInput,
+    LyDoTuyChonInput,
     NhanVienCreate,
     NhanVienDetailResponse,
     NhanVienListQuery,
@@ -164,6 +165,7 @@ async def patch_entry(
     return result
 
 
+# UC-05 Khóa tài khoản — Main 3–6; A1: nhận body lý do tùy chọn và trả 204 (specs/use_cases/identity_access/UC-05.md)
 @router.delete(
     "/{id}",
     status_code=204,
@@ -172,13 +174,15 @@ async def patch_entry(
 )
 async def delete_entry(
     id: EmployeeId,
-    params: LyDoInput,
     actor: Actor,
     service: Service,
     request_id: RequestId,
+    params: LyDoTuyChonInput | None = None,
     if_match: IfMatch = None,
 ) -> Response:
-    _, etag = await service.soft_delete_employee(id, actor, if_match, params.ly_do, request_id)
+    _, etag = await service.soft_delete_employee(
+        id, actor, if_match, params.ly_do if params else None, request_id
+    )
     return Response(status_code=204, headers={"ETag": etag})
 
 

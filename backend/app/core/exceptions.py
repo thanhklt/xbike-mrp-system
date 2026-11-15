@@ -48,6 +48,7 @@ ERROR_STATUS = {
     "thieu_bom": 409,
     "du_lieu_khong_hop_le": 422,
     "trang_thai_khong_hop_le": 409,
+    "quan_tri_vien_cuoi_cung": 409,
     "nguoi_duoc_giao_khong_hop_le": 409,
     "ke_hoach_da_thay_doi": 409,
     "phu_thuoc_khong_hop_le": 409,

@@ -103,6 +103,8 @@ function Confirmation({ options, onClose }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [reason, setReason] = useState("");
+  // UC-05 Khóa tài khoản — Main 2–3; A1: lý do tùy chọn, mặc định vẫn bắt buộc (specs/use_cases/identity_access/UC-05.md)
+  const reasonOptional = options.reasonOptional ?? false;
   useEffect(() => {
     const element = dialog.current;
     element.showModal();
@@ -163,7 +165,7 @@ function Confirmation({ options, onClose }) {
               as="textarea"
               rows={3}
               label={options.reasonLabel || "Lý do"}
-              required
+              required={!reasonOptional}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               autoFocus
@@ -178,7 +180,7 @@ function Confirmation({ options, onClose }) {
           <Button
             type="submit"
             variant={options.danger ? "danger" : "primary"}
-            disabled={busy || Boolean(options.reason && !reason.trim())}
+            disabled={busy || Boolean(options.reason && !reasonOptional && !reason.trim())}
           >
             {busy ? "Đang xử lý…" : options.label || "Xác nhận"}
           </Button>

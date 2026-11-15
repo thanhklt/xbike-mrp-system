@@ -12,6 +12,8 @@ from app.core.errors import (
     InactiveAccountException,
     InvalidAssignee,
     InvalidCredentialsException,
+    InvalidWorkflowState,
+    LastActiveAdminException,
     NotFoundException,
     PreconditionFailedException,
     PreconditionRequiredException,
@@ -265,6 +267,7 @@ class NhanVienService:
         return role
 
     # UC-04 Thêm tài khoản — Main 6; R5: ghi lịch sử cùng transaction tạo (specs/use_cases/identity_access/UC-04.md)
+    # UC-05 Khóa tài khoản — Main 6; R6: ghi người thực hiện, lý do và trạng thái trước/sau (specs/use_cases/identity_access/UC-05.md)
     async def _audit(
         self,
         actor: dict,
@@ -273,6 +276,8 @@ class NhanVienService:
         *,
         before: EmployeeRecord | None = None,
         reason: str | None = None,
+        status_before: str | None = None,
+        status_after: str | None = None,
     ) -> None:
         await self.audit.append(
             CreationAudit(
@@ -287,6 +292,8 @@ class NhanVienService:
                 if before is not None
                 else None,
                 ly_do=reason,
+                trang_thai_truoc=status_before,
+                trang_thai_sau=status_after,
             )
         )
 
@@ -389,12 +396,13 @@ class NhanVienService:
                 await self._audit(actor, employee, "cap_quyen", before=before)
         return self._result(employee, actor, request_id)
 
+    # UC-05 Khóa tài khoản — Main 4–6; A2–A4, A9: kiểm tra QTV cuối và lưu atomic (specs/use_cases/identity_access/UC-05.md)
     async def _change_status(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
         *,
         status: str,
@@ -402,22 +410,39 @@ class NhanVienService:
     ) -> tuple[NhanVienDetailResponse, str]:
         _require_admin(actor)
         async with self.transaction:
+            if status == "bi_khoa":
+                await self.repository.lock_admin_role()
             actor = await self._lock_admin(actor)
             before = await self._target(employee_id, actor, if_match)
             if before.trang_thai == status:
+                if status == "bi_khoa":
+                    raise InvalidWorkflowState(message="Tài khoản không ở trạng thái phù hợp")
                 raise ConflictException(message="Tài khoản không ở trạng thái phù hợp")
-            if status == "bi_khoa" and before.ma_vai_tro == "quan_tri_vien":
-                raise ConflictException(message="Không được khóa quản trị viên duy nhất")
+            if (
+                status == "bi_khoa"
+                and before.ma_vai_tro == "quan_tri_vien"
+                and await self.repository.count_active_admins() <= 1
+            ):
+                raise LastActiveAdminException()
             employee = await self.repository.set_status(employee_id, status)
-            await self._audit(actor, employee, action, before=before, reason=reason)
+            await self._audit(
+                actor,
+                employee,
+                action,
+                before=before,
+                reason=reason,
+                status_before=before.trang_thai,
+                status_after=employee.trang_thai,
+            )
         return self._result(employee, actor, request_id)
 
+    # UC-05 Khóa tài khoản — Main 5–6; A1: khóa thay xóa, lý do tùy chọn (specs/use_cases/identity_access/UC-05.md)
     async def soft_delete_employee(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
     ) -> tuple[NhanVienDetailResponse, str]:
         return await self._change_status(
@@ -427,7 +452,7 @@ class NhanVienService:
             reason,
             request_id,
             status="bi_khoa",
-            action="vo_hieu_hoa",
+            action="khoa",
         )
 
     async def unlock_employee(

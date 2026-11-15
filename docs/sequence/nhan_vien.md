@@ -303,9 +303,10 @@ sequenceDiagram
 Body rỗng hoặc giá trị không đổi là no-op, không thêm audit. Hai request cùng ETag chỉ một request thay đổi thành công; request sau nhận 412.
 
 
-## DELETE /api/v1/nhan_vien/{id} — Soft delete bằng khóa tài khoản
+## DELETE /api/v1/nhan_vien/{id} — Khóa tài khoản (UC-05)
 
-Body LyDoInput bắt buộc: {"ly_do":"..."}, trim không rỗng. Bắt buộc If-Match. Thay thế POST /vo_hieu_hoa theo quyết định ngày 01/11/2026. Chuyển hoat_dong sang bi_khoa, giữ nguyên dòng nhân viên, role, chứng từ và lịch sử.
+Nguồn: [UC-05](../../specs/use_cases/identity_access/UC-05.md), R1–R7, Main 1–6, A1–A9.
+Body `LyDoTuyChonInput` không bắt buộc: thiếu body, `{}`, `{"ly_do":null}` hoặc lý do chỉ khoảng trắng đều được coi là không có lý do; nếu nhập thì trim, tối đa 1000 ký tự. Bắt buộc `If-Match`. Chuyển `hoat_dong` sang `bi_khoa`, giữ nguyên dòng nhân viên, vai trò, hồ sơ, yêu cầu sản xuất đang giao, chứng từ và lịch sử. Không có endpoint xóa hẳn.
 
 ```mermaid
 sequenceDiagram
@@ -318,7 +319,7 @@ sequenceDiagram
     participant AR as audit.repository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
-    C->>R: DELETE /api/v1/nhan_vien/{id}, JWT, body và headers
+    C->>R: DELETE /api/v1/nhan_vien/{id}, JWT, body tùy chọn và If-Match
     R->>A: current_payload(token)
     A-->>R: Actor hiện tại hoặc 401/403
     R->>R: Validate path/body và reject query
@@ -332,9 +333,16 @@ sequenceDiagram
             R-->>C: 403 khong_co_quyen
         end
         N->>T: __aenter__
+        N->>P: lock_admin_role()
+        P->>DB: SELECT VaiTro WHERE ma_vai_tro = quan_tri_vien FOR UPDATE
         N->>P: lock_credentials_by_id(admin_id)
         P->>DB: SELECT admin FOR UPDATE và refresh
         N->>N: Recheck account/role/password version
+        break Actor mất hiệu lực trong lúc chờ khóa
+            N->>T: __aexit__(error)
+            T->>DB: ROLLBACK
+            R-->>C: 401 / 403
+        end
         N->>P: get_for_update(id)
         P->>DB: SELECT nhân viên FOR UPDATE, refresh role
         N->>N: Check tồn tại và ETag
@@ -343,18 +351,21 @@ sequenceDiagram
             T->>DB: ROLLBACK
             R-->>C: 404 / 428 / 412
         end
-        N->>N: Check đang hoat_dong và không phải admin
-        alt Điều kiện nghiệp vụ lỗi hoặc admin mất hiệu lực sau chờ khóa
+        N->>N: Check đang hoat_dong
+        opt Đích là QTV đang hoạt động
+            N->>P: count_active_admins()
+            P->>DB: COUNT NhanVien JOIN VaiTro, QTV đang hoat_dong
+            P-->>N: Số QTV hoạt động
+        end
+        alt Đích đã khóa hoặc đích là QTV hoạt động cuối cùng
             N->>T: __aexit__(error)
             T->>DB: ROLLBACK
-            R-->>C: 401/403 sau recheck hoặc 404 / 428 / 412 / 409 đã khóa hoặc là admin
+            R-->>C: 409 trang_thai_khong_hop_le / quan_tri_vien_cuoi_cung
         else Điều kiện hợp lệ
             N->>P: set_status(id, bi_khoa)
             P->>DB: UPDATE trạng thái và đọc lại record
-            opt Có thay đổi thực tế
-                N->>AU: append vo_hieu_hoa, lý do và dữ liệu trước/sau
-                AU->>AR: append(entry), session.add
-            end
+            N->>AU: append khoa, hoat_dong → bi_khoa, lý do và snapshot trước/sau
+            AU->>AR: append(entry), session.add
             N->>T: __aexit__
             alt Audit/commit lỗi
                 T->>DB: ROLLBACK
@@ -368,7 +379,13 @@ sequenceDiagram
     end
 ```
 
-Không tự khóa admin. Gọi lại với ETag cũ trả 412; ETag hiện tại nhưng đã khóa trả 409, không thêm audit. JWT cũ bị từ chối 403 khi bị khóa. Tài khoản vẫn có trong danh sách/lịch sử và hỗ trợ lọc trạng thái.
+Thứ tự khóa cố định trong transaction: dòng `VaiTro` QTV → actor → đích. Các thao tác khóa cùng chờ dòng vai trò, sau đó đọc lại quyền actor, trạng thái đích và số QTV hoạt động; không khóa được QTV cuối cùng kể cả khi có thao tác đồng thời. Actor mất hiệu lực sau chờ khóa trả 401/403 và rollback. QTV được khóa QTV khác hoặc tự khóa khi vẫn còn QTV khác đang hoạt động; QTV cuối nhận 409 `quan_tri_vien_cuoi_cung` (“Không khóa được Quản trị viên đang hoạt động cuối cùng”).
+
+Gọi lại với ETag cũ trả 412 `du_lieu_da_thay_doi`; thiếu `If-Match` trả 428 `thieu_if_match`; ETag hiện tại nhưng đã khóa trả 409 `trang_thai_khong_hop_le`, không thêm audit. JWT đã cấp bị từ chối 403 `tai_khoan_bi_vo_hieu_hoa` ở request tiếp theo do xác thực đọc lại trạng thái tài khoản từ DB. FE kiểm tra lại phiên ngay sau tự khóa để kết thúc phiên và chuyển về đăng nhập; không cấp token mới.
+
+Audit `khoa` ghi người thực hiện, đối tượng đích, `trang_thai_truoc=hoat_dong`, `trang_thai_sau=bi_khoa`, lý do đã trim hoặc null và snapshot hồ sơ trước/sau không có mật khẩu/hash. Thời điểm `created_at` do DB đặt. Cập nhật trạng thái và audit dùng chung transaction; audit/commit lỗi rollback cả hai. Thành công trả 204 không body và ETag mới. Tài khoản vẫn có trong danh sách/lịch sử và hỗ trợ lọc trạng thái. Đóng hộp xác nhận trước khi lưu không gửi DELETE.
+
+Thay đổi hợp đồng API: body/lý do DELETE trở thành tùy chọn, bổ sung lỗi QTV cuối; caller FE đã cập nhật. Không đổi đường dẫn, header, schema/bootstrap hay dữ liệu đang chạy. Test repo giả kiểm tra thứ tự gọi và SQL được biên dịch; chưa kiểm chứng khóa đồng thời trên PostgreSQL thật.
 
 
 ## PUT /api/v1/nhan_vien/{id}/vai_tro — Đổi vai trò

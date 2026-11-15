@@ -185,6 +185,17 @@ class LyDoInput(BaseModel):
     ly_do: str = Field(min_length=1)
 
 
+class LyDoTuyChonInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    ly_do: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("ly_do")
+    @classmethod
+    def blank_reason_to_none(cls, value: str | None) -> str | None:
+        return value or None
+
+
 class VaiTroListQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

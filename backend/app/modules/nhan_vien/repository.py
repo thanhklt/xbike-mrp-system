@@ -195,8 +195,24 @@ class SqlAlchemyNhanVienRepository:
     async def set_role(self, employee_id: int, role_id: int) -> EmployeeRecord:
         return await self._update(employee_id, {"vai_tro_id": role_id})
 
+    # UC-05 Khóa tài khoản — Main 5: chỉ cập nhật trạng thái tài khoản (specs/use_cases/identity_access/UC-05.md)
     async def set_status(self, employee_id: int, status: str) -> EmployeeRecord:
         return await self._update(employee_id, {"trang_thai": status})
+
+    # UC-05 Khóa tài khoản — Main 4; A2: tuần tự hóa khóa QTV bằng dòng vai trò (specs/use_cases/identity_access/UC-05.md)
+    async def lock_admin_role(self) -> None:
+        await self.session.scalar(
+            select(VaiTro).where(VaiTro.ma_vai_tro == "quan_tri_vien").with_for_update()
+        )
+
+    # UC-05 Khóa tài khoản — Main 4; AC-3: đếm QTV đang hoạt động dưới khóa vai trò (specs/use_cases/identity_access/UC-05.md)
+    async def count_active_admins(self) -> int:
+        return await self.session.scalar(
+            select(func.count())
+            .select_from(NhanVien)
+            .join(VaiTro, NhanVien.vai_tro_id == VaiTro.id)
+            .where(VaiTro.ma_vai_tro == "quan_tri_vien", NhanVien.trang_thai == "hoat_dong")
+        ) or 0
 
     async def get_role(self, role_id: int) -> VaiTroRead | None:
         if not 1 <= role_id <= MAX_EMPLOYEE_ID:
