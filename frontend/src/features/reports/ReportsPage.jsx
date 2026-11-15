@@ -4,28 +4,46 @@ import { Card } from "../../components/Card.jsx";
 import { Field } from "../../components/Field.jsx";
 import { Button } from "../../components/Button.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
-import { Notice } from "../../components/QueryState.jsx";
-import { itemTypeOptions } from "../../components/ResourceFields.jsx";
+import { QueryState } from "../../components/QueryState.jsx";
+import { API } from "../../lib/api/endpoints.js";
+import { useChoices, useResource } from "../../lib/api/useResources.js";
+import { ITEM_LABELS, number } from "../../lib/format.js";
+import {
+  defaultReportForm,
+  periodLabel,
+  REPORT_ITEM_TYPES,
+  reportQuery,
+} from "./inventoryReport.js";
+
+// UC-41 Xem báo cáo nhập-xuất-tồn — Main 1–4; R1–R5, A1–A3 (specs/use_cases/reporting/UC-41.md)
 export function ReportsPage() {
-  const [period, setPeriod] = useState("thang");
+  const [form, setForm] = useState(defaultReportForm);
+  const [submitted, setSubmitted] = useState(null);
+  const query = useResource(API.inventoryReport, submitted ?? {}, submitted !== null);
+  const choices = useChoices(API.items);
+  const report = query.data?.data;
+
+  function change(event) {
+    const { name, value } = event.target;
+    setForm((previous) => ({ ...previous, [name]: value }));
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const params = reportQuery(form);
+    if (JSON.stringify(params) === JSON.stringify(submitted)) query.refetch();
+    else setSubmitted(params);
+  }
+
   return (
     <>
       <PageHeader
-        title="Thống kê nhập – xuất – tồn"
-        subtitle="Số liệu báo cáo chỉ tính giao dịch đã ghi sổ, bao gồm điều chỉnh có dấu đúng một lần."
+        title="Báo cáo nhập – xuất – tồn"
+        subtitle="Chỉ tính chứng từ đã ghi nhận vào kho: phiếu nhập hoàn tất, phiếu xuất đã duyệt, chứng từ hoàn thành đã duyệt. Kỳ tính theo giờ Việt Nam."
       />
-      <Notice tone="warning">
-        Báo cáo chưa có API được triển khai. Chưa thể truy xuất số liệu tháng/quý/năm; giao diện
-        không hiển thị số liệu giả hoặc tính từ danh sách phân trang.
-      </Notice>
       <Card title="Kỳ thống kê">
-        <div className="filters">
-          <Field
-            as="select"
-            label="Kỳ thống kê"
-            value={period}
-            onChange={(event) => setPeriod(event.target.value)}
-          >
+        <form className="filters" onSubmit={submit}>
+          <Field as="select" label="Kỳ thống kê" name="ky" value={form.ky} onChange={change}>
             <option value="thang">Tháng</option>
             <option value="quy">Quý</option>
             <option value="nam">Năm</option>
@@ -33,37 +51,109 @@ export function ReportsPage() {
           <Field
             label="Năm"
             type="number"
-            defaultValue={new Date().getFullYear()}
-            min="1"
-            max="9999"
+            name="nam"
+            value={form.nam}
+            onChange={change}
+            min="2"
+            max="9998"
+            required
           />
-          {period === "thang" && (
-            <Field label="Tháng" type="number" min="1" max="12" defaultValue="1" />
+          {form.ky === "thang" && (
+            <Field
+              label="Tháng"
+              type="number"
+              name="thang"
+              min="1"
+              max="12"
+              value={form.thang}
+              onChange={change}
+              required
+            />
           )}
-          {period === "quy" && (
-            <Field label="Quý" as="select">
+          {form.ky === "quy" && (
+            <Field label="Quý" as="select" name="quy" value={form.quy} onChange={change}>
               <option>1</option>
               <option>2</option>
               <option>3</option>
               <option>4</option>
             </Field>
           )}
-          <Field label="Loại mặt hàng" as="select" options={itemTypeOptions} />
-          <Button reason="Chờ API báo cáo nhập–xuất–tồn.">Xem thống kê</Button>
-        </div>
+          <Field
+            label="Loại mặt hàng"
+            as="select"
+            name="loai_mat_hang"
+            value={form.loai_mat_hang}
+            onChange={change}
+            options={[{ value: "", label: "Tất cả loại" }, ...REPORT_ITEM_TYPES]}
+          />
+          <QueryState query={choices}>
+            <Field
+              label="Mặt hàng"
+              as="select"
+              name="mat_hang_id"
+              value={form.mat_hang_id}
+              onChange={change}
+            >
+              <option value="">Tất cả mặt hàng</option>
+              {(choices.data ?? []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ma_mat_hang} · {item.ten_mat_hang}
+                </option>
+              ))}
+            </Field>
+          </QueryState>
+          <Button type="submit" disabled={query.isFetching}>
+            Xem báo cáo
+          </Button>
+        </form>
       </Card>
-      <Card title="Nhập – xuất – tồn theo mặt hàng">
-        <DataTable
-          empty="Chưa có số liệu báo cáo — đang chờ API."
-          columns={[
-            { key: "ten_mat_hang", label: "Mặt hàng" },
-            { key: "ton_dau_ky", label: "Tồn đầu kỳ", numeric: true },
-            { key: "nhap_trong_ky", label: "Nhập", numeric: true },
-            { key: "xuat_trong_ky", label: "Xuất", numeric: true },
-            { key: "dieu_chinh_trong_ky", label: "Điều chỉnh", numeric: true },
-            { key: "ton_cuoi_ky", label: "Tồn cuối kỳ", numeric: true },
-          ]}
-        />
+      <Card
+        title={submitted ? periodLabel(report ?? submitted) : "Nhập – xuất – tồn theo mặt hàng"}
+      >
+        {submitted ? (
+          <QueryState query={query}>
+            <DataTable
+              rows={(report?.mat_hang ?? []).map((row) => ({ ...row, id: row.mat_hang_id }))}
+              empty="Không có mặt hàng thỏa bộ lọc."
+              columns={[
+                { key: "ma_mat_hang", label: "Mã mặt hàng" },
+                { key: "ten_mat_hang", label: "Mặt hàng" },
+                {
+                  key: "loai_mat_hang",
+                  label: "Loại",
+                  render: (row) => ITEM_LABELS[row.loai_mat_hang],
+                },
+                { key: "don_vi_tinh", label: "ĐVT" },
+                {
+                  key: "ton_dau_ky",
+                  label: "Tồn đầu kỳ",
+                  numeric: true,
+                  render: (row) => number(row.ton_dau_ky),
+                },
+                {
+                  key: "nhap_trong_ky",
+                  label: "Nhập",
+                  numeric: true,
+                  render: (row) => number(row.nhap_trong_ky),
+                },
+                {
+                  key: "xuat_trong_ky",
+                  label: "Xuất",
+                  numeric: true,
+                  render: (row) => number(row.xuat_trong_ky),
+                },
+                {
+                  key: "ton_cuoi_ky",
+                  label: "Tồn cuối kỳ",
+                  numeric: true,
+                  render: (row) => number(row.ton_cuoi_ky),
+                },
+              ]}
+            />
+          </QueryState>
+        ) : (
+          <p>Chọn kỳ và bấm “Xem báo cáo” để tải số liệu.</p>
+        )}
       </Card>
     </>
   );
