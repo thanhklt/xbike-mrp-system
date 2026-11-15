@@ -1,4 +1,5 @@
 export const ROLE_HOME = { quan_tri_vien: "/admin", quan_ly: "/kho", nhan_vien: "/nv" };
+// UC-01 Đăng nhập — Main 6; R3 (specs/use_cases/identity_access/UC-01.md)
 export const homeFor = (role) => (Object.hasOwn(ROLE_HOME, role) ? ROLE_HOME[role] : "/403");
 export const isAllowed = (role, allowed) => allowed.includes(role);
 export function canAccessPath(role, pathname) {

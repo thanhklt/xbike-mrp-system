@@ -20,6 +20,7 @@ from app.modules.auth.service import AuthService
 from app.modules.nhan_vien.service import ResponseMeta
 
 
+# UC-01 Đăng nhập — Main 2–6: header chống cache (specs/use_cases/identity_access/UC-01.md)
 def auth_response_headers(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -33,6 +34,7 @@ router = APIRouter(
 )
 
 
+# UC-01 Đăng nhập — Main 2–6; A1–A4 (specs/use_cases/identity_access/UC-01.md)
 @router.post("/dang_nhap", response_model=LoginResponse, dependencies=[Depends(reject_query)])
 async def dang_nhap(
     credentials: LoginInput,
@@ -43,6 +45,7 @@ async def dang_nhap(
     return LoginResponse(data=token, meta=ResponseMeta(request_id=request_id))
 
 
+# UC-01 Đăng nhập — R1, D1: OAuth2 bằng tên đăng nhập (specs/use_cases/identity_access/UC-01.md)
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],

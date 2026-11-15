@@ -43,6 +43,7 @@ from app.modules.nhan_vien.schemas import (
 __all__ = ["NhanVienService", "AuthIdentity", "NhanVienRead", "ResponseMeta"]
 
 
+# UC-01 Đăng nhập — Main 4; R2, A3 (specs/use_cases/identity_access/UC-01.md)
 def _require_active(user: EmployeeCredentials) -> None:
     if user.trang_thai != "hoat_dong":
         raise InactiveAccountException()
@@ -59,6 +60,7 @@ def _require_current_password(user: EmployeeCredentials, version: str) -> None:
         raise UnauthorizedException(message="Please sign in again")
 
 
+# UC-01 Đăng nhập — Main 5: hồ sơ và vai trò hiện tại (specs/use_cases/identity_access/UC-01.md)
 def _identity(user: EmployeeCredentials) -> AuthIdentity:
     return AuthIdentity(
         profile=NhanVienRead.model_validate(user),
@@ -104,6 +106,7 @@ class NhanVienService:
         if employee.trang_thai != "hoat_dong" or employee.ma_vai_tro != "nhan_vien":
             raise InvalidAssignee()
 
+    # UC-01 Đăng nhập — Main 3–4; A2, A3 (specs/use_cases/identity_access/UC-01.md)
     async def authenticate_employee(
         self, identifier: str, password: str, *, allow_email: bool = False
     ) -> AuthIdentity:
@@ -117,6 +120,7 @@ class NhanVienService:
         _require_active(user)
         return _identity(user)
 
+    # UC-01 Đăng nhập — Main 5; R4, A4 (specs/use_cases/identity_access/UC-01.md)
     async def record_login(self, employee_id: int) -> None:
         try:
             async with self.transaction:

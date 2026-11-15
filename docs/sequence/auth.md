@@ -5,6 +5,8 @@ Auth gọi public service nhân viên; ORM `NhanVien`, `VaiTro` thuộc nhân vi
 
 ## POST /api/v1/auth/dang_nhap
 
+Nguồn use case: [UC-01 — Đăng nhập](../../specs/use_cases/identity_access/UC-01.md), Main 2–6, A1–A4.
+
 JSON bắt buộc `ten_dang_nhap`, `mat_khau`; không nhận field dư hoặc query. Username trim, dài 1–255 ký tự; password không trim, dài 1–1024 ký tự.
 
 ```mermaid
@@ -63,7 +65,7 @@ Response gồm `access_token`, `token_type=bearer`, `expires_in` tính bằng gi
 
 ## POST /api/v1/auth/token
 
-OAuth2 form gồm `username`, `password`. Endpoint phục vụ Swagger/OAuth2, trả token trực tiếp, không có envelope/hồ sơ. Không áp dụng `reject_query` hoặc schema JSON của `dang_nhap` cho endpoint này.
+OAuth2 form gồm `username` (chỉ tên đăng nhập, không fallback email theo UC-01 R1/D1), `password`. Endpoint phục vụ Swagger/OAuth2, trả token trực tiếp, không có envelope/hồ sơ. Không áp dụng `reject_query` hoặc schema JSON của `dang_nhap` cho endpoint này.
 
 ```mermaid
 sequenceDiagram
@@ -82,19 +84,13 @@ sequenceDiagram
         R-->>C: 422 du_lieu_khong_hop_le
     else Form hợp lệ
         R->>A: authenticate(identifier, password)
-        A->>N: authenticate_employee(..., allow_email=True)
+        A->>N: authenticate_employee(identifier, password)
         N->>P: find_by_username(identifier)
         P->>DB: SELECT NhanVien và VaiTro
         DB-->>P: Record hoặc None
         P-->>N: Credential record
-        opt Không tìm thấy username
-            N->>P: find_unique_by_email(identifier)
-            P->>DB: SELECT tối đa 2 account cùng email
-            DB-->>P: Kết quả
-            P-->>N: Record nếu duy nhất, ngược lại None
-        end
         N->>N: Verify password, kiểm tra account và role
-        alt Không có record duy nhất hoặc sai password
+        alt Không có username hoặc sai password
             N-->>C: 401 thong_tin_dang_nhap_khong_hop_le
         else Account khóa hoặc role không hợp lệ
             N-->>C: 403
@@ -123,7 +119,7 @@ sequenceDiagram
     end
 ```
 
-Username ưu tiên hơn email; nếu username tồn tại nhưng password sai thì không thử account khác qua email. Email trùng bị từ chối. `/api/v1/auth/login` không được triển khai, trả 404.
+Chỉ tra cứu tên đăng nhập; không tra cứu hoặc fallback email. `/api/v1/auth/login` không được triển khai, trả 404.
 
 Cả hai endpoint đăng nhập giữ response/header hiện hành. Append/commit lỗi trả 500 và không có `access_token`, kể cả lỗi CHECK được adapter transaction chuyển thành ConflictException. Volume tạo trước commit `2ef564c` có thể chưa cho phép `dang_nhap`; không tự ALTER/seed DB.
 

@@ -7,6 +7,7 @@ from app.modules.auth.schema import TokenRead, TokenResponse
 from app.modules.nhan_vien.service import AuthIdentity, NhanVienRead, NhanVienService
 
 
+# UC-01 Đăng nhập — Main 5: cấp token theo vai trò (specs/use_cases/identity_access/UC-01.md)
 def _issue_token(identity: AuthIdentity) -> TokenRead:
     return TokenRead(
         access_token=create_access_token(
@@ -23,15 +24,15 @@ class AuthService:
     def __init__(self, employees: NhanVienService):
         self.employees = employees
 
+    # UC-01 Đăng nhập — Main 3–5; A2–A4 (specs/use_cases/identity_access/UC-01.md)
     async def login(self, username: str, password: str) -> TokenRead:
         identity = await self.employees.authenticate_employee(username, password)
         await self.employees.record_login(identity.profile.id)
         return _issue_token(identity)
 
+    # UC-01 Đăng nhập — Main 3–5; A2–A4; R1, D1 (specs/use_cases/identity_access/UC-01.md)
     async def authenticate(self, identifier: str, password: str) -> TokenResponse:
-        identity = await self.employees.authenticate_employee(
-            identifier, password, allow_email=True
-        )
+        identity = await self.employees.authenticate_employee(identifier, password)
         await self.employees.record_login(identity.profile.id)
         result = _issue_token(identity)
         return TokenResponse(**result.model_dump(exclude={"nhan_vien"}))
