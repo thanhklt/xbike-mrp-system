@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.dialects import postgresql
 
-from app.core.errors import ConflictException
+from app.core.errors import DuplicateCodeException
 from app.core.exceptions import register_exception_handlers
 from app.core.security import password_version
 from app.dependencies import get_current_user_payload, get_nhan_vien_service
@@ -80,10 +80,18 @@ def feature(monkeypatch, employees):
 
     async def create(employee):
         events.append("insert")
-        return replace(RECORD, ma_nhan_vien=employee.ma_nhan_vien)
+        return replace(
+            RECORD,
+            ma_nhan_vien=employee.ma_nhan_vien,
+            vai_tro_id=employee.vai_tro_id,
+            ma_vai_tro=repo.get_role.return_value.ma_vai_tro,
+        )
 
     repo.lock_credentials_by_id.side_effect = lock
-    repo.get_role.return_value = VaiTroRead(id=3, ma_vai_tro="nhan_vien", ten_vai_tro="Nhân viên")
+    repo.get_role.return_value = VaiTroRead(
+        id=3, ma_vai_tro="nhan_vien", ten_vai_tro="Nhân viên", mo_ta=None
+    )
+    repo.find_by_username.return_value = None
     repo.next_employee_code.side_effect = allocator.next_employee_code
     repo.create.side_effect = create
     monkeypatch.setattr(
@@ -93,6 +101,7 @@ def feature(monkeypatch, employees):
     return service, repo, audit, events
 
 
+# UC-04 R6: mã max+1 kể cả tài khoản khóa, rỗng và biên; cấp dưới khóa trong transaction
 @pytest.mark.parametrize(
     "employees,expected",
     [
@@ -124,15 +133,18 @@ async def post(service, body):
         return await client.post("/api/v1/nhan_vien", json=body)
 
 
+# UC-04 A4: gửi kèm mã nhân viên bị từ chối trước mọi truy cập repository
 async def test_client_employee_code_is_rejected_with_422(monkeypatch):
     service, repo, _, events = feature(monkeypatch, [])
     response = await post(service, {**BODY, "ma_nhan_vien": "NV-000008"})
     assert response.status_code == 422
     assert "ma_nhan_vien" in response.text
     assert not events
+    assert repo.mock_calls == []
     repo.create.assert_not_awaited()
 
 
+# UC-04 R6: hết dải trả 409, rollback và không tạo tài khoản/lịch sử
 async def test_exhaustion_returns_409_without_create_or_audit(monkeypatch):
     service, repo, audit, events = feature(monkeypatch, [("NV-999999", "bi_khoa")])
     response = await post(service, BODY)
@@ -144,6 +156,7 @@ async def test_exhaustion_returns_409_without_create_or_audit(monkeypatch):
     audit.append.assert_not_awaited()
 
 
+# UC-04 R6: API trả mã tự cấp cùng Location, ETag và không lộ mật khẩu
 async def test_create_http_returns_generated_code_location_and_etag(monkeypatch):
     service, _, _, _ = feature(monkeypatch, [("NV-000008", "bi_khoa")])
     response = await post(service, BODY)
@@ -154,12 +167,29 @@ async def test_create_http_returns_generated_code_location_and_etag(monkeypatch)
     assert "mat_khau" not in response.json()["data"]
 
 
-async def test_cannot_create_second_admin(monkeypatch):
-    service, repo, audit, _ = feature(monkeypatch, [])
+# UC-04 AC-1: cho phép tạo thêm QTV với mã tự cấp và lịch sử
+async def test_can_create_second_admin(monkeypatch):
+    service, repo, audit, events = feature(monkeypatch, [])
     repo.get_role.return_value = VaiTroRead(
-        id=1, ma_vai_tro="quan_tri_vien", ten_vai_tro="Quản trị viên"
+        id=1, ma_vai_tro="quan_tri_vien", ten_vai_tro="Quản trị viên", mo_ta=None
     )
-    with pytest.raises(ConflictException):
-        await service.create_employee(NhanVienCreate(**{**BODY, "vai_tro_id": 1}), ACTOR, "req")
-    repo.next_employee_code.assert_not_awaited()
+    response = await post(service, {**BODY, "vai_tro_id": 1})
+    assert response.status_code == 201
+    assert response.json()["data"]["ma_vai_tro"] == "quan_tri_vien"
+    assert response.json()["data"]["ma_nhan_vien"] == "NV-000001"
+    assert events == ["begin", "admin_lock", "max", "insert", "commit"]
+    repo.next_employee_code.assert_awaited_once()
+    audit.append.assert_awaited_once()
+
+
+# UC-04 R6: trùng mã khi tạo đồng thời trả 409, rollback và không ghi lịch sử
+async def test_concurrent_code_conflict_returns_409(monkeypatch):
+    service, repo, audit, events = feature(monkeypatch, [])
+    message = "Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại"
+    repo.create.side_effect = DuplicateCodeException(message=message)
+    response = await post(service, BODY)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ma_bi_trung"
+    assert response.json()["error"]["message"] == message
+    assert events == ["begin", "admin_lock", "max", "rollback"]
     audit.append.assert_not_awaited()

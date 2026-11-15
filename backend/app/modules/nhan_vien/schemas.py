@@ -54,7 +54,7 @@ class NhanVienListQuery(BaseModel):
 
 
 class NhanVienAssignmentRead(BaseModel):
-    """Limited projection for managers assigning work."""
+    """Hồ sơ cho QLK: mọi trường trừ tên đăng nhập (UC-03 R4)."""
 
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
@@ -64,15 +64,15 @@ class NhanVienAssignmentRead(BaseModel):
     vai_tro_id: int | None
     ma_vai_tro: RoleCode | None
     trang_thai: EmployeeStatus
-
-
-class NhanVienRead(NhanVienAssignmentRead):
-    ten_dang_nhap: str
     ngay_sinh: date | None
     so_dien_thoai: str | None
     email: str | None
     ngay_vao_lam: date | None
     he_so_luong: Decimal | None = Field(ge=0)
+
+
+class NhanVienRead(NhanVienAssignmentRead):
+    ten_dang_nhap: str
 
 
 class ResponseMeta(BaseModel):
@@ -106,6 +106,7 @@ class EmployeeCredentials(BaseModel):
     roles: list[str]
     trang_thai: str | None
     password_hash: str = Field(repr=False, exclude=True)
+    phien_ban_dang_nhap: int = 0
     ma_nhan_vien: str
     vai_tro_id: int | None
     ma_vai_tro: str | None
@@ -121,6 +122,7 @@ class AuthIdentity(BaseModel):
     profile: NhanVienRead
     roles: list[str]
     credential_version: str = Field(repr=False, exclude=True)
+    session_version: int = 0
 
 
 def _date_string(value: object) -> object:
@@ -157,34 +159,43 @@ class NhanVienPatch(BaseModel):
 
 class NhanVienCreate(NhanVienPatch):
     ten_dang_nhap: str = Field(min_length=1, max_length=255)
-    ma_nhan_vien: str = Field(pattern=r"^NV-[0-9]{6}$")
     vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
-    mat_khau: SecretStr = Field(min_length=8, max_length=1024, repr=False, exclude=True)
+    mat_khau: SecretStr = Field(min_length=6, max_length=1024, repr=False, exclude=True)
+    ly_do: str | None = Field(default=None, max_length=1000)
 
-    @field_validator("ma_nhan_vien")
+    @field_validator("ly_do")
     @classmethod
-    def valid_employee_code(cls, value: str) -> str:
-        if value == "NV-000000":
-            raise ValueError("Employee code must be nonzero")
-        return value
+    def normalize_reason(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class DoiVaiTroInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
+    ly_do: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("ly_do")
+    @classmethod
+    def blank_reason_to_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class DatLaiMatKhauInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024, repr=False)
+    mat_khau_moi: SecretStr = Field(min_length=6, max_length=1024, repr=False)
 
 
-class LyDoInput(BaseModel):
+class LyDoTuyChonInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    ly_do: str = Field(min_length=1)
+    ly_do: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("ly_do")
+    @classmethod
+    def blank_reason_to_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class VaiTroListQuery(BaseModel):

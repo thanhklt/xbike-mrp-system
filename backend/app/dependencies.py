@@ -87,6 +87,7 @@ def get_auth_service(
     return AuthService(employees)
 
 
+# UC-02 Đăng xuất — R1, A1, A2: yêu cầu token và tài khoản hợp lệ (specs/use_cases/identity_access/UC-02.md)
 async def get_current_user_payload(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     service: Annotated[AuthService, Depends(get_auth_service)],

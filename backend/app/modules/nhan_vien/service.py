@@ -7,14 +7,18 @@ from math import ceil
 
 from app.core.errors import (
     ConflictException,
+    DuplicateUsernameException,
     ForbiddenException,
     InactiveAccountException,
     InvalidAssignee,
     InvalidCredentialsException,
+    InvalidWorkflowState,
+    LastActiveAdminException,
     NotFoundException,
     PreconditionFailedException,
     PreconditionRequiredException,
     UnauthorizedException,
+    UnfinishedAssignmentException,
 )
 from app.core.security import get_password_hash, password_version, verify_password
 from app.core.transactions import Transaction
@@ -43,6 +47,8 @@ from app.modules.nhan_vien.schemas import (
 __all__ = ["NhanVienService", "AuthIdentity", "NhanVienRead", "ResponseMeta"]
 
 
+# UC-01 Đăng nhập — Main 4; R2, A3 (specs/use_cases/identity_access/UC-01.md)
+# UC-02 Đăng xuất — A2: từ chối tài khoản khóa hoặc vai trò không hợp lệ (specs/use_cases/identity_access/UC-02.md)
 def _require_active(user: EmployeeCredentials) -> None:
     if user.trang_thai != "hoat_dong":
         raise InactiveAccountException()
@@ -50,6 +56,7 @@ def _require_active(user: EmployeeCredentials) -> None:
         raise ForbiddenException()
 
 
+# UC-02 Đăng xuất — A2: từ chối token có phiên bản mật khẩu cũ (specs/use_cases/identity_access/UC-02.md)
 def _require_current_password(user: EmployeeCredentials, version: str) -> None:
     if (
         not isinstance(version, str)
@@ -59,14 +66,18 @@ def _require_current_password(user: EmployeeCredentials, version: str) -> None:
         raise UnauthorizedException(message="Please sign in again")
 
 
+# UC-01 Đăng nhập — Main 5: hồ sơ và vai trò hiện tại (specs/use_cases/identity_access/UC-01.md)
+# UC-02 Đăng xuất — A2: dùng hồ sơ và vai trò hiện tại khi xác minh phiên (specs/use_cases/identity_access/UC-02.md)
 def _identity(user: EmployeeCredentials) -> AuthIdentity:
     return AuthIdentity(
         profile=NhanVienRead.model_validate(user),
         roles=user.roles,
         credential_version=password_version(user.password_hash),
+        session_version=user.phien_ban_dang_nhap,
     )
 
 
+# UC-03 Xem danh sách tài khoản — R4: QTV/chính chủ đủ hồ sơ, QLK không có tên đăng nhập (specs/use_cases/identity_access/UC-03.md)
 def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = False):
     full_profile = "quan_tri_vien" in actor["roles"] or (detail and user.id == int(actor["sub"]))
     schema = NhanVienRead if full_profile else NhanVienAssignmentRead
@@ -75,6 +86,7 @@ def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = Fals
     return schema.model_validate(values)
 
 
+# UC-03 Xem danh sách tài khoản — R4: ETag từ hồ sơ sau projection (specs/use_cases/identity_access/UC-03.md)
 def _employee_etag(user: EmployeeRecord, actor: dict) -> str:
     profile = _employee_response(user, actor, detail=True)
     return f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
@@ -104,6 +116,7 @@ class NhanVienService:
         if employee.trang_thai != "hoat_dong" or employee.ma_vai_tro != "nhan_vien":
             raise InvalidAssignee()
 
+    # UC-01 Đăng nhập — Main 3–4; A2, A3 (specs/use_cases/identity_access/UC-01.md)
     async def authenticate_employee(
         self, identifier: str, password: str, *, allow_email: bool = False
     ) -> AuthIdentity:
@@ -117,6 +130,7 @@ class NhanVienService:
         _require_active(user)
         return _identity(user)
 
+    # UC-01 Đăng nhập — Main 5; R4, A4 (specs/use_cases/identity_access/UC-01.md)
     async def record_login(self, employee_id: int) -> None:
         try:
             async with self.transaction:
@@ -135,7 +149,11 @@ class NhanVienService:
             # The shared transaction maps integrity errors to 409; login audit failures are 500.
             raise RuntimeError("Không ghi được lịch sử đăng nhập") from error
 
-    async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
+    # UC-02 Đăng xuất — A2: kiểm tra tài khoản khóa và phiên bản mật khẩu (specs/use_cases/identity_access/UC-02.md)
+    # UC-06 Mở khóa tài khoản — A3: từ chối phiên có từ trước khi khóa (specs/use_cases/identity_access/UC-06.md)
+    async def get_auth_identity(
+        self, employee_id: int, *, credential_version: str, session_version: int = 0
+    ) -> AuthIdentity:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             raise UnauthorizedException(message="Invalid token subject")
         user = await self.repository.get_credentials_by_id(employee_id)
@@ -143,31 +161,11 @@ class NhanVienService:
             raise UnauthorizedException(message="Employee no longer exists")
         _require_active(user)
         _require_current_password(user, credential_version)
+        if type(session_version) is not int or session_version != user.phien_ban_dang_nhap:
+            raise UnauthorizedException(message="Please sign in again")
         return _identity(user)
 
-    async def change_password(
-        self, employee_id: int, current_password: str, new_password: str, *, credential_version: str
-    ) -> None:
-        async with self.transaction:
-            user = await self.repository.lock_credentials_by_id(employee_id)
-            if user is None:
-                raise UnauthorizedException(message="Employee no longer exists")
-            _require_active(user)
-            _require_current_password(user, credential_version)
-            if not await asyncio.to_thread(verify_password, current_password, user.password_hash):
-                raise InvalidCredentialsException()
-            new_hash = await asyncio.to_thread(get_password_hash, new_password)
-            await self.repository.set_password_hash(user.id, new_hash)
-            await self.audit.append(
-                CreationAudit(
-                    nhan_vien_id=user.id,
-                    loai_doi_tuong="nhan_vien",
-                    doi_tuong_id=user.id,
-                    thao_tac="sua",
-                    du_lieu_sau={"da_doi_mat_khau": True},
-                )
-            )
-
+    # UC-03 Xem danh sách tài khoản — Main 2–4; R1, A1–A3 (specs/use_cases/identity_access/UC-03.md)
     async def list_employees(
         self,
         params: NhanVienListQuery,
@@ -190,6 +188,7 @@ class NhanVienService:
             ),
         )
 
+    # UC-03 Xem danh sách tài khoản — R4: quyền đọc chi tiết (specs/use_cases/identity_access/UC-03.md)
     async def get_employee(
         self,
         employee_id: int,
@@ -208,6 +207,7 @@ class NhanVienService:
             raise ForbiddenException()
         return self._result(user, actor, request_id)
 
+    # UC-03 Xem danh sách tài khoản — R4: trả hồ sơ chi tiết và ETag (specs/use_cases/identity_access/UC-03.md)
     @staticmethod
     def _result(
         user: EmployeeRecord, actor: dict, request_id: str
@@ -220,10 +220,11 @@ class NhanVienService:
             _employee_etag(user, actor),
         )
 
+    # UC-04 Thêm tài khoản — Main 4–5; A6: khóa và làm mới quyền QTV (specs/use_cases/identity_access/UC-04.md)
     async def _lock_admin(self, actor: dict) -> dict:
         _require_admin(actor)
-        # The sole admin row serializes administrative writes, including requests
-        # from different tabs. Refresh credentials after waiting for the lock.
+        # Lock this actor's row to serialize their writes and refresh credentials
+        # after waiting. Different administrators can still allocate the same code.
         current = await self.repository.lock_credentials_by_id(int(actor["sub"]))
         if current is None:
             raise UnauthorizedException(message="Employee no longer exists")
@@ -249,6 +250,9 @@ class NhanVienService:
             raise NotFoundException(message="Không tìm thấy vai trò")
         return role
 
+    # UC-04 Thêm tài khoản — Main 6; R5: ghi lịch sử cùng transaction tạo (specs/use_cases/identity_access/UC-04.md)
+    # UC-05 Khóa tài khoản — Main 6; R6: ghi người thực hiện, lý do và trạng thái trước/sau (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 6; R6: ghi một lịch sử với hồ sơ và lý do trước/sau (specs/use_cases/identity_access/UC-07.md)
     async def _audit(
         self,
         actor: dict,
@@ -257,6 +261,8 @@ class NhanVienService:
         *,
         before: EmployeeRecord | None = None,
         reason: str | None = None,
+        status_before: str | None = None,
+        status_after: str | None = None,
     ) -> None:
         await self.audit.append(
             CreationAudit(
@@ -271,9 +277,12 @@ class NhanVienService:
                 if before is not None
                 else None,
                 ly_do=reason,
+                trang_thai_truoc=status_before,
+                trang_thai_sau=status_after,
             )
         )
 
+    # UC-04 Thêm tài khoản — Main 4–6; R1, R3–R7, A1–A7 (specs/use_cases/identity_access/UC-04.md)
     async def create_employee(
         self, params: NhanVienCreate, actor: dict, request_id: str
     ) -> tuple[NhanVienDetailResponse, str]:
@@ -281,22 +290,23 @@ class NhanVienService:
         password_hash = await asyncio.to_thread(
             get_password_hash, params.mat_khau.get_secret_value()
         )
-        profile = params.model_dump(exclude={"ten_dang_nhap", "ma_nhan_vien", "vai_tro_id"})
+        profile = params.model_dump(exclude={"ten_dang_nhap", "vai_tro_id", "ly_do"})
         async with self.transaction:
             actor = await self._lock_admin(actor)
-            role = await self._role(params.vai_tro_id)
-            if role.ma_vai_tro == "quan_tri_vien":
-                raise ConflictException(message="Hệ thống chỉ có một quản trị viên")
+            await self._role(params.vai_tro_id)
+            if await self.repository.find_by_username(params.ten_dang_nhap) is not None:
+                raise DuplicateUsernameException()
+            employee_code = await self.repository.next_employee_code()
             employee = await self.repository.create(
                 NewEmployee(
                     params.ten_dang_nhap,
-                    params.ma_nhan_vien,
+                    employee_code,
                     params.vai_tro_id,
                     password_hash,
                     profile,
                 )
             )
-            await self._audit(actor, employee, "tao")
+            await self._audit(actor, employee, "tao", reason=params.ly_do)
         return self._result(employee, actor, request_id)
 
     async def patch_employee(
@@ -322,6 +332,7 @@ class NhanVienService:
                 await self._audit(actor, employee, "sua", before=before)
         return self._result(employee, actor, request_id)
 
+    # UC-08 Đổi mật khẩu tài khoản — Main 4–6; A2, A6: QTV đổi mật khẩu và ghi audit cùng transaction (specs/use_cases/identity_access/UC-08.md)
     async def reset_password(
         self,
         employee_id: int,
@@ -341,14 +352,15 @@ class NhanVienService:
                     nhan_vien_id=int(actor["sub"]),
                     loai_doi_tuong="nhan_vien",
                     doi_tuong_id=employee.id,
-                    thao_tac="sua",
+                    thao_tac="doi_mat_khau",
                     du_lieu_truoc=None,
-                    du_lieu_sau={"da_dat_lai_mat_khau": True},
+                    du_lieu_sau={"da_doi_mat_khau": True},
                     ly_do=None,
                 )
             )
         return self._result(employee, actor, request_id)
 
+    # UC-07 Đổi vai trò — Main 4–6; R3–R8, A2–A6, A9: kiểm tra và lưu cùng transaction (specs/use_cases/identity_access/UC-07.md)
     async def change_role(
         self,
         employee_id: int,
@@ -356,27 +368,42 @@ class NhanVienService:
         actor: dict,
         if_match: str | None,
         request_id: str,
+        reason: str | None = None,
     ) -> tuple[NhanVienDetailResponse, str]:
         _require_admin(actor)
         async with self.transaction:
+            await self.repository.lock_admin_role()
             actor = await self._lock_admin(actor)
             before = await self._target(employee_id, actor, if_match)
             role = await self._role(role_id)
-            employee = before
-            if before.vai_tro_id != role_id:
-                if "quan_tri_vien" in {before.ma_vai_tro, role.ma_vai_tro}:
-                    raise ConflictException(message="Không được thay đổi quản trị viên duy nhất")
-                employee = await self.repository.set_role(employee_id, role_id)
-                await self._audit(actor, employee, "thu_hoi_quyen", before=before)
-                await self._audit(actor, employee, "cap_quyen", before=before)
+            if before.vai_tro_id == role_id:
+                raise InvalidWorkflowState(message="Vai trò mới trùng vai trò hiện tại")
+            if (
+                before.ma_vai_tro == "quan_tri_vien"
+                and before.trang_thai == "hoat_dong"
+                and role.ma_vai_tro != "quan_tri_vien"
+                and await self.repository.count_active_admins() <= 1
+            ):
+                raise LastActiveAdminException(
+                    message="Không hạ quyền được Quản trị viên đang hoạt động cuối cùng"
+                )
+            if (
+                before.ma_vai_tro == "nhan_vien"
+                and await self.repository.count_unfinished_assigned_requests(employee_id) > 0
+            ):
+                raise UnfinishedAssignmentException()
+            employee = await self.repository.set_role(employee_id, role_id)
+            await self._audit(actor, employee, "doi_vai_tro", before=before, reason=reason)
         return self._result(employee, actor, request_id)
 
+    # UC-05 Khóa tài khoản — Main 4–6; A2–A4, A9: kiểm tra QTV cuối và lưu atomic (specs/use_cases/identity_access/UC-05.md)
+    # UC-06 Mở khóa tài khoản — Main 4–6; A2, A6: kiểm tra trạng thái, lưu và audit cùng transaction (specs/use_cases/identity_access/UC-06.md)
     async def _change_status(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
         *,
         status: str,
@@ -384,22 +411,37 @@ class NhanVienService:
     ) -> tuple[NhanVienDetailResponse, str]:
         _require_admin(actor)
         async with self.transaction:
+            if status == "bi_khoa":
+                await self.repository.lock_admin_role()
             actor = await self._lock_admin(actor)
             before = await self._target(employee_id, actor, if_match)
             if before.trang_thai == status:
-                raise ConflictException(message="Tài khoản không ở trạng thái phù hợp")
-            if status == "bi_khoa" and before.ma_vai_tro == "quan_tri_vien":
-                raise ConflictException(message="Không được khóa quản trị viên duy nhất")
+                raise InvalidWorkflowState(message="Tài khoản không ở trạng thái phù hợp")
+            if (
+                status == "bi_khoa"
+                and before.ma_vai_tro == "quan_tri_vien"
+                and await self.repository.count_active_admins() <= 1
+            ):
+                raise LastActiveAdminException()
             employee = await self.repository.set_status(employee_id, status)
-            await self._audit(actor, employee, action, before=before, reason=reason)
+            await self._audit(
+                actor,
+                employee,
+                action,
+                before=before,
+                reason=reason,
+                status_before=before.trang_thai,
+                status_after=employee.trang_thai,
+            )
         return self._result(employee, actor, request_id)
 
+    # UC-05 Khóa tài khoản — Main 5–6; A1: khóa thay xóa, lý do tùy chọn (specs/use_cases/identity_access/UC-05.md)
     async def soft_delete_employee(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
     ) -> tuple[NhanVienDetailResponse, str]:
         return await self._change_status(
@@ -409,15 +451,16 @@ class NhanVienService:
             reason,
             request_id,
             status="bi_khoa",
-            action="vo_hieu_hoa",
+            action="khoa",
         )
 
+    # UC-06 Mở khóa tài khoản — Main 5–6; A1: hoạt động lại, giữ vai trò và ghi mo_khoa (specs/use_cases/identity_access/UC-06.md)
     async def unlock_employee(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
     ) -> tuple[NhanVienDetailResponse, str]:
         return await self._change_status(
@@ -427,7 +470,7 @@ class NhanVienService:
             reason,
             request_id,
             status="hoat_dong",
-            action="sua",
+            action="mo_khoa",
         )
 
     async def list_roles(

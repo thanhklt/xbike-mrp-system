@@ -54,6 +54,11 @@ class DuplicateCodeException(ConflictException):
     default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"
 
 
+class DuplicateUsernameException(ConflictException):
+    code = "ten_dang_nhap_bi_trung"
+    default_message = "Tên đăng nhập đã tồn tại"
+
+
 class BomCycleException(ConflictException):
     code = "bom_co_chu_trinh"
     default_message = "BOM tạo chu trình trong cấu trúc"
@@ -67,6 +72,16 @@ class MissingBomException(ConflictException):
 class InvalidWorkflowState(ConflictException):
     code = "trang_thai_khong_hop_le"
     default_message = "Trạng thái không cho phép thao tác này"
+
+
+class LastActiveAdminException(ConflictException):
+    code = "quan_tri_vien_cuoi_cung"
+    default_message = "Không khóa được Quản trị viên đang hoạt động cuối cùng"
+
+
+class UnfinishedAssignmentException(ConflictException):
+    code = "con_yeu_cau_chua_ket_thuc"
+    default_message = "Nhân viên còn yêu cầu sản xuất chưa kết thúc"
 
 
 class InvalidAssignee(ConflictException):

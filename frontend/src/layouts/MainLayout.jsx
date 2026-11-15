@@ -23,10 +23,11 @@ function adminBreadcrumbs(pathname) {
   if (pathname === "/admin/tai-khoan") return [{ label: "Quản lý tài khoản" }];
   if (pathname === "/admin/vai-tro") return [{ label: "Quản lý vai trò" }];
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
-  if (pathname === "/ho-so") return [{ label: "Hồ sơ & đổi mật khẩu" }];
+  if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
 }
 
+// UC-02 Đăng xuất — Main 1: cung cấp thao tác đăng xuất trong menu (specs/use_cases/identity_access/UC-02.md)
 export function MainLayout() {
   const { user, logout } = useAuth();
   const { confirm } = useFeedback();
@@ -49,12 +50,14 @@ export function MainLayout() {
     };
   }, [isAdmin]);
 
+  // UC-02 Đăng xuất — Main 1–3, A3: hỏi xác nhận, chỉ đăng xuất khi đồng ý (specs/use_cases/identity_access/UC-02.md)
   function signOut() {
     confirm({
       title: "Đăng xuất",
       description: "Bạn có muốn kết thúc phiên làm việc?",
       hideImpact: true,
       variant: "logout",
+      // UC-02 Đăng xuất — Main 2–3: xóa phiên và chuyển về đăng nhập (specs/use_cases/identity_access/UC-02.md)
       onConfirm: () => {
         logout();
         navigate("/dang-nhap", { replace: true });
@@ -76,7 +79,7 @@ export function MainLayout() {
       </summary>
       <div className="user-dropdown">
         <NavLink to="/ho-so">
-          <UserRound size={16} /> Hồ sơ & đổi mật khẩu
+          <UserRound size={16} /> Hồ sơ
         </NavLink>
         <button type="button" onClick={signOut}>
           <LogOut size={16} /> Đăng xuất

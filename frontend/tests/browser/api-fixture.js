@@ -475,7 +475,6 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (state.accessToken !== "browser-test-token" && call.headers.authorization !== `Bearer ${state.accessToken}`)
       return respond({ error: { message: "Please sign in again" } }, 401);
     if (path === "auth/me") return respond({ data: user, meta: {} }, 200, { etag: '"user-v1"' });
-    if (path === "auth/doi_mat_khau") return respond({ data: { da_doi: true }, meta: {} });
     if (path === "danh_muc_mat_hang")
       return respond({ data: items, meta: { total: items.length } });
     if (path === "luu_luong_truy_cap")

@@ -3,19 +3,13 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowRight, Eye, EyeOff, Phone } from "lucide-react";
 import { useAuth } from "./AuthProvider.jsx";
 import { homeFor } from "./permissions.js";
+import { loginErrorMessage } from "./loginErrors.js";
 import { Button } from "../../components/Button.jsx";
 import { Field } from "../../components/Field.jsx";
 import { LoginCarousel } from "./LoginCarousel.jsx";
 import { LOGIN_SLIDES, LOGIN_SLIDE_INTERVAL_MS } from "./loginSlides.js";
 
 const SUPPORT_PHONE = { display: "0900 000 000", tel: "0900000000" };
-const LOGIN_ERROR_MESSAGES = {
-  0: "Không kết nối được máy chủ. Vui lòng thử lại.",
-  401: "Thông tin đăng nhập không hợp lệ",
-  403: "Tài khoản bị khóa hoặc không có quyền đăng nhập.",
-  422: "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.",
-  429: "Bạn thử quá nhiều lần. Vui lòng thử lại sau.",
-};
 
 export function LoginPage() {
   const { user, login } = useAuth();
@@ -27,6 +21,7 @@ export function LoginPage() {
   const [error, setError] = useState(null);
   const pending = useRef(false);
   if (user) return <Navigate to={homeFor(user.ma_vai_tro)} replace />;
+  // UC-01 Đăng nhập — Main 2–6 (specs/use_cases/identity_access/UC-01.md)
   async function submit(event) {
     event.preventDefault();
     if (pending.current) return;
@@ -101,10 +96,7 @@ export function LoginPage() {
                 {error && (
                   <div className="login-error">
                     <AlertCircle aria-hidden="true" size={16} />
-                    <span>
-                      {LOGIN_ERROR_MESSAGES[error.status] ||
-                        "Chưa thể đăng nhập. Vui lòng thử lại sau."}
-                    </span>
+                    <span>{loginErrorMessage(error)}</span>
                   </div>
                 )}
               </div>
