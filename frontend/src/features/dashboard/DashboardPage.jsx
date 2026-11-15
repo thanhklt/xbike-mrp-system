@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Ban, BarChart3, CircleCheck, Info, Layers, PieChart, Users } from "lucide-react";
 import { API } from "../../lib/api/endpoints.js";
 import { useChoices, useResource } from "../../lib/api/useResources.js";
-import { formatAuditAction, formatAuditDetail } from "./auditFormat.js";
+import { formatAuditAction, formatAuditDetail, formatRecentAuditDetail } from "./auditFormat.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import {
@@ -495,6 +495,10 @@ function AdminDashboard() {
             </table>
           </div>
         </QueryState>
+        {/* UC-43: lối vào lịch sử cho QTV; giữ nguyên ba mục Sidebar. */}
+        <div className="actions actions-end">
+          <Link to="/admin/lich-su">Xem tất cả →</Link>
+        </div>
       </section>
     </div>
   );
@@ -730,9 +734,7 @@ function RecentAudit() {
                   <small>
                     {dateTime(entry.created_at)} · Nhân viên #{entry.nhan_vien_id}
                   </small>
-                  <p>
-                    {entry.thao_tac} · {entry.loai_doi_tuong} #{entry.doi_tuong_id}
-                  </p>
+                  <p>{formatRecentAuditDetail({ ...entry, ly_do: null })}</p>
                   {entry.ly_do && <small>{entry.ly_do}</small>}
                 </div>
               </div>

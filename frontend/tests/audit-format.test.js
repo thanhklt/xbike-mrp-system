@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatAuditAction, formatAuditDetail } from "../src/features/dashboard/auditFormat.js";
+import {
+  formatAuditAction,
+  formatAuditDetail,
+  formatRecentAuditDetail,
+} from "../src/features/dashboard/auditFormat.js";
 import { auditParams } from "../src/lib/api/contract.js";
 import { ROLE_LABELS } from "../src/lib/format.js";
 
@@ -129,4 +133,125 @@ test("auditParams preserves the exclusion filter for ADM-01", () => {
       sort_order: "desc",
     },
   );
+});
+
+const accountSnapshot = { ma_nhan_vien: "NV-000005", ho_ten: "Tên lịch sử" };
+const accountActionsV4 = [
+  ["khoa", "Khóa tài khoản", "Khóa tài khoản NV-000005 (Tên lịch sử) do kiểm tra."],
+  ["mo_khoa", "Mở khóa tài khoản", "Mở khóa tài khoản NV-000005 (Tên lịch sử) do kiểm tra."],
+  [
+    "doi_vai_tro",
+    "Đổi vai trò",
+    'Đổi vai trò tài khoản NV-000005 (Tên lịch sử) từ "Nhân viên" sang "Quản lý kho" do kiểm tra.',
+  ],
+  ["doi_mat_khau", "Đổi mật khẩu", "Đổi mật khẩu tài khoản NV-000005 (Tên lịch sử)."],
+];
+
+// UC-05 AC-5 / UC-06 AC-3 / UC-07 AC-9 / UC-08 AC-7: bốn mã tài khoản v4.
+for (const [action, label, detail] of accountActionsV4) {
+  test(`v4 account ${action} has a Vietnamese action and historical detail`, () => {
+    const entry = {
+      ...base,
+      thao_tac: action,
+      du_lieu_truoc: { ...accountSnapshot, ma_vai_tro: "nhan_vien" },
+      du_lieu_sau: {
+        ...accountSnapshot,
+        ma_vai_tro: "quan_ly",
+        password_hash: "PRIVATE_HASH",
+        email: "private@example.test",
+      },
+      ly_do: "kiểm tra",
+    };
+    assert.equal(formatAuditAction(entry), label);
+    assert.equal(
+      formatAuditDetail(entry, [{ id: 5, ma_nhan_vien: "NV-MOI", ho_ten: "Tên hiện tại" }]),
+      detail,
+    );
+  });
+}
+
+// UC-07 AC-9: vai trò lấy từ snapshot trước/sau, không suy ra từ hồ sơ hiện tại.
+for (const previous of Object.keys(ROLE_LABELS)) {
+  for (const next of Object.keys(ROLE_LABELS)) {
+    if (previous === next) continue;
+    test(`v4 role history describes ${previous} to ${next}`, () => {
+      assert.equal(
+        formatAuditDetail({
+          ...base,
+          thao_tac: "doi_vai_tro",
+          du_lieu_truoc: { ...accountSnapshot, ma_vai_tro: previous },
+          du_lieu_sau: { ...accountSnapshot, ma_vai_tro: next },
+        }),
+        `Đổi vai trò tài khoản NV-000005 (Tên lịch sử) từ "${ROLE_LABELS[previous]}" sang "${ROLE_LABELS[next]}".`,
+      );
+    });
+  }
+}
+
+for (const [action, expected] of [
+  ["khoa", "Khóa tài khoản #5."],
+  ["mo_khoa", "Mở khóa tài khoản #5."],
+  ["doi_vai_tro", "Đổi vai trò tài khoản #5."],
+  ["doi_mat_khau", "Đổi mật khẩu tài khoản #5."],
+]) {
+  test(`v4 ${action} retains its label without snapshots`, () => {
+    assert.equal(
+      formatAuditDetail({ ...base, thao_tac: action, du_lieu_truoc: null, du_lieu_sau: null }),
+      expected,
+    );
+  });
+}
+
+test("v4 role history handles missing or unknown roles without inventing a transition", () => {
+  const entry = { ...base, thao_tac: "doi_vai_tro", ly_do: "điều chuyển" };
+  assert.equal(
+    formatAuditDetail({
+      ...entry,
+      du_lieu_sau: { ...accountSnapshot, ma_vai_tro: "quan_ly" },
+    }),
+    'Đổi vai trò tài khoản NV-000005 (Tên lịch sử) sang "Quản lý kho" do điều chuyển.',
+  );
+  for (const role of [null, "toString", "__proto__", "khong_ro"]) {
+    assert.equal(
+      formatAuditDetail({ ...entry, du_lieu_sau: { ...accountSnapshot, ma_vai_tro: role } }),
+      "Đổi vai trò tài khoản NV-000005 (Tên lịch sử) do điều chuyển.",
+    );
+  }
+});
+
+for (const [action, , detail] of accountActionsV4) {
+  test(`compact dashboard translates ${action} without repeating its separate reason`, () => {
+    assert.equal(
+      formatRecentAuditDetail({
+        ...base,
+        thao_tac: action,
+        du_lieu_truoc: { ...accountSnapshot, ma_vai_tro: "nhan_vien" },
+        du_lieu_sau: { ...accountSnapshot, ma_vai_tro: "quan_ly" },
+        ly_do: null,
+      }),
+      detail.replace(" do kiểm tra.", "."),
+    );
+  });
+}
+
+for (const action of ["sua", "cap_quyen", "thu_hoi_quyen", "vo_hieu_hoa"]) {
+  test(`compact dashboard preserves legacy ${action} wording`, () => {
+    assert.equal(
+      formatRecentAuditDetail({
+        ...base,
+        thao_tac: action,
+        du_lieu_sau: { ...accountSnapshot, da_dat_lai_mat_khau: true },
+      }),
+      `${action} · nhan_vien #5`,
+    );
+  });
+}
+
+test("unrelated modules retain their existing compact wording", () => {
+  for (const action of ["khoa", "gui_lai", "thao_tac_moi"]) {
+    assert.equal(
+      formatRecentAuditDetail({ loai_doi_tuong: "mat_hang", doi_tuong_id: 7, thao_tac: action }),
+      `${action} · mat_hang #7`,
+    );
+  }
 });

@@ -2691,6 +2691,21 @@ html[data-admin-theme="true"] dialog .notice-info {
   color: #d6cbc0;
 }
 
+.audit-history {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
+/* UC-43: giữ độ tương phản của JSON và tiêu đề bảng trong giao diện QTV. */
+html[data-admin-theme="true"] dialog .audit-json,
+html[data-admin-theme="true"] dialog .audit-detail th,
+.admin-shell .audit-history th {
+  background: #171310;
+  border-color: #3a312a;
+  color: #f4ede6;
+}
+
 .admin-shell .notice-warning,
 html[data-admin-theme="true"] dialog .notice-warning {
   background: #2f2213;

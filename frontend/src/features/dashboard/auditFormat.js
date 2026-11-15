@@ -1,10 +1,13 @@
 import { ROLE_LABELS } from "../../lib/format.js";
 
 const ACTION_LABELS = {
+  dang_nhap: "Đăng nhập",
   tao: "Tạo",
   sua: "Cập nhật",
   xoa_nhap: "Xóa nháp",
   gui: "Gửi",
+  gui_lai: "Gửi lại",
+  kiem_tra: "Kiểm tra",
   bat_dau: "Bắt đầu",
   duyet: "Duyệt",
   tu_choi: "Từ chối",
@@ -18,6 +21,17 @@ const ACTION_LABELS = {
   nhan_xu_ly: "Nhận xử lý",
   giai_quyet: "Giải quyết",
   xac_nhan: "Xác nhận",
+  ngung: "Ngừng",
+  dung_lai: "Dùng lại",
+  tao_phien_ban: "Tạo phiên bản",
+  dung_lai_phien_ban: "Dùng lại phiên bản",
+};
+
+const ACCOUNT_ACTIONS_V4 = {
+  khoa: "Khóa tài khoản",
+  mo_khoa: "Mở khóa tài khoản",
+  doi_vai_tro: "Đổi vai trò",
+  doi_mat_khau: "Đổi mật khẩu",
 };
 
 const OBJECT_LABELS = {
@@ -56,9 +70,21 @@ const PROFILE_FIELDS = [
   ["he_so_luong", "hệ số lương"],
 ];
 
+export function auditActionLabel(code) {
+  if (Object.hasOwn(ACCOUNT_ACTIONS_V4, code)) return ACCOUNT_ACTIONS_V4[code];
+  return Object.hasOwn(ACTION_LABELS, code) ? ACTION_LABELS[code] : code;
+}
+
+export function auditObjectLabel(code) {
+  return Object.hasOwn(OBJECT_LABELS, code) ? OBJECT_LABELS[code] : code;
+}
+
 export function formatAuditAction(entry) {
   if (entry.loai_doi_tuong === "nhan_vien") {
     if (entry.thao_tac === "dang_nhap") return "Đăng nhập";
+    if (Object.hasOwn(ACCOUNT_ACTIONS_V4, entry.thao_tac)) {
+      return ACCOUNT_ACTIONS_V4[entry.thao_tac];
+    }
     if (entry.thao_tac === "cap_quyen") return "Phân quyền";
     if (entry.thao_tac === "thu_hoi_quyen") return "Thu hồi quyền";
     if (entry.thao_tac === "sua") {
@@ -96,7 +122,14 @@ function employeeDetail(entry, employees) {
   const target = `${code}${name ? ` (${name})` : ""}`;
   const action = formatAuditAction(entry);
   const reason = entry.ly_do ? ` do ${entry.ly_do}` : "";
-  const fallback = reason ? `${target}${reason}.` : target;
+  const accountAction = ["doi_vai_tro", "doi_mat_khau"].includes(entry.thao_tac)
+    ? `${action} tài khoản`
+    : action;
+  const fallback = Object.hasOwn(ACCOUNT_ACTIONS_V4, entry.thao_tac)
+    ? `${accountAction} ${target}${reason}.`
+    : reason
+      ? `${target}${reason}.`
+      : target;
   if (entry.thao_tac === "dang_nhap") return "Đăng nhập thành công vào hệ thống.";
   if (!snapshot) return fallback;
   if (entry.thao_tac === "tao") {
@@ -111,6 +144,13 @@ function employeeDetail(entry, employees) {
     const previous =
       granted && previousRole && previousRole !== role ? ` (trước đó: "${previousRole}")` : "";
     return `${granted ? "Gán" : "Thu hồi"} vai trò "${role}" ${granted ? "cho" : "của"} tài khoản ${target}${previous}.`;
+  }
+  if (entry.thao_tac === "doi_vai_tro") {
+    const before = roleLabel(entry.du_lieu_truoc);
+    const after = roleLabel(entry.du_lieu_sau);
+    if (!after) return fallback;
+    const from = before && before !== after ? ` từ "${before}"` : "";
+    return `Đổi vai trò tài khoản ${target}${from} sang "${after}"${reason}.`;
   }
   if (["Đổi mật khẩu", "Đặt lại mật khẩu"].includes(action))
     return `${action} tài khoản ${target}.`;
@@ -137,4 +177,11 @@ export function formatAuditDetail(entry, employees = []) {
   const code = snapshot?.[codeField] || entry.du_lieu_truoc?.[codeField] || fallback;
   const noun = OBJECT_LABELS[entry.loai_doi_tuong] || entry.loai_doi_tuong;
   return `${noun} ${code}${entry.ly_do ? ` · ${entry.ly_do}` : ""}`;
+}
+
+export function formatRecentAuditDetail(entry) {
+  if (entry.loai_doi_tuong === "nhan_vien" && Object.hasOwn(ACCOUNT_ACTIONS_V4, entry.thao_tac)) {
+    return formatAuditDetail(entry);
+  }
+  return `${entry.thao_tac} · ${entry.loai_doi_tuong} #${entry.doi_tuong_id}`;
 }
