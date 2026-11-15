@@ -479,6 +479,32 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       return respond({ data: items, meta: { total: items.length } });
     if (path === "luu_luong_truy_cap")
       return respond(trafficSeries(call.params.khoang_thoi_gian || "hom_nay"));
+    if (method === "GET" && path === "bao_cao/nhap_xuat_ton") {
+      const { ky, nam, thang, quy } = call.params;
+      const year = Number(nam);
+      const month = ky === "thang" ? Number(thang) : ky === "quy" ? Number(quy) * 3 - 2 : 1;
+      const duration = ky === "thang" ? 1 : ky === "quy" ? 3 : 12;
+      return respond({
+        success: true,
+        data: {
+          ky, nam: year, thang: thang ? Number(thang) : null, quy: quy ? Number(quy) : null,
+          tu_thoi_diem: new Date(Date.UTC(year, month - 1, 1, -7)).toISOString(),
+          den_thoi_diem: new Date(Date.UTC(year, month - 1 + duration, 1, -7)).toISOString(),
+          mat_hang: [],
+        },
+        message: "Lấy báo cáo nhập-xuất-tồn thành công",
+      });
+    }
+    if (method === "GET" && path === "bao_cao/bien_dong_kho")
+      return respond({
+        success: true,
+        data: [],
+        pagination: {
+          page: Number(call.params.page || 1), page_size: Number(call.params.page_size || 20),
+          total_items: 0, total_pages: 0, has_next: false, has_prev: false,
+        },
+        message: "Items retrieved successfully",
+      });
     const [resource, rawId, action] = path.split("/");
     const records = state.resources[resource];
     if (!records) {

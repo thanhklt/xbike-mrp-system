@@ -9,7 +9,7 @@ from app.dependencies import (
     get_pagination_params,
     require_roles,
 )
-from app.modules.inventory.schemas import StockLevelResponse, StockMovementResponse
+from app.modules.inventory.schemas import StockLevelResponse
 from app.modules.inventory.service import InventoryService
 from app.shared.pagination import PageParams, PaginatedResponse
 
@@ -28,12 +28,7 @@ async def list_0(
     return await service.list_stock(params)
 
 
-@router.get("/movements", response_model=PaginatedResponse[StockMovementResponse])
-async def list_1(
-    params: Annotated[PageParams, Depends(get_pagination_params)],
-    service: Annotated[InventoryService, Depends(get_inventory_service)],
-):
-    return await service.list_movements(params)
+# UC-42 A2: lịch sử biến động chỉ qua GET /bao_cao/bien_dong_kho (QLK)
 
 
 @router.post("/movements")

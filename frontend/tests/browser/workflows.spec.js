@@ -208,15 +208,29 @@ test("unsupported supplier actions are disabled with visible reasons", async ({ 
   expect(state.calls.some((call) => ["PATCH", "DELETE"].includes(call.method))).toBeFalsy();
 });
 
+// UC-42 R2: Hai trang báo cáo chỉ đọc endpoint reporting, không gọi inventory cũ
 test("read-only reports make no requests to unimplemented or legacy stock endpoints", async ({
   page,
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/thong-ke");
-  await expect(page.getByRole("button", { name: "Xem thống kê" })).toBeDisabled();
+  await page.getByRole("button", { name: "Xem báo cáo", exact: true }).click();
+  await expect(page.getByText("Không có mặt hàng thỏa bộ lọc.", { exact: true })).toBeVisible();
+  expect(
+    state.calls.some((call) => call.method === "GET" && call.path === "bao_cao/nhap_xuat_ton"),
+  ).toBeTruthy();
   await page.goto("/kho/giao-dich");
-  await expect(page.getByRole("button", { name: "Lọc giao dịch" })).toBeDisabled();
-  expect(state.calls.some((call) => /inventory|bao_cao/.test(call.path))).toBeFalsy();
+  await expect(
+    page.getByRole("heading", { name: "Lịch sử biến động kho", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Chưa có dữ liệu phù hợp.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Lọc", exact: true }).click();
+  expect(
+    state.calls.some((call) => call.method === "GET" && call.path === "bao_cao/bien_dong_kho"),
+  ).toBeTruthy();
+  expect(state.calls.some((call) => /inventory/.test(call.path))).toBeFalsy();
+  expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
+  expect(state.unexpected).toEqual([]);
 });
 
 test("expired authenticated request closes the workflow and returns to login", async ({ page }) => {
