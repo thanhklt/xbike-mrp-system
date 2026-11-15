@@ -18,6 +18,18 @@ const ACTION_LABELS = {
   nhan_xu_ly: "Nhận xử lý",
   giai_quyet: "Giải quyết",
   xac_nhan: "Xác nhận",
+  // Mã thao tác tài khoản v4 (UC-05 – UC-08); mã v3 phía trên giữ để hiển thị bản ghi cũ.
+  khoa: "Khóa",
+  mo_khoa: "Mở khóa",
+  doi_vai_tro: "Đổi vai trò",
+  doi_mat_khau: "Đổi mật khẩu",
+};
+
+const ACCOUNT_ACTIONS_V4 = {
+  khoa: "Khóa tài khoản",
+  mo_khoa: "Mở khóa tài khoản",
+  doi_vai_tro: "Đổi vai trò",
+  doi_mat_khau: "Đổi mật khẩu",
 };
 
 const OBJECT_LABELS = {
@@ -59,6 +71,7 @@ const PROFILE_FIELDS = [
 export function formatAuditAction(entry) {
   if (entry.loai_doi_tuong === "nhan_vien") {
     if (entry.thao_tac === "dang_nhap") return "Đăng nhập";
+    if (Object.hasOwn(ACCOUNT_ACTIONS_V4, entry.thao_tac)) return ACCOUNT_ACTIONS_V4[entry.thao_tac];
     if (entry.thao_tac === "cap_quyen") return "Phân quyền";
     if (entry.thao_tac === "thu_hoi_quyen") return "Thu hồi quyền";
     if (entry.thao_tac === "sua") {
@@ -111,6 +124,13 @@ function employeeDetail(entry, employees) {
     const previous =
       granted && previousRole && previousRole !== role ? ` (trước đó: "${previousRole}")` : "";
     return `${granted ? "Gán" : "Thu hồi"} vai trò "${role}" ${granted ? "cho" : "của"} tài khoản ${target}${previous}.`;
+  }
+  if (entry.thao_tac === "doi_vai_tro") {
+    const before = roleLabel(entry.du_lieu_truoc);
+    const after = roleLabel(entry.du_lieu_sau);
+    if (!after) return fallback;
+    const from = before && before !== after ? ` từ "${before}"` : "";
+    return `Đổi vai trò tài khoản ${target}${from} sang "${after}"${reason}.`;
   }
   if (["Đổi mật khẩu", "Đặt lại mật khẩu"].includes(action))
     return `${action} tài khoản ${target}.`;
