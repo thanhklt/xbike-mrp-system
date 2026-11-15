@@ -72,6 +72,7 @@ def _identity(user: EmployeeCredentials) -> AuthIdentity:
         profile=NhanVienRead.model_validate(user),
         roles=user.roles,
         credential_version=password_version(user.password_hash),
+        session_version=user.phien_ban_dang_nhap,
     )
 
 
@@ -148,7 +149,10 @@ class NhanVienService:
             raise RuntimeError("Không ghi được lịch sử đăng nhập") from error
 
     # UC-02 Đăng xuất — A2: kiểm tra tài khoản khóa và phiên bản mật khẩu (specs/use_cases/identity_access/UC-02.md)
-    async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
+    # UC-06 Mở khóa tài khoản — A3: từ chối phiên có từ trước khi khóa (specs/use_cases/identity_access/UC-06.md)
+    async def get_auth_identity(
+        self, employee_id: int, *, credential_version: str, session_version: int = 0
+    ) -> AuthIdentity:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             raise UnauthorizedException(message="Invalid token subject")
         user = await self.repository.get_credentials_by_id(employee_id)
@@ -156,10 +160,18 @@ class NhanVienService:
             raise UnauthorizedException(message="Employee no longer exists")
         _require_active(user)
         _require_current_password(user, credential_version)
+        if type(session_version) is not int or session_version != user.phien_ban_dang_nhap:
+            raise UnauthorizedException(message="Please sign in again")
         return _identity(user)
 
     async def change_password(
-        self, employee_id: int, current_password: str, new_password: str, *, credential_version: str
+        self,
+        employee_id: int,
+        current_password: str,
+        new_password: str,
+        *,
+        credential_version: str,
+        session_version: int = 0,
     ) -> None:
         async with self.transaction:
             user = await self.repository.lock_credentials_by_id(employee_id)
@@ -167,6 +179,8 @@ class NhanVienService:
                 raise UnauthorizedException(message="Employee no longer exists")
             _require_active(user)
             _require_current_password(user, credential_version)
+            if type(session_version) is not int or session_version != user.phien_ban_dang_nhap:
+                raise UnauthorizedException(message="Please sign in again")
             if not await asyncio.to_thread(verify_password, current_password, user.password_hash):
                 raise InvalidCredentialsException()
             new_hash = await asyncio.to_thread(get_password_hash, new_password)
@@ -397,6 +411,7 @@ class NhanVienService:
         return self._result(employee, actor, request_id)
 
     # UC-05 Khóa tài khoản — Main 4–6; A2–A4, A9: kiểm tra QTV cuối và lưu atomic (specs/use_cases/identity_access/UC-05.md)
+    # UC-06 Mở khóa tài khoản — Main 4–6; A2, A6: kiểm tra trạng thái, lưu và audit cùng transaction (specs/use_cases/identity_access/UC-06.md)
     async def _change_status(
         self,
         employee_id: int,
@@ -415,9 +430,7 @@ class NhanVienService:
             actor = await self._lock_admin(actor)
             before = await self._target(employee_id, actor, if_match)
             if before.trang_thai == status:
-                if status == "bi_khoa":
-                    raise InvalidWorkflowState(message="Tài khoản không ở trạng thái phù hợp")
-                raise ConflictException(message="Tài khoản không ở trạng thái phù hợp")
+                raise InvalidWorkflowState(message="Tài khoản không ở trạng thái phù hợp")
             if (
                 status == "bi_khoa"
                 and before.ma_vai_tro == "quan_tri_vien"
@@ -455,12 +468,13 @@ class NhanVienService:
             action="khoa",
         )
 
+    # UC-06 Mở khóa tài khoản — Main 5–6; A1: hoạt động lại, giữ vai trò và ghi mo_khoa (specs/use_cases/identity_access/UC-06.md)
     async def unlock_employee(
         self,
         employee_id: int,
         actor: dict,
         if_match: str | None,
-        reason: str,
+        reason: str | None,
         request_id: str,
     ) -> tuple[NhanVienDetailResponse, str]:
         return await self._change_status(
@@ -470,7 +484,7 @@ class NhanVienService:
             reason,
             request_id,
             status="hoat_dong",
-            action="sua",
+            action="mo_khoa",
         )
 
     async def list_roles(

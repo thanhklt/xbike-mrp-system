@@ -3,6 +3,8 @@
 Nguồn: `auth/{router,schema,service}.py`, `nhan_vien/{service,ports,repository,schemas,models}.py`, `audit/{service,repository}.py`, `app/dependencies.py`, `core/{security,exceptions,sqlalchemy_transaction}.py`.
 Auth gọi public service nhân viên; ORM `NhanVien`, `VaiTro` thuộc nhân viên, ORM `LichSuThaoTac` thuộc audit. Các repository dùng chung session theo request. Validation và authentication là dependency của FastAPI; không quy định thứ tự ưu tiên khi request đồng thời sai nhiều điều kiện.
 
+Theo [UC-06](../../specs/use_cases/identity_access/UC-06.md), A3 và quyết định D1, JWT cấp mới mang `pbdn=NhanVien.phien_ban_dang_nhap`. Mỗi request cần xác thực so `payload.get("pbdn", 0)` với phiên bản DB; lệch hoặc claim không phải số nguyên trả 401 `chua_xac_thuc`, thông báo `Please sign in again`. Tài khoản đang khóa vẫn trả 403 `tai_khoan_bi_vo_hieu_hoa`. Khóa tăng phiên bản trong cùng transaction; mở khóa giữ nguyên, nên phiên trước khi khóa không dùng lại được. `pwdv` vẫn được kiểm tra như trước; hồ sơ response không lộ phiên bản đăng nhập.
+
 ## POST /api/v1/auth/dang_nhap
 
 Nguồn use case: [UC-01 — Đăng nhập](../../specs/use_cases/identity_access/UC-01.md), Main 2–6, A1–A4.
@@ -53,7 +55,7 @@ sequenceDiagram
             else Commit thành công
                 T-->>N: Đã commit
                 N-->>A: record_login hoàn tất
-                A->>A: Ký JWT với sub, roles, pwdv, iat, exp
+                A->>A: Ký JWT với sub, roles, pwdv, pbdn, iat, exp
                 A-->>R: TokenRead
                 R-->>C: 200 data và meta.request_id
             end
@@ -111,7 +113,7 @@ sequenceDiagram
             else Commit thành công
                 T-->>N: Đã commit
                 N-->>A: record_login hoàn tất
-                A->>A: Ký JWT có credential version
+                A->>A: Ký JWT có pwdv và pbdn từ identity
                 A-->>R: TokenResponse
                 R-->>C: 200 access_token, token_type, expires_in
             end
@@ -142,13 +144,13 @@ sequenceDiagram
     alt Thiếu token, JWT lỗi hoặc sub sai
         A-->>C: 401 chua_xac_thuc
     else JWT hợp lệ
-        A->>N: get_auth_identity(id, credential_version)
+        A->>N: get_auth_identity(id, credential_version, session_version=pbdn hoặc 0)
         N->>P: get_credentials_by_id(id)
         P->>DB: SELECT NhanVien và VaiTro
         DB-->>P: Account hiện tại
         P-->>N: EmployeeCredentials
-        N->>N: Kiểm tra tồn tại, trạng thái, role và pwdv
-        alt Account mất hoặc password version đổi
+        N->>N: Kiểm tra tồn tại, trạng thái, role, pwdv và pbdn so với DB
+        alt Account mất hoặc pwdv/pbdn cũ hay sai kiểu
             N-->>C: 401 chua_xac_thuc
         else Account khóa hoặc role không hợp lệ
             N-->>C: 403
@@ -160,7 +162,7 @@ sequenceDiagram
                 R-->>C: 422 du_lieu_khong_hop_le
             else Query hợp lệ
                 R->>A: get_current_user(payload)
-                A->>N: get_auth_identity(id, pwdv)
+                A->>N: get_auth_identity(id, pwdv, session_version=pbdn hoặc 0)
                 N->>P: Đọc và kiểm tra account hiện tại lần nữa
                 P->>DB: SELECT NhanVien và VaiTro
                 DB-->>N: Record qua repository
@@ -178,9 +180,9 @@ sequenceDiagram
 
 Theo [UC-02 — Đăng xuất](../../specs/use_cases/identity_access/UC-02.md), D1a chỉ kết thúc phiên phía client, không có endpoint đăng xuất. Sau khi người dùng xác nhận, client xóa token khỏi `localStorage`, hủy truy vấn, xóa cache và chuyển về `/dang-nhap`; đóng hộp hỏi giữ nguyên phiên và trang hiện tại (A3). Khi mở lại trang cần đăng nhập, `Protected` chuyển về trang đăng nhập nếu không còn token, kể cả khi còn hồ sơ cũ trong bộ nhớ (R1, A1).
 
-API cần đăng nhập vẫn kiểm tra token và tài khoản như `GET /api/v1/auth/me` ở trên: thiếu/hỏng/hết hạn token hoặc phiên bản mật khẩu cũ trả 401 `chua_xac_thuc` với `WWW-Authenticate: Bearer`; tài khoản khóa trả 403 `tai_khoan_bi_vo_hieu_hoa`. Client nhận 401 hoặc mã tài khoản khóa từ request có Bearer token sẽ kết thúc phiên; thao tác đăng xuất vẫn xóa phiên phía client khi token đã hết hiệu lực (A2). Không ghi lịch sử đăng xuất. Cơ chế `phien_ban_dang_nhap` thuộc UC-07, chưa triển khai trong UC-02.
+API cần đăng nhập vẫn kiểm tra token và tài khoản như `GET /api/v1/auth/me` ở trên: thiếu/hỏng/hết hạn token, phiên bản mật khẩu hoặc phiên bản đăng nhập cũ trả 401 `chua_xac_thuc` với `WWW-Authenticate: Bearer`; tài khoản khóa trả 403 `tai_khoan_bi_vo_hieu_hoa`. Client nhận 401 hoặc mã tài khoản khóa từ request có Bearer token sẽ kết thúc phiên; thao tác đăng xuất vẫn xóa phiên phía client khi token đã hết hiệu lực (A2). Không ghi lịch sử đăng xuất. Cơ chế `phien_ban_dang_nhap` được triển khai tại UC-06 D1/A3, thay lịch triển khai UC-07 trong quyết định D2 của plan UC-01; UC-07/UC-08 sẽ dùng lại.
 
-Giới hạn D1a: đăng xuất không thu hồi JWT trên server; token còn hạn đã được sao chép vẫn dùng được đến khi hết hạn (TTL hiện tại 60 phút), trừ khi bị từ chối bởi kiểm tra tài khoản hoặc phiên bản mật khẩu hiện có.
+Giới hạn D1a: đăng xuất không thu hồi JWT trên server; token còn hạn đã được sao chép vẫn dùng được đến khi hết hạn (TTL hiện tại 60 phút), trừ khi bị từ chối bởi kiểm tra tài khoản, phiên bản mật khẩu hoặc phiên bản đăng nhập hiện có.
 
 ## POST /api/v1/auth/doi_mat_khau
 
@@ -199,7 +201,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     C->>R: POST /api/v1/auth/doi_mat_khau, Bearer JWT, JSON
     R->>A: current_payload(token)
-    A->>N: get_auth_identity(id, pwdv)
+    A->>N: get_auth_identity(id, pwdv, session_version=pbdn hoặc 0)
     N->>P: Đọc account và role hiện tại
     P->>DB: SELECT NhanVien và VaiTro
     DB-->>N: Credentials qua repository
@@ -211,14 +213,14 @@ sequenceDiagram
         R-->>C: 422 du_lieu_khong_hop_le
     else Xác thực và input hợp lệ
         R->>A: change_password(payload, current, new)
-        A->>N: change_password(id, current, new, credential_version)
+        A->>N: change_password(id, current, new, credential_version, session_version=pbdn hoặc 0)
         N->>T: Enter transaction trên session hiện tại
         N->>P: lock_credentials_by_id(id)
         P->>DB: SELECT NhanVien FOR UPDATE, populate_existing
         P->>DB: Tải VaiTro
         DB-->>N: Credentials mới nhất qua repository
-        N->>N: Kiểm tra account, role, pwdv và mật khẩu hiện tại
-        alt Account/password/pwdv không hợp lệ
+        N->>N: Kiểm tra account, role, pwdv, pbdn và mật khẩu hiện tại
+        alt Account/password/pwdv/pbdn không hợp lệ
             N->>T: Exit với exception
             T->>DB: ROLLBACK
             N-->>C: 401 hoặc 403

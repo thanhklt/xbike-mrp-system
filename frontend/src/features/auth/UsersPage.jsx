@@ -110,7 +110,7 @@ function promptAccountStateChange({ record, etag, currentUserId, confirm, notify
       await writeResource({
         path: `${API.employees}/${record.id}${options.pathSuffix}`,
         method: options.method,
-        body: unlock ? { ly_do: reason } : lockRequestBody(reason),
+        body: lockRequestBody(reason),
         etag,
       });
       if (!unlock && record.id === currentUserId) {

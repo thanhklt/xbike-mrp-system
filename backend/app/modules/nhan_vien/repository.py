@@ -196,8 +196,12 @@ class SqlAlchemyNhanVienRepository:
         return await self._update(employee_id, {"vai_tro_id": role_id})
 
     # UC-05 Khóa tài khoản — Main 5: chỉ cập nhật trạng thái tài khoản (specs/use_cases/identity_access/UC-05.md)
+    # UC-06 Mở khóa tài khoản — A3: khóa tăng phiên bản bằng SQL, mở khóa giữ phiên bản (specs/use_cases/identity_access/UC-06.md)
     async def set_status(self, employee_id: int, status: str) -> EmployeeRecord:
-        return await self._update(employee_id, {"trang_thai": status})
+        changes: dict[str, object] = {"trang_thai": status}
+        if status == "bi_khoa":
+            changes["phien_ban_dang_nhap"] = NhanVien.phien_ban_dang_nhap + 1
+        return await self._update(employee_id, changes)
 
     # UC-05 Khóa tài khoản — Main 4; A2: tuần tự hóa khóa QTV bằng dòng vai trò (specs/use_cases/identity_access/UC-05.md)
     async def lock_admin_role(self) -> None:
@@ -238,4 +242,5 @@ def employee_credentials(user: NhanVien) -> EmployeeCredentials:
         **values,
         roles=[profile.ma_vai_tro] if profile.ma_vai_tro else [],
         password_hash=user.mat_khau,
+        phien_ban_dang_nhap=user.phien_ban_dang_nhap,
     )

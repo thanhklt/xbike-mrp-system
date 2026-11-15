@@ -106,6 +106,7 @@ class EmployeeCredentials(BaseModel):
     roles: list[str]
     trang_thai: str | None
     password_hash: str = Field(repr=False, exclude=True)
+    phien_ban_dang_nhap: int = 0
     ma_nhan_vien: str
     vai_tro_id: int | None
     ma_vai_tro: str | None
@@ -121,6 +122,7 @@ class AuthIdentity(BaseModel):
     profile: NhanVienRead
     roles: list[str]
     credential_version: str = Field(repr=False, exclude=True)
+    session_version: int = 0
 
 
 def _date_string(value: object) -> object:
@@ -177,12 +179,6 @@ class DatLaiMatKhauInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mat_khau_moi: SecretStr = Field(min_length=8, max_length=1024, repr=False)
-
-
-class LyDoInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    ly_do: str = Field(min_length=1)
 
 
 class LyDoTuyChonInput(BaseModel):

@@ -121,13 +121,14 @@ test("shared confirmation keeps required reasons by default and supports optiona
 });
 
 // UC-05 A8: đối chứng mở khóa giữ lý do bắt buộc tới UC-06
-test("unlock still requires a reason and uses the existing POST endpoint", async () => {
+// UC-06 AC-1: đối chứng mở khóa chuyển sang lý do tùy chọn theo D3
+test("unlock accepts an optional reason and uses the existing POST endpoint", async () => {
   const locked = { ...record, trang_thai: "bi_khoa" };
   assert.deepEqual(stateConfirmOptions(locked), {
-    title: "Mở khóa tài khoản", reasonOptional: false, danger: false, method: "post", pathSuffix: "/mo_khoa",
+    title: "Mở khóa tài khoản", reasonOptional: true, danger: false, method: "post", pathSuffix: "/mo_khoa",
   });
   const action = stateAction({ record: locked });
-  assert.equal(action.confirmation.reasonOptional, false);
+  assert.equal(action.confirmation.reasonOptional, true);
   await action.confirmation.onConfirm("Khôi phục truy cập");
   assert.deepEqual(action.writes, [{
     path: "/nhan_vien/1/mo_khoa", method: "post", body: { ly_do: "Khôi phục truy cập" }, etag: '"reviewed"',

@@ -14,7 +14,6 @@ from app.modules.nhan_vien.schemas import (
     DoiVaiTroInput,
     EmployeeSort,
     EmployeeStatus,
-    LyDoInput,
     LyDoTuyChonInput,
     NhanVienCreate,
     NhanVienDetailResponse,
@@ -206,6 +205,7 @@ async def change_role(
     return result
 
 
+# UC-06 Mở khóa tài khoản — Main 3–6; A1: nhận body lý do tùy chọn (specs/use_cases/identity_access/UC-06.md)
 @router.post(
     "/{id}/mo_khoa",
     response_model=NhanVienDetailResponse,
@@ -214,14 +214,16 @@ async def change_role(
 )
 async def unlock_entry(
     id: EmployeeId,
-    params: LyDoInput,
     actor: Actor,
     service: Service,
     request_id: RequestId,
     response: Response,
+    params: LyDoTuyChonInput | None = None,
     if_match: IfMatch = None,
 ) -> NhanVienDetailResponse:
-    result, etag = await service.unlock_employee(id, actor, if_match, params.ly_do, request_id)
+    result, etag = await service.unlock_employee(
+        id, actor, if_match, params.ly_do if params else None, request_id
+    )
     response.headers["ETag"] = etag
     return result
 

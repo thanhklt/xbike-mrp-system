@@ -4,6 +4,8 @@ Nguồn: `nhan_vien/{router,service,repository,schemas,models}.py`, `auth/servic
 Module sở hữu ORM/bảng `NhanVien`, `VaiTro`; không có ORM trong auth. Public service cũng cung cấp xác thực/đổi mật khẩu cho auth, mô tả ở [auth.md](auth.md).
 FastAPI cache dependency trong mỗi request nên kiểm tra auth dùng chung session với các truy vấn nhân viên. Nếu request đồng thời sai auth và input, sơ đồ không quy định thứ tự ưu tiên lỗi. Lỗi được chuyển thành HTTP qua exception handlers chung.
 
+Theo [UC-06](../../specs/use_cases/identity_access/UC-06.md) A3/D1, `current_payload` truyền thêm `session_version=payload.get("pbdn", 0)` vào `get_auth_identity` cho mọi endpoint bên dưới. Service so với `NhanVien.phien_ban_dang_nhap`; lệch hoặc claim không phải số nguyên trả 401 `chua_xac_thuc` (`Please sign in again`). Tài khoản đang khóa vẫn trả 403. Chi tiết xác thực nằm trong [auth.md](auth.md).
+
 ## GET /api/v1/nhan_vien — Danh sách nhân viên
 
 Nguồn nghiệp vụ: [UC-03 — Xem danh sách tài khoản](../../specs/use_cases/identity_access/UC-03.md), Main 2–4, R1–R4, A1–A4; D1 ngày 15/11/2026.
@@ -21,12 +23,12 @@ sequenceDiagram
     C->>R: GET /api/v1/nhan_vien, Bearer JWT, query
     R->>A: current_payload(token)
     A->>A: Verify JWT và định dạng sub
-    A->>N: get_auth_identity(id, pwdv)
+    A->>N: get_auth_identity(id, pwdv, session_version=pbdn hoặc 0)
     N->>P: get_credentials_by_id(id)
     P->>DB: SELECT NhanVien và VaiTro
     DB-->>N: Account qua repository
-    N->>N: Kiểm tra trạng thái, role và password version
-    alt Thiếu/token lỗi/account mất/pwdv cũ
+    N->>N: Kiểm tra trạng thái, role, password version và phiên bản đăng nhập
+    alt Thiếu/token lỗi/account mất/pwdv hoặc pbdn cũ
         R-->>C: 401 chua_xac_thuc
     else Account khóa hoặc role không hợp lệ
         R-->>C: 403
@@ -79,7 +81,7 @@ sequenceDiagram
     C->>R: GET /api/v1/nhan_vien/{id}, Bearer JWT
     R->>A: current_payload(token)
     A->>A: Verify JWT và sub
-    A->>N: get_auth_identity(actor_id, pwdv)
+    A->>N: get_auth_identity(actor_id, pwdv, session_version=pbdn hoặc 0)
     N->>P: get_credentials_by_id(actor_id)
     P->>DB: SELECT NhanVien và VaiTro
     DB-->>N: Account hiện tại qua repository
@@ -152,7 +154,7 @@ sequenceDiagram
     C->>R: POST /api/v1/nhan_vien, JWT, body không có mã NV
     R->>A: current_payload(token)
     A->>A: Verify JWT và sub
-    A->>N: get_auth_identity(actor_id, pwdv)
+    A->>N: get_auth_identity(actor_id, pwdv, session_version=pbdn hoặc 0)
     N->>P: get_credentials_by_id(actor_id)
     P->>DB: SELECT NhanVien và VaiTro hiện tại
     DB-->>N: Credentials qua repository
@@ -363,7 +365,7 @@ sequenceDiagram
             R-->>C: 409 trang_thai_khong_hop_le / quan_tri_vien_cuoi_cung
         else Điều kiện hợp lệ
             N->>P: set_status(id, bi_khoa)
-            P->>DB: UPDATE trạng thái và đọc lại record
+            P->>DB: UPDATE trạng thái, phien_ban_dang_nhap = phien_ban_dang_nhap + 1 và đọc lại record
             N->>AU: append khoa, hoat_dong → bi_khoa, lý do và snapshot trước/sau
             AU->>AR: append(entry), session.add
             N->>T: __aexit__
@@ -383,7 +385,7 @@ Thứ tự khóa cố định trong transaction: dòng `VaiTro` QTV → actor �
 
 Gọi lại với ETag cũ trả 412 `du_lieu_da_thay_doi`; thiếu `If-Match` trả 428 `thieu_if_match`; ETag hiện tại nhưng đã khóa trả 409 `trang_thai_khong_hop_le`, không thêm audit. JWT đã cấp bị từ chối 403 `tai_khoan_bi_vo_hieu_hoa` ở request tiếp theo do xác thực đọc lại trạng thái tài khoản từ DB. FE kiểm tra lại phiên ngay sau tự khóa để kết thúc phiên và chuyển về đăng nhập; không cấp token mới.
 
-Audit `khoa` ghi người thực hiện, đối tượng đích, `trang_thai_truoc=hoat_dong`, `trang_thai_sau=bi_khoa`, lý do đã trim hoặc null và snapshot hồ sơ trước/sau không có mật khẩu/hash. Thời điểm `created_at` do DB đặt. Cập nhật trạng thái và audit dùng chung transaction; audit/commit lỗi rollback cả hai. Thành công trả 204 không body và ETag mới. Tài khoản vẫn có trong danh sách/lịch sử và hỗ trợ lọc trạng thái. Đóng hộp xác nhận trước khi lưu không gửi DELETE.
+Audit `khoa` ghi người thực hiện, đối tượng đích, `trang_thai_truoc=hoat_dong`, `trang_thai_sau=bi_khoa`, lý do đã trim hoặc null và snapshot hồ sơ trước/sau không có mật khẩu/hash. Thời điểm `created_at` do DB đặt. Theo UC-06 D1, khóa tăng `phien_ban_dang_nhap` đúng 1 bằng biểu thức SQL trong cùng transaction với trạng thái và audit; audit/commit lỗi rollback cả ba. Mở khóa không tăng và không khôi phục phiên cũ. Thành công trả 204 không body và ETag mới. Tài khoản vẫn có trong danh sách/lịch sử và hỗ trợ lọc trạng thái. Đóng hộp xác nhận trước khi lưu không gửi DELETE.
 
 Thay đổi hợp đồng API: body/lý do DELETE trở thành tùy chọn, bổ sung lỗi QTV cuối; caller FE đã cập nhật. Không đổi đường dẫn, header, schema/bootstrap hay dữ liệu đang chạy. Test repo giả kiểm tra thứ tự gọi và SQL được biên dịch; chưa kiểm chứng khóa đồng thời trên PostgreSQL thật.
 
@@ -460,9 +462,11 @@ sequenceDiagram
 Vai trò không đổi là no-op sau kiểm tra ETag. Hai audit khi đổi role cùng transaction. Request tiếp theo dùng JWT cũ đọc quyền mới từ DB; không đổi password/trạng thái/công việc.
 
 
-## POST /api/v1/nhan_vien/{id}/mo_khoa — Mở khóa
+## POST /api/v1/nhan_vien/{id}/mo_khoa — Mở khóa tài khoản (UC-06)
 
-Body LyDoInput bắt buộc: {"ly_do":"..."}, trim không rỗng. Bắt buộc If-Match. Chỉ chấp nhận bi_khoa và chuyển sang hoat_dong.
+Nguồn: [UC-06](../../specs/use_cases/identity_access/UC-06.md), R1–R2, Main 1–6, A1–A6; D1–D3 trong plan UC-06.
+
+Body `LyDoTuyChonInput | None` không bắt buộc: thiếu body, `{}`, `{"ly_do":null}`, chuỗi rỗng hoặc chỉ khoảng trắng đều lưu `ly_do=null`; lý do được trim, tối đa 1000 ký tự, field dư/không hợp lệ trả 422. Bắt buộc `If-Match`. Chỉ QTV được chuyển `bi_khoa` sang `hoat_dong`.
 
 ```mermaid
 sequenceDiagram
@@ -475,8 +479,13 @@ sequenceDiagram
     participant AR as audit.repository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
-    C->>R: POST /api/v1/nhan_vien/{id}/mo_khoa, JWT, body và headers
+    C->>R: POST /api/v1/nhan_vien/{id}/mo_khoa, JWT, body tùy chọn và If-Match
     R->>A: current_payload(token)
+    A->>N: get_auth_identity(actor_id, pwdv, session_version=pbdn hoặc 0)
+    N->>P: get_credentials_by_id(actor_id)
+    P->>DB: SELECT NhanVien và VaiTro
+    DB-->>N: Credentials qua repository
+    N->>N: Kiểm tra active, role, pwdv, pbdn so với DB
     A-->>R: Actor hiện tại hoặc 401/403
     R->>R: Validate path/body và reject query
     alt Auth/input lỗi
@@ -492,6 +501,11 @@ sequenceDiagram
         N->>P: lock_credentials_by_id(admin_id)
         P->>DB: SELECT admin FOR UPDATE và refresh
         N->>N: Recheck account/role/password version
+        break Actor mất hiệu lực sau khi chờ khóa
+            N->>T: __aexit__(error)
+            T->>DB: ROLLBACK
+            R-->>C: 401 / 403
+        end
         N->>P: get_for_update(id)
         P->>DB: SELECT nhân viên FOR UPDATE, refresh role
         N->>N: Check tồn tại và ETag
@@ -501,17 +515,15 @@ sequenceDiagram
             R-->>C: 404 / 428 / 412
         end
         N->>N: Check đang bi_khoa
-        alt Điều kiện nghiệp vụ lỗi hoặc admin mất hiệu lực sau chờ khóa
+        alt Đích đã hoạt động
             N->>T: __aexit__(error)
             T->>DB: ROLLBACK
-            R-->>C: 401/403 sau recheck hoặc 404 / 428 / 412 / 409 đã hoạt động
+            R-->>C: 409 trang_thai_khong_hop_le
         else Điều kiện hợp lệ
             N->>P: set_status(id, hoat_dong)
-            P->>DB: UPDATE trạng thái và đọc lại record
-            opt Có thay đổi thực tế
-                N->>AU: append sua, lý do và dữ liệu trước/sau
-                AU->>AR: append(entry), session.add
-            end
+            P->>DB: UPDATE trạng thái, giữ nguyên phiên bản và đọc lại record
+            N->>AU: append mo_khoa, bi_khoa → hoat_dong, lý do và snapshot trước/sau
+            AU->>AR: append(entry), session.add
             N->>T: __aexit__
             alt Audit/commit lỗi
                 T->>DB: ROLLBACK
@@ -525,7 +537,11 @@ sequenceDiagram
     end
 ```
 
-Audit dùng sua vì enum chưa có mo_khoa. Không cấp JWT mới, không đổi password/role. JWT cũ còn hạn và đúng password version dùng lại được sau mở khóa.
+Audit `thao_tac=mo_khoa` thuộc enum v4; ghi actor, đích, `bi_khoa → hoat_dong`, lý do trim hoặc null và snapshot hồ sơ trước/sau an toàn. Thời điểm `created_at` do DB đặt. Trạng thái và audit commit cùng transaction; lỗi append/commit rollback, không thêm lịch sử, trạng thái và phiên bản giữ nguyên. Đích đã hoạt động trả 409 `trang_thai_khong_hop_le`, ETag cũ trả 412 `du_lieu_da_thay_doi`, thiếu If-Match trả 428 `thieu_if_match`; các nhánh này không ghi audit.
+
+Không cấp JWT mới, không đổi password/role và không tăng `phien_ban_dang_nhap`. Token có từ trước khi khóa mang phiên bản cũ nên vẫn bị từ chối 401 sau mở khóa, kể cả còn hạn và đúng `pwdv`. Người dùng đăng nhập lại bằng mật khẩu hiện có sẽ nhận token với `pbdn` hiện tại và vai trò cũ. Response 200 là hồ sơ đầy đủ cho QTV, `meta.request_id` và ETag mới, không trả phiên bản đăng nhập.
+
+FE giữ hộp xác nhận “Mở khóa tài khoản”, không `danger`, cho phép lý do trống và gửi POST với `{ly_do: lý do trim hoặc null}` cùng ETag đã xem. Đóng/hủy trước khi lưu không gửi request và không đổi trạng thái. QLK/NV bị chặn cả đường dẫn quản trị lẫn lời gọi API trực tiếp (403). Hợp đồng body mở khóa trở thành tùy chọn; không đổi đường dẫn/header, không cập nhật database đang chạy hoặc bootstrap.
 
 
 ## GET /api/v1/vai_tro — Danh sách vai trò
@@ -582,12 +598,12 @@ sequenceDiagram
     C->>R: POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau, JWT, If-Match, body
     R->>A: current_payload(token)
     A->>A: Verify JWT và sub
-    A->>N: get_auth_identity(id actor, credential_version=pwdv)
+    A->>N: get_auth_identity(id actor, credential_version=pwdv, session_version=pbdn hoặc 0)
     N->>P: get_credentials_by_id(id actor)
     P->>DB: SELECT NhanVien và VaiTro
     DB-->>P: Credentials và quyền hiện tại
     P-->>N: Credentials
-    alt Thiếu/token lỗi/account mất/pwdv cũ
+    alt Thiếu/token lỗi/account mất/pwdv hoặc pbdn cũ
         R-->>C: 401 chua_xac_thuc
     else Actor bị khóa hoặc role không hợp lệ
         R-->>C: 403
