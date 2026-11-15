@@ -495,6 +495,10 @@ function AdminDashboard() {
             </table>
           </div>
         </QueryState>
+        {/* UC-43 Xem lịch sử thao tác — Main 1: lối vào lịch sử cho Quản trị viên (specs/use_cases/audit/UC-43.md) */}
+        <div className="actions actions-end">
+          <Link to="/admin/lich-su">Xem tất cả →</Link>
+        </div>
       </section>
     </div>
   );
