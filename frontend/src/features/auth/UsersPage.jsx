@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Activity,
   ArrowLeft,
+  ArrowUpDown,
   Ban,
   Calendar,
   CirclePercent,
@@ -36,6 +37,12 @@ import {
   nullable,
 } from "../../lib/format.js";
 import { useAuth } from "./AuthProvider.jsx";
+import {
+  ACCOUNT_SEARCH_LABEL,
+  ACCOUNT_SORT_OPTIONS,
+  DEFAULT_ACCOUNT_SORT,
+  accountMetaLine,
+} from "./accountList.js";
 import { AdminPagination } from "../../components/DataTable.jsx";
 import { RecordPanel } from "../../components/RecordPanel.jsx";
 import { AdminRoleBadge, AdminStatusBadge } from "../../components/Badge.jsx";
@@ -110,6 +117,7 @@ function promptAccountStateChange({ record, etag, currentUserId, confirm, notify
   });
 }
 
+// UC-03 Xem danh sách tài khoản — Main 1: mở chức năng quản trị tài khoản (specs/use_cases/identity_access/UC-03.md)
 export function UsersPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -133,11 +141,12 @@ export function UsersPage() {
   return <AccountListView id={id} roles={roles} />;
 }
 
+// UC-03 Xem danh sách tài khoản — Main 1–5; R3, A1, A2: danh sách, tiêu chí và phân trang (specs/use_cases/identity_access/UC-03.md)
 function AccountListView({ id, roles }) {
   const { user } = useAuth();
   const { confirm, notify } = useFeedback();
   const queryClient = useQueryClient();
-  const collection = useCollection(API.employees, { page: 1, page_size: 10, sort: "id" });
+  const collection = useCollection(API.employees, { page: 1, page_size: 10, sort: DEFAULT_ACCOUNT_SORT });
   const detail = useDetail(API.employees, id);
   const [searchDraft, setSearchDraft] = useState(collection.params.q || "");
   const [selectedIds, setSelectedIds] = useState([]);
@@ -161,6 +170,7 @@ function AccountListView({ id, roles }) {
     collection.params.q,
     collection.params.vai_tro_id,
     collection.params.trang_thai,
+    collection.params.sort,
   ]);
 
   function toggleAll(checked) {
@@ -218,8 +228,8 @@ function AccountListView({ id, roles }) {
             <Search size={18} aria-hidden="true" />
             <input
               type="search"
-              aria-label="Tìm tài khoản"
-              placeholder="Tìm tài khoản"
+              aria-label={ACCOUNT_SEARCH_LABEL}
+              placeholder={ACCOUNT_SEARCH_LABEL}
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
             />
@@ -252,6 +262,20 @@ function AccountListView({ id, roles }) {
               {["hoat_dong", "bi_khoa"].map((value) => (
                 <option key={value} value={value}>
                   {STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="admin-select-shell">
+            <ArrowUpDown size={18} aria-hidden="true" />
+            <select
+              aria-label="Sắp xếp"
+              value={collection.params.sort}
+              onChange={(event) => collection.filter({ sort: event.target.value })}
+            >
+              {ACCOUNT_SORT_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -320,7 +344,7 @@ function AccountListView({ id, roles }) {
                             </span>
                             <div className="admin-user-meta">
                               <strong>{displayName}</strong>
-                              <small>{row.ma_nhan_vien}</small>
+                              <small>{accountMetaLine(row)}</small>
                             </div>
                           </div>
                         </td>

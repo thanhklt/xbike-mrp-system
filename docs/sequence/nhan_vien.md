@@ -6,6 +6,8 @@ FastAPI cache dependency trong mỗi request nên kiểm tra auth dùng chung se
 
 ## GET /api/v1/nhan_vien — Danh sách nhân viên
 
+Nguồn nghiệp vụ: [UC-03 — Xem danh sách tài khoản](../../specs/use_cases/identity_access/UC-03.md), Main 2–4, R1–R4, A1–A4; D1 ngày 15/11/2026.
+
 Query: `page` mặc định 1, tối thiểu 1; `page_size` mặc định 20, từ 1 đến 100; `q`, `vai_tro_id` dương, `trang_thai=hoat_dong|bi_khoa`; `sort` mặc định `id`, cho phép `id`, `ma_nhan_vien`, `ho_ten`, `ten_dang_nhap` và tiền tố `-` cho chiều giảm dần. Query lặp hoặc không khai báo trả 422.
 
 ```mermaid
@@ -47,7 +49,7 @@ sequenceDiagram
                     DB-->>P: Nhân viên và vai trò
                 end
                 P-->>N: RecordPage các EmployeeRecord
-                N->>N: Chọn projection theo vai trò, tính total_pages
+                N->>N: QTV đủ hồ sơ#59; QLK bỏ ten_dang_nhap (R4)#59; tính total_pages
                 N-->>R: NhanVienListResponse
                 R-->>C: 200 data và meta phân trang
             end
@@ -55,11 +57,14 @@ sequenceDiagram
     end
 ```
 
-- Admin nhận hồ sơ đầy đủ. Quản lý chỉ nhận `id`, `ma_nhan_vien`, `ho_ten`, `vai_tro_id`, `ma_vai_tro`, `trang_thai` để giao việc. Nhân viên không được xem danh sách.
+- Admin nhận hồ sơ đầy đủ, có `ten_dang_nhap`. QLK nhận `id`, `ma_nhan_vien`, `ho_ten`, `vai_tro_id`, `ma_vai_tro`, `trang_thai`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`; không có `ten_dang_nhap` hoặc mật khẩu/hash (D1, R4). Nhân viên không được xem danh sách. Trang `/admin/tai-khoan` vẫn chỉ QTV vào được.
+- Response QLK bổ sung các trường hồ sơ, tương thích ngược với caller hiện tại như `ProductionPage`; tham số query, phân trang và quyền NV giữ nguyên.
 - `q` tìm không phân biệt hoa/thường theo mã/họ tên; escape `%` và `_`, không nội suy SQL. Sort thêm `id` để ổn định phân trang.
 - Filter vai trò vượt signed 32-bit cho kết quả rỗng. Trang vượt tổng trả 200 với `data=[]`; tổng 0 có `total_pages=0`. Meta gồm request_id, page, page_size, total, total_pages.
 
 ## GET /api/v1/nhan_vien/{id} — Chi tiết nhân viên
+
+Nguồn nghiệp vụ: [UC-03 — Xem danh sách tài khoản](../../specs/use_cases/identity_access/UC-03.md), R4; D1 ngày 15/11/2026.
 
 Path ID nguyên dương; không nhận query. Strong ETag được tính từ profile sau projection, không từ request_id.
 
@@ -102,7 +107,8 @@ sequenceDiagram
                 else Nhân viên đọc hồ sơ người khác
                     N-->>C: 403 khong_co_quyen
                 else Admin, quản lý hoặc chính mình
-                    N->>N: Chọn projection và tính SHA-256 ETag
+                    N->>N: QTV/chính chủ đủ hồ sơ#59; QLK đọc người khác bỏ ten_dang_nhap (R4)
+                    N->>N: Tính SHA-256 ETag từ hồ sơ sau projection
                     N-->>R: NhanVienDetailResponse và ETag
                     R-->>C: 200 data, meta.request_id, ETag
                 end
@@ -111,7 +117,7 @@ sequenceDiagram
     end
 ```
 
-Admin và chính chủ đọc hồ sơ đầy đủ; quản lý đọc người khác chỉ có projection giao việc. Thiếu account đích được kiểm tra trước phạm vi truy cập. Nullable profile được giữ là null; `he_so_luong` được serialize thành JSON string. Không response nào có password hash, `tai_khoan_id`, JWT hoặc `loai_nhan_vien`.
+Admin và chính chủ đọc hồ sơ đầy đủ, có `ten_dang_nhap`; QLK đọc người khác nhận cùng tập trường như danh sách QLK ở trên, trừ `ten_dang_nhap` và mật khẩu/hash (D1, R4). Thay đổi bổ sung trường hồ sơ cho QLK tương thích ngược với caller hiện tại; ETag được tính từ projection mới. Thiếu account đích được kiểm tra trước phạm vi truy cập. Nullable profile được giữ là null; `he_so_luong` được serialize thành JSON string. Không response nào có mật khẩu/hash, `tai_khoan_id`, JWT hoặc `loai_nhan_vien`.
 GET không ghi audit hoặc commit. Ngoài các nhánh trên, lỗi không dự kiến được handler chung trả 500 an toàn. Module có đủ 8 endpoint bên dưới. Quyết định ngày 01/11/2026 thay DELETE xóa thật bằng soft delete, bỏ POST /vo_hieu_hoa và giữ /mo_khoa.
 
 

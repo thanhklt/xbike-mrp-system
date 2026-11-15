@@ -72,6 +72,7 @@ def _identity(user: EmployeeCredentials) -> AuthIdentity:
     )
 
 
+# UC-03 Xem danh sách tài khoản — R4: QTV/chính chủ đủ hồ sơ, QLK không có tên đăng nhập (specs/use_cases/identity_access/UC-03.md)
 def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = False):
     full_profile = "quan_tri_vien" in actor["roles"] or (detail and user.id == int(actor["sub"]))
     schema = NhanVienRead if full_profile else NhanVienAssignmentRead
@@ -80,6 +81,7 @@ def _employee_response(user: EmployeeRecord, actor: dict, *, detail: bool = Fals
     return schema.model_validate(values)
 
 
+# UC-03 Xem danh sách tài khoản — R4: ETag từ hồ sơ sau projection (specs/use_cases/identity_access/UC-03.md)
 def _employee_etag(user: EmployeeRecord, actor: dict) -> str:
     profile = _employee_response(user, actor, detail=True)
     return f'"{sha256(profile.model_dump_json().encode("utf-8")).hexdigest()}"'
@@ -176,6 +178,7 @@ class NhanVienService:
                 )
             )
 
+    # UC-03 Xem danh sách tài khoản — Main 2–4; R1, A1–A3 (specs/use_cases/identity_access/UC-03.md)
     async def list_employees(
         self,
         params: NhanVienListQuery,
@@ -198,6 +201,7 @@ class NhanVienService:
             ),
         )
 
+    # UC-03 Xem danh sách tài khoản — R4: quyền đọc chi tiết (specs/use_cases/identity_access/UC-03.md)
     async def get_employee(
         self,
         employee_id: int,
@@ -216,6 +220,7 @@ class NhanVienService:
             raise ForbiddenException()
         return self._result(user, actor, request_id)
 
+    # UC-03 Xem danh sách tài khoản — R4: trả hồ sơ chi tiết và ETag (specs/use_cases/identity_access/UC-03.md)
     @staticmethod
     def _result(
         user: EmployeeRecord, actor: dict, request_id: str

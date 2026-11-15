@@ -18,6 +18,7 @@ from app.modules.nhan_vien.schemas import (
 from app.shared.records import RecordPage
 
 
+# UC-03 Xem danh sách tài khoản — Main 4, R4: ánh xạ hồ sơ và vai trò từ ORM (specs/use_cases/identity_access/UC-03.md)
 def employee_record(user: NhanVien) -> EmployeeRecord:
     values = {
         name: getattr(user, name)
@@ -31,6 +32,7 @@ class SqlAlchemyNhanVienRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-03 Xem danh sách tài khoản — Main 4; R3, A1, A2: tìm, lọc, sort, phân trang (specs/use_cases/identity_access/UC-03.md)
     async def list_employees(self, params: NhanVienListQuery) -> RecordPage[EmployeeRecord]:
         query = select(NhanVien)
         if params.q:
@@ -62,6 +64,7 @@ class SqlAlchemyNhanVienRepository:
             employees = [employee_record(user) for user in records]
         return RecordPage(employees, total)
 
+    # UC-03 Xem danh sách tài khoản — R4: lấy hồ sơ chi tiết (specs/use_cases/identity_access/UC-03.md)
     async def get_by_id(self, employee_id: int) -> EmployeeRecord | None:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             return None

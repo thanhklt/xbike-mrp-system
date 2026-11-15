@@ -96,7 +96,7 @@ cd frontend && npx eslint <file đã sửa>
 
 Đạt khi: test của UC pass 100%; toàn backend và FE không có lỗi mới so với baseline; ruff/eslint sạch trên file đã sửa.
 
-Baseline ghi nhận 15/11/2026 trên `identity_access` (sau merge `feature/audit`): backend 111 pass, 22 skip (PostgreSQL), 8 fail sẵn ở `tests/test_nhan_vien_create_code.py` (thiếu `VaiTroRead.mo_ta`); frontend 46 pass. Cập nhật baseline sau mỗi UC đã commit.
+Baseline mới nhất trên `identity_access` (sau UC-02, commit `aa3a7db`): backend 134 pass, 22 skip (PostgreSQL), 8 fail sẵn ở `tests/test_nhan_vien_create_code.py` (thiếu `VaiTroRead.mo_ta`); frontend 77 pass. Cập nhật baseline sau mỗi UC đã commit.
 
 ## Môi trường
 

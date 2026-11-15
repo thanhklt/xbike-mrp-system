@@ -2,6 +2,7 @@ export const ROLE_HOME = { quan_tri_vien: "/admin", quan_ly: "/kho", nhan_vien: 
 // UC-01 Đăng nhập — Main 6; R3 (specs/use_cases/identity_access/UC-01.md)
 export const homeFor = (role) => (Object.hasOwn(ROLE_HOME, role) ? ROLE_HOME[role] : "/403");
 export const isAllowed = (role, allowed) => allowed.includes(role);
+// UC-03 Xem danh sách tài khoản — R1, A3: chặn truy cập trang quản trị theo vai trò (specs/use_cases/identity_access/UC-03.md)
 export function canAccessPath(role, pathname) {
   const home = homeFor(role);
   return (

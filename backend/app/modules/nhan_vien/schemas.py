@@ -54,7 +54,7 @@ class NhanVienListQuery(BaseModel):
 
 
 class NhanVienAssignmentRead(BaseModel):
-    """Limited projection for managers assigning work."""
+    """Hồ sơ cho QLK: mọi trường trừ tên đăng nhập (UC-03 R4)."""
 
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
@@ -64,15 +64,15 @@ class NhanVienAssignmentRead(BaseModel):
     vai_tro_id: int | None
     ma_vai_tro: RoleCode | None
     trang_thai: EmployeeStatus
-
-
-class NhanVienRead(NhanVienAssignmentRead):
-    ten_dang_nhap: str
     ngay_sinh: date | None
     so_dien_thoai: str | None
     email: str | None
     ngay_vao_lam: date | None
     he_so_luong: Decimal | None = Field(ge=0)
+
+
+class NhanVienRead(NhanVienAssignmentRead):
+    ten_dang_nhap: str
 
 
 class ResponseMeta(BaseModel):

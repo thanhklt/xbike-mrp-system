@@ -40,6 +40,7 @@ IfMatch = Annotated[
 ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong resource ETag"}
 
 
+# UC-03 Xem danh sách tài khoản — R3, A2: kiểm tra tiêu chí và phân trang (specs/use_cases/identity_access/UC-03.md)
 def get_list_query(
     request: Request,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -78,6 +79,7 @@ def get_list_query(
         ) from exc
 
 
+# UC-03 Xem danh sách tài khoản — Main 2–4; R1, A3, A4 (specs/use_cases/identity_access/UC-03.md)
 @router.get("", response_model=NhanVienListResponse)
 async def list_entries(
     actor: Annotated[dict, Depends(get_current_user_payload)],
@@ -88,6 +90,7 @@ async def list_entries(
     return await service.list_employees(params, actor, request_id)
 
 
+# UC-03 Xem danh sách tài khoản — R4: chi tiết theo vai trò và chính chủ (specs/use_cases/identity_access/UC-03.md)
 @router.get(
     "/{id}",
     response_model=NhanVienDetailResponse,
