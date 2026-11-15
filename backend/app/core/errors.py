@@ -54,6 +54,11 @@ class DuplicateCodeException(ConflictException):
     default_message = "Tên đăng nhập hoặc mã nhân viên đã tồn tại"
 
 
+class DuplicateUsernameException(ConflictException):
+    code = "ten_dang_nhap_bi_trung"
+    default_message = "Tên đăng nhập đã tồn tại"
+
+
 class BomCycleException(ConflictException):
     code = "bom_co_chu_trinh"
     default_message = "BOM tạo chu trình trong cấu trúc"

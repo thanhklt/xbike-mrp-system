@@ -39,6 +39,7 @@ ERROR_STATUS = {
     "FORBIDDEN": 403,
     "CONFLICT": 409,
     "ma_bi_trung": 409,
+    "ten_dang_nhap_bi_trung": 409,
     "thieu_if_match": 428,
     "du_lieu_da_thay_doi": 412,
     "danh_muc_chua_san_sang": 503,

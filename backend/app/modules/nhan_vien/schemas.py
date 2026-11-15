@@ -157,16 +157,14 @@ class NhanVienPatch(BaseModel):
 
 class NhanVienCreate(NhanVienPatch):
     ten_dang_nhap: str = Field(min_length=1, max_length=255)
-    ma_nhan_vien: str = Field(pattern=r"^NV-[0-9]{6}$")
     vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
-    mat_khau: SecretStr = Field(min_length=8, max_length=1024, repr=False, exclude=True)
+    mat_khau: SecretStr = Field(min_length=6, max_length=1024, repr=False, exclude=True)
+    ly_do: str | None = Field(default=None, max_length=1000)
 
-    @field_validator("ma_nhan_vien")
+    @field_validator("ly_do")
     @classmethod
-    def valid_employee_code(cls, value: str) -> str:
-        if value == "NV-000000":
-            raise ValueError("Employee code must be nonzero")
-        return value
+    def normalize_reason(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class DoiVaiTroInput(BaseModel):

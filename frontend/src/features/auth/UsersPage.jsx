@@ -37,6 +37,7 @@ import {
   nullable,
 } from "../../lib/format.js";
 import { useAuth } from "./AuthProvider.jsx";
+import { PASSWORD_MIN_LENGTH, buildCreateAccountBody, creatableRoles } from "./accountForm.js";
 import {
   ACCOUNT_SEARCH_LABEL,
   ACCOUNT_SORT_OPTIONS,
@@ -1060,6 +1061,7 @@ function InlineEditRow({ icon, label, htmlFor, children }) {
   );
 }
 
+// UC-04 Thêm tài khoản — Main 1–4; A5: nhập thông tin hoặc hủy trước khi lưu (specs/use_cases/identity_access/UC-04.md)
 function EmployeeForm({ snapshot, roles }) {
   const navigate = useNavigate();
   const { save, busy, error } = useSave();
@@ -1071,28 +1073,20 @@ function EmployeeForm({ snapshot, roles }) {
     ngay_vao_lam: "",
     he_so_luong: "",
     ten_dang_nhap: "",
-    ma_nhan_vien: "",
     mat_khau: "",
     vai_tro_id: "",
+    ly_do: "",
   });
-  const editableRoles = roles.filter((role) => role.ma_vai_tro !== "quan_tri_vien");
+  const editableRoles = creatableRoles(roles);
   const field = (name) => ({
     value: values[name],
     onChange: (event) => setValues({ ...values, [name]: event.target.value }),
   });
 
+  // UC-04 Thêm tài khoản — Main 4–6: gửi tạo tài khoản và mở chi tiết (specs/use_cases/identity_access/UC-04.md)
   function submit(event) {
     event.preventDefault();
-    const profile = Object.fromEntries(
-      PROFILE_FIELDS.map((name) => [name, nullable(String(values[name]))]),
-    );
-    const body = {
-      ...profile,
-      ten_dang_nhap: values.ten_dang_nhap.trim(),
-      ma_nhan_vien: values.ma_nhan_vien.trim(),
-      mat_khau: values.mat_khau,
-      vai_tro_id: Number(values.vai_tro_id),
-    };
+    const body = buildCreateAccountBody(values, PROFILE_FIELDS);
     save(
       {
         path: API.employees,
@@ -1118,16 +1112,9 @@ function EmployeeForm({ snapshot, roles }) {
             {...field("ten_dang_nhap")}
           />
           <Field
-            label="Mã nhân viên"
-            placeholder="NV-000001"
-            pattern="NV-[0-9]{6}"
-            required
-            {...field("ma_nhan_vien")}
-          />
-          <Field
             label="Mật khẩu ban đầu"
             type="password"
-            minLength={8}
+            minLength={PASSWORD_MIN_LENGTH}
             maxLength={1024}
             required
             autoComplete="new-password"
@@ -1157,6 +1144,7 @@ function EmployeeForm({ snapshot, roles }) {
             {...field("he_so_luong")}
           />
         </div>
+        <Field as="textarea" rows={3} label="Lý do" maxLength={1000} {...field("ly_do")} />
         <div className="actions actions-end">
           <Link to={base}>Hủy</Link>
           <Button type="submit" disabled={busy}>

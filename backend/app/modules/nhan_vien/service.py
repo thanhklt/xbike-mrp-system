@@ -7,6 +7,7 @@ from math import ceil
 
 from app.core.errors import (
     ConflictException,
+    DuplicateUsernameException,
     ForbiddenException,
     InactiveAccountException,
     InvalidAssignee,
@@ -233,10 +234,11 @@ class NhanVienService:
             _employee_etag(user, actor),
         )
 
+    # UC-04 Thêm tài khoản — Main 4–5; A6: khóa và làm mới quyền QTV (specs/use_cases/identity_access/UC-04.md)
     async def _lock_admin(self, actor: dict) -> dict:
         _require_admin(actor)
-        # The sole admin row serializes administrative writes, including requests
-        # from different tabs. Refresh credentials after waiting for the lock.
+        # Lock this actor's row to serialize their writes and refresh credentials
+        # after waiting. Different administrators can still allocate the same code.
         current = await self.repository.lock_credentials_by_id(int(actor["sub"]))
         if current is None:
             raise UnauthorizedException(message="Employee no longer exists")
@@ -262,6 +264,7 @@ class NhanVienService:
             raise NotFoundException(message="Không tìm thấy vai trò")
         return role
 
+    # UC-04 Thêm tài khoản — Main 6; R5: ghi lịch sử cùng transaction tạo (specs/use_cases/identity_access/UC-04.md)
     async def _audit(
         self,
         actor: dict,
@@ -287,6 +290,7 @@ class NhanVienService:
             )
         )
 
+    # UC-04 Thêm tài khoản — Main 4–6; R1, R3–R7, A1–A7 (specs/use_cases/identity_access/UC-04.md)
     async def create_employee(
         self, params: NhanVienCreate, actor: dict, request_id: str
     ) -> tuple[NhanVienDetailResponse, str]:
@@ -294,22 +298,23 @@ class NhanVienService:
         password_hash = await asyncio.to_thread(
             get_password_hash, params.mat_khau.get_secret_value()
         )
-        profile = params.model_dump(exclude={"ten_dang_nhap", "ma_nhan_vien", "vai_tro_id"})
+        profile = params.model_dump(exclude={"ten_dang_nhap", "vai_tro_id", "ly_do"})
         async with self.transaction:
             actor = await self._lock_admin(actor)
-            role = await self._role(params.vai_tro_id)
-            if role.ma_vai_tro == "quan_tri_vien":
-                raise ConflictException(message="Hệ thống chỉ có một quản trị viên")
+            await self._role(params.vai_tro_id)
+            if await self.repository.find_by_username(params.ten_dang_nhap) is not None:
+                raise DuplicateUsernameException()
+            employee_code = await self.repository.next_employee_code()
             employee = await self.repository.create(
                 NewEmployee(
                     params.ten_dang_nhap,
-                    params.ma_nhan_vien,
+                    employee_code,
                     params.vai_tro_id,
                     password_hash,
                     profile,
                 )
             )
-            await self._audit(actor, employee, "tao")
+            await self._audit(actor, employee, "tao", reason=params.ly_do)
         return self._result(employee, actor, request_id)
 
     async def patch_employee(

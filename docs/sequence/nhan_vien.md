@@ -134,7 +134,9 @@ GET không ghi audit hoặc commit. Ngoài các nhánh trên, lỗi không dự 
 
 ## POST /api/v1/nhan_vien — Tạo nhân viên
 
-NhanVienCreate bắt buộc ten_dang_nhap trim 1–255 ký tự; mat_khau 8–1024 ký tự không trim; ma_nhan_vien NV-NNNNNN khác NV-000000; vai_tro_id integer dương signed 32-bit. Hồ sơ nullable là tùy chọn. he_so_luong là decimal JSON string 0–999.99, tối đa 2 số thập phân; ngày YYYY-MM-DD. Server đặt hoat_dong; field dư trả 422. Không cần If-Match.
+Nguồn nghiệp vụ: [UC-04 — Thêm tài khoản](../../specs/use_cases/identity_access/UC-04.md), Main 2–6, R1–R7, A1–A7; D1–D4 trong [plan UC-04](../plans/UC-04.md).
+
+NhanVienCreate bắt buộc `ten_dang_nhap` trim 1–255 ký tự; `mat_khau` 6–1024 ký tự không trim; `vai_tro_id` integer dương signed 32-bit. Chọn được cả `quan_tri_vien`, `quan_ly`, `nhan_vien`. Hồ sơ nullable là tùy chọn: `ho_ten`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`. `he_so_luong` là decimal JSON string 0–999.99, tối đa 2 số thập phân; ngày YYYY-MM-DD. `ly_do` tùy chọn, trim, tối đa 1000 ký tự, rỗng thành null; chỉ dùng cho lịch sử. Server tự cấp `ma_nhan_vien`, đặt `hoat_dong`; gửi kèm mã hoặc field dư trả 422. Không cần If-Match, không nhận query.
 
 ```mermaid
 sequenceDiagram
@@ -147,10 +149,17 @@ sequenceDiagram
     participant AR as audit.repository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
-    C->>R: POST /api/v1/nhan_vien, JWT, body và headers
+    C->>R: POST /api/v1/nhan_vien, JWT, body không có mã NV
     R->>A: current_payload(token)
+    A->>A: Verify JWT và sub
+    A->>N: get_auth_identity(actor_id, pwdv)
+    N->>P: get_credentials_by_id(actor_id)
+    P->>DB: SELECT NhanVien và VaiTro hiện tại
+    DB-->>N: Credentials qua repository
+    N->>N: Kiểm tra trạng thái, vai trò, password version
+    N-->>A: AuthIdentity hoặc lỗi 401/403
     A-->>R: Actor hiện tại hoặc 401/403
-    R->>R: Validate path/body và reject query
+    R->>R: Validate body bắt buộc, mật khẩu, lý do#59; reject mã/query
     alt Auth/input lỗi
         R-->>C: 401 / 403 / 422
     else Request hợp lệ
@@ -165,29 +174,48 @@ sequenceDiagram
         N->>P: lock_credentials_by_id(admin_id)
         P->>DB: SELECT admin FOR UPDATE và refresh
         N->>N: Recheck account/role/password version
-        N->>P: get_role(vai_tro_id)
-        P->>DB: SELECT VaiTro
-        N->>N: Check role tồn tại và không phải admin
-        alt Điều kiện nghiệp vụ lỗi hoặc admin mất hiệu lực sau chờ khóa
+        break Admin mất hiệu lực sau chờ khóa
             N->>T: __aexit__(error)
             T->>DB: ROLLBACK
-            R-->>C: 401/403 sau recheck hoặc 404 role / 409 admin thứ hai
-        else Điều kiện hợp lệ
+            R-->>C: 401 phiên cũ/mất account hoặc 403 khóa/hạ quyền
+        end
+        N->>P: get_role(vai_tro_id)
+        P->>DB: SELECT VaiTro
+        break Vai trò không tồn tại
+            N->>T: __aexit__(error)
+            T->>DB: ROLLBACK
+            R-->>C: 404 khong_tim_thay
+        end
+        N->>P: find_by_username(ten_dang_nhap)
+        P->>DB: SELECT theo ten_dang_nhap
+        break Tên đăng nhập đã có
+            N->>T: __aexit__(DuplicateUsernameException)
+            T->>DB: ROLLBACK
+            R-->>C: 409 ten_dang_nhap_bi_trung
+        end
+        N->>P: next_employee_code()
+        P->>DB: SELECT max(CAST(right(ma_nhan_vien, 6) AS INTEGER)) toàn NhanVien
+        P->>P: max+1#59; rỗng bắt đầu NV-000001
+        break Vượt NV-999999
+            N->>T: __aexit__(InvalidWorkflowState)
+            T->>DB: ROLLBACK
+            R-->>C: 409 trang_thai_khong_hop_le, Đã hết mã nhân viên khả dụng
+        end
+        rect rgb(245, 245, 245)
             N->>P: create(NewEmployee)
-            P->>DB: INSERT NhanVien, flush và tải role
-            break Trùng username hoặc mã nhân viên
-                N->>T: __aexit__(DuplicateCodeException)
+            P->>DB: INSERT NhanVien hoat_dong, flush, refresh và tải role
+            break Unique username/mã vi phạm khi tạo đồng thời
+                N->>T: __aexit__(DuplicateUsernameException hoặc DuplicateCodeException)
                 T->>DB: ROLLBACK
-                R-->>C: 409 ma_bi_trung
+                R-->>C: 409 ten_dang_nhap_bi_trung hoặc ma_bi_trung (thử lại)
             end
-            opt Có thay đổi thực tế
-                N->>AU: append tao
-                AU->>AR: append(entry), session.add
-            end
-            N->>T: __aexit__
+            N->>AU: append tao, actor_id, id mới, hồ sơ an toàn, ly_do
+            AU->>AR: append(entry), session.add
+            Note over AR,DB: created_at do PostgreSQL đặt mặc định khi lưu
+            N->>T: __aexit__(error nếu append lỗi)
             alt Audit/commit lỗi
                 T->>DB: ROLLBACK
-                R-->>C: 409 constraint / 500 nội bộ
+                R-->>C: 409 constraint / 500 loi_noi_bo, không tạo tài khoản/lịch sử
             else Thành công
                 T->>DB: Flush audit và COMMIT
                 N-->>R: Profile an toàn và ETag
@@ -197,7 +225,12 @@ sequenceDiagram
     end
 ```
 
-Location trỏ GET chi tiết mới; username/mã bất biến sau tạo. Không cấp JWT.
+Location trỏ GET chi tiết mới; ETag từ hồ sơ trả về, meta có `request_id`. Response QTV đủ hồ sơ và vai trò, không chứa mật khẩu/hash hoặc `ly_do`. Không cấp JWT khi tạo; tài khoản mới đăng nhập qua UC-01 và xuất hiện trong danh sách UC-03. Đóng phần nhập trước khi lưu không gửi POST.
+
+- Tài khoản và audit `tao` dùng chung transaction. Audit có người thực hiện, đối tượng mới, thời điểm do DB đặt, lý do tùy chọn; không lưu mật khẩu thô/hash.
+- Cấp mã đọc toàn bảng, kể cả tài khoản khóa, dưới khóa dòng của QTV thực hiện. Hai QTV khác nhau có thể lấy cùng mã; unique `ma_nhan_vien` chặn bản ghi sau, trả 409 `ma_bi_trung` với thông báo “Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại”. Không có retry tự động hoặc trigger cấp mã.
+- Username trùng trước cấp mã hoặc lúc INSERT đều trả 409 `ten_dang_nhap_bi_trung`, “Tên đăng nhập đã tồn tại”. Username/mã bất biến sau tạo.
+- Thay đổi hợp đồng API: client bỏ `ma_nhan_vien` (gửi trường cũ sẽ nhận 422), mật khẩu từ 6 ký tự, nhận thêm `ly_do` tùy chọn. Caller `EmployeeForm` đã được cập nhật. Không sửa schema/bootstrap hoặc database đang chạy.
 
 
 ## PATCH /api/v1/nhan_vien/{id} — Sửa hồ sơ

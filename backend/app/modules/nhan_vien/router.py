@@ -115,6 +115,7 @@ async def get_entry(
     return result
 
 
+# UC-04 Thêm tài khoản — Main 2, 4–6; A1–A4, A6, A7: tạo và trả 201 (specs/use_cases/identity_access/UC-04.md)
 @router.post(
     "",
     response_model=NhanVienDetailResponse,
