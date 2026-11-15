@@ -1,6 +1,6 @@
 """SQLAlchemy employee queries; ORM objects do not leave this adapter."""
 
-from sqlalchemy import Integer, cast, false, func, or_, select, update
+from sqlalchemy import Integer, cast, column, false, func, or_, select, table, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -192,8 +192,15 @@ class SqlAlchemyNhanVienRepository:
     async def update_profile(self, employee_id: int, changes: dict[str, object]) -> EmployeeRecord:
         return await self._update(employee_id, changes)
 
+    # UC-07 Đổi vai trò — Main 5; R5: đổi vai trò và kết thúc phiên trong cùng UPDATE (specs/use_cases/identity_access/UC-07.md)
     async def set_role(self, employee_id: int, role_id: int) -> EmployeeRecord:
-        return await self._update(employee_id, {"vai_tro_id": role_id})
+        return await self._update(
+            employee_id,
+            {
+                "vai_tro_id": role_id,
+                "phien_ban_dang_nhap": NhanVien.phien_ban_dang_nhap + 1,
+            },
+        )
 
     # UC-05 Khóa tài khoản — Main 5: chỉ cập nhật trạng thái tài khoản (specs/use_cases/identity_access/UC-05.md)
     # UC-06 Mở khóa tài khoản — A3: khóa tăng phiên bản bằng SQL, mở khóa giữ phiên bản (specs/use_cases/identity_access/UC-06.md)
@@ -204,18 +211,34 @@ class SqlAlchemyNhanVienRepository:
         return await self._update(employee_id, changes)
 
     # UC-05 Khóa tài khoản — Main 4; A2: tuần tự hóa khóa QTV bằng dòng vai trò (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 4; A3: tuần tự hóa đổi vai trò bằng khóa QTV dùng chung (specs/use_cases/identity_access/UC-07.md)
     async def lock_admin_role(self) -> None:
         await self.session.scalar(
             select(VaiTro).where(VaiTro.ma_vai_tro == "quan_tri_vien").with_for_update()
         )
 
     # UC-05 Khóa tài khoản — Main 4; AC-3: đếm QTV đang hoạt động dưới khóa vai trò (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 4; R3: đếm QTV hoạt động trước khi hạ quyền (specs/use_cases/identity_access/UC-07.md)
     async def count_active_admins(self) -> int:
         return await self.session.scalar(
             select(func.count())
             .select_from(NhanVien)
             .join(VaiTro, NhanVien.vai_tro_id == VaiTro.id)
             .where(VaiTro.ma_vai_tro == "quan_tri_vien", NhanVien.trang_thai == "hoat_dong")
+        ) or 0
+
+    # UC-07 Đổi vai trò — Main 4; R4: đếm yêu cầu được giao chưa kết thúc theo trạng thái v4 (specs/use_cases/identity_access/UC-07.md)
+    async def count_unfinished_assigned_requests(self, employee_id: int) -> int:
+        requests = table(
+            "YeuCauSanXuat", column("nhan_vien_duoc_giao_id"), column("trang_thai")
+        )
+        return await self.session.scalar(
+            select(func.count()).select_from(requests).where(
+                requests.c.nhan_vien_duoc_giao_id == employee_id,
+                requests.c.trang_thai.in_(
+                    ("nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien")
+                ),
+            )
         ) or 0
 
     async def get_role(self, role_id: int) -> VaiTroRead | None:

@@ -185,6 +185,7 @@ async def delete_entry(
     return Response(status_code=204, headers={"ETag": etag})
 
 
+# UC-07 Đổi vai trò — Main 3–6; R2: nhận lý do tùy chọn, trả hồ sơ và ETag (specs/use_cases/identity_access/UC-07.md)
 @router.put(
     "/{id}/vai_tro",
     response_model=NhanVienDetailResponse,
@@ -200,7 +201,9 @@ async def change_role(
     response: Response,
     if_match: IfMatch = None,
 ) -> NhanVienDetailResponse:
-    result, etag = await service.change_role(id, params.vai_tro_id, actor, if_match, request_id)
+    result, etag = await service.change_role(
+        id, params.vai_tro_id, actor, if_match, request_id, reason=params.ly_do
+    )
     response.headers["ETag"] = etag
     return result
 

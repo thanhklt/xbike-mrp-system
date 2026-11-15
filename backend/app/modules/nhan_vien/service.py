@@ -18,6 +18,7 @@ from app.core.errors import (
     PreconditionFailedException,
     PreconditionRequiredException,
     UnauthorizedException,
+    UnfinishedAssignmentException,
 )
 from app.core.security import get_password_hash, password_version, verify_password
 from app.core.transactions import Transaction
@@ -282,6 +283,7 @@ class NhanVienService:
 
     # UC-04 Thêm tài khoản — Main 6; R5: ghi lịch sử cùng transaction tạo (specs/use_cases/identity_access/UC-04.md)
     # UC-05 Khóa tài khoản — Main 6; R6: ghi người thực hiện, lý do và trạng thái trước/sau (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 6; R6: ghi một lịch sử với hồ sơ và lý do trước/sau (specs/use_cases/identity_access/UC-07.md)
     async def _audit(
         self,
         actor: dict,
@@ -388,6 +390,7 @@ class NhanVienService:
             )
         return self._result(employee, actor, request_id)
 
+    # UC-07 Đổi vai trò — Main 4–6; R3–R8, A2–A6, A9: kiểm tra và lưu cùng transaction (specs/use_cases/identity_access/UC-07.md)
     async def change_role(
         self,
         employee_id: int,
@@ -395,19 +398,32 @@ class NhanVienService:
         actor: dict,
         if_match: str | None,
         request_id: str,
+        reason: str | None = None,
     ) -> tuple[NhanVienDetailResponse, str]:
         _require_admin(actor)
         async with self.transaction:
+            await self.repository.lock_admin_role()
             actor = await self._lock_admin(actor)
             before = await self._target(employee_id, actor, if_match)
             role = await self._role(role_id)
-            employee = before
-            if before.vai_tro_id != role_id:
-                if "quan_tri_vien" in {before.ma_vai_tro, role.ma_vai_tro}:
-                    raise ConflictException(message="Không được thay đổi quản trị viên duy nhất")
-                employee = await self.repository.set_role(employee_id, role_id)
-                await self._audit(actor, employee, "thu_hoi_quyen", before=before)
-                await self._audit(actor, employee, "cap_quyen", before=before)
+            if before.vai_tro_id == role_id:
+                raise InvalidWorkflowState(message="Vai trò mới trùng vai trò hiện tại")
+            if (
+                before.ma_vai_tro == "quan_tri_vien"
+                and before.trang_thai == "hoat_dong"
+                and role.ma_vai_tro != "quan_tri_vien"
+                and await self.repository.count_active_admins() <= 1
+            ):
+                raise LastActiveAdminException(
+                    message="Không hạ quyền được Quản trị viên đang hoạt động cuối cùng"
+                )
+            if (
+                before.ma_vai_tro == "nhan_vien"
+                and await self.repository.count_unfinished_assigned_requests(employee_id) > 0
+            ):
+                raise UnfinishedAssignmentException()
+            employee = await self.repository.set_role(employee_id, role_id)
+            await self._audit(actor, employee, "doi_vai_tro", before=before, reason=reason)
         return self._result(employee, actor, request_id)
 
     # UC-05 Khóa tài khoản — Main 4–6; A2–A4, A9: kiểm tra QTV cuối và lưu atomic (specs/use_cases/identity_access/UC-05.md)

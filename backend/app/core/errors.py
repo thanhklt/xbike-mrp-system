@@ -79,6 +79,11 @@ class LastActiveAdminException(ConflictException):
     default_message = "Không khóa được Quản trị viên đang hoạt động cuối cùng"
 
 
+class UnfinishedAssignmentException(ConflictException):
+    code = "con_yeu_cau_chua_ket_thuc"
+    default_message = "Nhân viên còn yêu cầu sản xuất chưa kết thúc"
+
+
 class InvalidAssignee(ConflictException):
     code = "nguoi_duoc_giao_khong_hop_le"
     default_message = "Người phụ trách phải là nhân viên đang hoạt động"

@@ -390,9 +390,11 @@ Audit `khoa` ghi người thực hiện, đối tượng đích, `trang_thai_tru
 Thay đổi hợp đồng API: body/lý do DELETE trở thành tùy chọn, bổ sung lỗi QTV cuối; caller FE đã cập nhật. Không đổi đường dẫn, header, schema/bootstrap hay dữ liệu đang chạy. Test repo giả kiểm tra thứ tự gọi và SQL được biên dịch; chưa kiểm chứng khóa đồng thời trên PostgreSQL thật.
 
 
-## PUT /api/v1/nhan_vien/{id}/vai_tro — Đổi vai trò
+## PUT /api/v1/nhan_vien/{id}/vai_tro — Đổi vai trò (UC-07)
 
-DoiVaiTroInput chỉ nhận vai_tro_id integer dương signed 32-bit. Bắt buộc If-Match. Không cấp admin cho tài khoản khác hoặc hạ quyền admin hiện tại; chỉ đổi giữa vai trò không phải admin.
+Nguồn: [UC-07](../../specs/use_cases/identity_access/UC-07.md), R1–R8, Main 1–6, A1–A9; D1–D5 trong plan UC-07.
+
+Body `DoiVaiTroInput`: `vai_tro_id` integer dương signed 32-bit bắt buộc; `ly_do` tùy chọn, trim, rỗng thành null, tối đa 1000 ký tự. Field dư/không hợp lệ trả 422. Bắt buộc `If-Match`; không nhận query. Đổi được giữa cả ba vai trò, kể cả tự đổi khi còn QTV khác đang hoạt động.
 
 ```mermaid
 sequenceDiagram
@@ -405,23 +407,30 @@ sequenceDiagram
     participant AR as audit.repository
     participant T as SqlAlchemyTransaction
     participant DB as PostgreSQL
-    C->>R: PUT /api/v1/nhan_vien/{id}/vai_tro, JWT, body và headers
+    C->>R: PUT /api/v1/nhan_vien/{id}/vai_tro, JWT, If-Match, vai_tro_id và ly_do
     R->>A: current_payload(token)
     A-->>R: Actor hiện tại hoặc 401/403
     R->>R: Validate path/body và reject query
     alt Auth/input lỗi
         R-->>C: 401 / 403 / 422
     else Request hợp lệ
-        R->>N: change_role
+        R->>N: change_role(id, role_id, actor, If-Match, request_id, reason)
         N->>N: Require admin
         break Actor không là admin
             N-->>R: ForbiddenException
             R-->>C: 403 khong_co_quyen
         end
         N->>T: __aenter__
+        N->>P: lock_admin_role()
+        P->>DB: SELECT VaiTro QTV FOR UPDATE
         N->>P: lock_credentials_by_id(admin_id)
         P->>DB: SELECT admin FOR UPDATE và refresh
         N->>N: Recheck account/role/password version
+        break Actor mất hiệu lực sau chờ khóa
+            N->>T: __aexit__(error)
+            T->>DB: ROLLBACK
+            R-->>C: 401/403 sau recheck
+        end
         N->>P: get_for_update(id)
         P->>DB: SELECT nhân viên FOR UPDATE, refresh role
         N->>N: Check tồn tại và ETag
@@ -432,34 +441,56 @@ sequenceDiagram
         end
         N->>P: get_role(role_id)
         P->>DB: SELECT VaiTro
-        N->>N: Check role tồn tại và không thay đổi admin duy nhất
-        alt Điều kiện nghiệp vụ lỗi hoặc admin mất hiệu lực sau chờ khóa
+        break Vai trò không tồn tại
             N->>T: __aexit__(error)
             T->>DB: ROLLBACK
-            R-->>C: 401/403 sau recheck hoặc 404 nhân viên hoặc role / 428 / 412 / 409 một admin
-        else Điều kiện hợp lệ
-            opt Vai trò thực sự thay đổi
-                N->>P: set_role(id, role_id)
-                P->>DB: UPDATE vai trò và đọc lại record
-            end
-            opt Có thay đổi thực tế
-                N->>AU: append thu_hoi_quyen và cap_quyen nếu có thay đổi
-                AU->>AR: append(entry), session.add
-            end
-            N->>T: __aexit__
-            alt Audit/commit lỗi
+            R-->>C: 404 khong_tim_thay
+        end
+        break R7 - Vai trò mới trùng vai trò hiện tại
+            N->>T: __aexit__(InvalidWorkflowState)
+            T->>DB: ROLLBACK
+            R-->>C: 409 trang_thai_khong_hop_le
+        end
+        opt Đích là QTV hoạt động và vai trò mới khác QTV
+            N->>P: count_active_admins()
+            P->>DB: COUNT NhanVien QTV hoat_dong
+            break R3 - Không còn QTV hoạt động khác
+                N->>T: __aexit__(LastActiveAdminException)
                 T->>DB: ROLLBACK
-                R-->>C: 409 constraint / 500 nội bộ
-            else Thành công
-                T->>DB: Flush audit và COMMIT
-                N-->>R: Profile an toàn và ETag
-                R-->>C: 200 data, meta và ETag
+                R-->>C: 409 quan_tri_vien_cuoi_cung
             end
+        end
+        opt Vai trò hiện tại là nhan_vien
+            N->>P: count_unfinished_assigned_requests(id)
+            P->>DB: SQL Core COUNT YeuCauSanXuat được giao, bốn trạng thái v4
+            break R4 - Còn yêu cầu chưa kết thúc
+                N->>T: __aexit__(UnfinishedAssignmentException)
+                T->>DB: ROLLBACK
+                R-->>C: 409 con_yeu_cau_chua_ket_thuc
+            end
+        end
+        N->>P: set_role(id, role_id)
+        P->>DB: UPDATE vai_tro_id, phien_ban_dang_nhap = phien_ban_dang_nhap + 1
+        P->>DB: SELECT lại hồ sơ và vai trò
+        N->>AU: append doi_vai_tro, hồ sơ trước/sau, ly_do
+        AU->>AR: append(entry), session.add
+        N->>T: __aexit__
+        alt Audit/commit lỗi
+            T->>DB: ROLLBACK vai trò, phiên bản, audit
+            R-->>C: 409 constraint / 500 loi_noi_bo
+        else Thành công
+            T->>DB: Flush audit và COMMIT
+            N-->>R: Profile đầy đủ và ETag
+            R-->>C: 200 data, meta và ETag
         end
     end
 ```
 
-Vai trò không đổi là no-op sau kiểm tra ETag. Hai audit khi đổi role cùng transaction. Request tiếp theo dùng JWT cũ đọc quyền mới từ DB; không đổi password/trạng thái/công việc.
+Thứ tự khóa dùng chung với UC-05: dòng `VaiTro` QTV → actor → đích `FOR UPDATE`. Khóa đích chặn giao việc đồng thời vì luồng giao việc khóa nhân viên `FOR SHARE`. Đếm yêu cầu bằng SQL Core trên `"YeuCauSanXuat"`, không dùng ORM v3: `nhan_vien_duoc_giao_id=id` và `trang_thai IN ('nhap','da_gui','cho_bo_sung_linh_kien','dang_thuc_hien')`. `hoan_thanh`, `da_huy` và yêu cầu của người khác không chặn. R4 áp dụng cả NV đang khóa; R3 chỉ tính QTV `hoat_dong`.
+
+Mỗi lần đổi thành công ghi đúng một audit `doi_vai_tro`, cùng transaction với cập nhật vai trò/phiên bản: actor, đích, thời điểm do DB tạo, hồ sơ `du_lieu_truoc/sau` có `vai_tro_id`, `ma_vai_tro`, lý do tùy chọn. `trang_thai_truoc/sau=null` vì trạng thái tài khoản không đổi. Trùng vai trò trả 409, không audit hoặc tăng phiên bản; lỗi lưu rollback cả ba. Response 200 gồm hồ sơ đầy đủ và ETag mới, không trả phiên bản đăng nhập.
+
+Với đích đang hoạt động, mọi JWT cũ bị 401 ở request kế tiếp do claim `pbdn` lệch DB; đăng nhập lại nhận vai trò và phiên bản mới. Đích đang khóa tiếp tục bị 403 khi xác thực. FE tự đổi vai trò thì đăng xuất ngay với thông báo “Đã đổi vai trò. Vui lòng đăng nhập lại.”, dừng các bước lưu sau (kể cả mật khẩu). Đóng phần nhập trước khi lưu không gửi request. Không đổi mật khẩu, trạng thái tài khoản hoặc công việc đang giao.
 
 
 ## POST /api/v1/nhan_vien/{id}/mo_khoa — Mở khóa tài khoản (UC-06)

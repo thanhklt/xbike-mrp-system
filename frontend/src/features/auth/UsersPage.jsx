@@ -39,6 +39,7 @@ import {
 import { useAuth } from "./AuthProvider.jsx";
 import { PASSWORD_MIN_LENGTH, buildCreateAccountBody, creatableRoles } from "./accountForm.js";
 import { canChangeAccountState, lockRequestBody, stateConfirmOptions } from "./accountState.js";
+import { endsOwnSession, roleChangeBody, roleOptions } from "./accountRole.js";
 import {
   ACCOUNT_SEARCH_LABEL,
   ACCOUNT_SORT_OPTIONS,
@@ -453,12 +454,12 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }
 
   const activeBaselineRecord = editBaselineRef.current?.data || record;
-  const lockedAdmin = activeBaselineRecord?.ma_vai_tro === "quan_tri_vien";
   const canChangeState = canChangeAccountState(activeBaselineRecord);
   const isLocked = activeBaselineRecord?.trang_thai === "bi_khoa";
 
   const [values, setValues] = useState(() => extractProfileDraft(activeBaselineRecord));
   const [roleId, setRoleId] = useState(() => String(activeBaselineRecord?.vai_tro_id ?? ""));
+  const [roleReason, setRoleReason] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -472,6 +473,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setRoleReason("");
       setSaveError(null);
       return;
     }
@@ -481,11 +483,13 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setRoleReason("");
       setSaveError(null);
     }
   }, [isEditing, activeBaselineRecord, id]);
 
   function handleStartEdit() {
+    setRoleReason("");
     setNewPassword("");
     setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
@@ -499,6 +503,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }
 
   function handleCancelEdit() {
+    setRoleReason("");
     setNewPassword("");
     setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
@@ -548,7 +553,6 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     }
     const parsedRoleId = Number(roleId);
     const roleDirty =
-      !lockedAdmin &&
       Boolean(roleId) &&
       !Number.isNaN(parsedRoleId) &&
       parsedRoleId !== Number(baseRecord.vai_tro_id);
@@ -566,6 +570,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       baselineRecord: baseRecord,
       values: { ...values },
       targetRoleId: parsedRoleId,
+      roleReason,
       needProfileWrite: profileDirty,
       needRoleWrite: roleDirty,
       needPasswordWrite: passwordDirty,
@@ -637,6 +642,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             submission.baselineRecord = workingRecord;
           }
 
+          // UC-07 Đổi vai trò — Main 3, 5; R2, A5: gửi lý do và dừng lưu khi tự đổi vai trò (specs/use_cases/identity_access/UC-07.md)
           if (submission.needRoleWrite) {
             failedStep = "cập nhật vai trò";
             if (!currentEtag) {
@@ -648,9 +654,13 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             const roleRes = await writeResource({
               path: `${API.employees}/${submission.id}/vai_tro`,
               method: "put",
-              body: { vai_tro_id: submission.targetRoleId },
+              body: roleChangeBody(submission.targetRoleId, submission.roleReason),
               etag: currentEtag,
             });
+            if (endsOwnSession(submission.id, user.id)) {
+              logout("Đã đổi vai trò. Vui lòng đăng nhập lại.");
+              return;
+            }
             const matchedRole = (roles.data || []).find(
               (item) => Number(item.id) === submission.targetRoleId,
             );
@@ -752,9 +762,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     });
   }
 
-  const roleChoices = (roles.data || []).filter(
-    (role) => role.ma_vai_tro !== "quan_tri_vien" || lockedAdmin,
-  );
+  const roleChoices = roleOptions(roles.data || [], activeBaselineRecord?.vai_tro_id);
 
   return (
     <div className="admin-screen">
@@ -927,21 +935,34 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
                         className="admin-inline-select"
                         value={roleId}
                         onChange={(event) => setRoleId(event.target.value)}
-                        disabled={lockedAdmin || busy || roles.isLoading}
+                        disabled={busy || roles.isLoading}
                       >
                         {roleChoices.length ? (
                           roleChoices.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {ROLE_LABELS[role.ma_vai_tro] || role.ten_vai_tro}
+                            <option key={role.id} value={role.id} disabled={role.disabled}>
+                              {role.label}
                             </option>
                           ))
                         ) : (
-                          <option value={activeBaselineRecord.vai_tro_id ?? ""}>
-                            {ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"}
+                          <option value={activeBaselineRecord.vai_tro_id ?? ""} disabled>
+                            {ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"} (hiện tại)
                           </option>
                         )}
                       </select>
                     </InlineEditRow>
+                    {Number(roleId) !== Number(activeBaselineRecord.vai_tro_id) && (
+                      <InlineEditRow icon={Info} label="Lý do đổi vai trò" htmlFor="inline-ly-do-vai-tro">
+                        <textarea
+                          id="inline-ly-do-vai-tro"
+                          className="admin-inline-input"
+                          rows={2}
+                          maxLength={1000}
+                          value={roleReason}
+                          onChange={(event) => setRoleReason(event.target.value)}
+                          disabled={busy}
+                        />
+                      </InlineEditRow>
+                    )}
                     <InlineEditRow
                       icon={Calendar}
                       label="Ngày vào làm"

@@ -170,9 +170,15 @@ class NhanVienCreate(NhanVienPatch):
 
 
 class DoiVaiTroInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     vai_tro_id: int = Field(strict=True, gt=0, le=MAX_EMPLOYEE_ID)
+    ly_do: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("ly_do")
+    @classmethod
+    def blank_reason_to_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class DatLaiMatKhauInput(BaseModel):
