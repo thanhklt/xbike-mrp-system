@@ -44,6 +44,7 @@ __all__ = ["NhanVienService", "AuthIdentity", "NhanVienRead", "ResponseMeta"]
 
 
 # UC-01 Đăng nhập — Main 4; R2, A3 (specs/use_cases/identity_access/UC-01.md)
+# UC-02 Đăng xuất — A2: từ chối tài khoản khóa hoặc vai trò không hợp lệ (specs/use_cases/identity_access/UC-02.md)
 def _require_active(user: EmployeeCredentials) -> None:
     if user.trang_thai != "hoat_dong":
         raise InactiveAccountException()
@@ -51,6 +52,7 @@ def _require_active(user: EmployeeCredentials) -> None:
         raise ForbiddenException()
 
 
+# UC-02 Đăng xuất — A2: từ chối token có phiên bản mật khẩu cũ (specs/use_cases/identity_access/UC-02.md)
 def _require_current_password(user: EmployeeCredentials, version: str) -> None:
     if (
         not isinstance(version, str)
@@ -61,6 +63,7 @@ def _require_current_password(user: EmployeeCredentials, version: str) -> None:
 
 
 # UC-01 Đăng nhập — Main 5: hồ sơ và vai trò hiện tại (specs/use_cases/identity_access/UC-01.md)
+# UC-02 Đăng xuất — A2: dùng hồ sơ và vai trò hiện tại khi xác minh phiên (specs/use_cases/identity_access/UC-02.md)
 def _identity(user: EmployeeCredentials) -> AuthIdentity:
     return AuthIdentity(
         profile=NhanVienRead.model_validate(user),
@@ -139,6 +142,7 @@ class NhanVienService:
             # The shared transaction maps integrity errors to 409; login audit failures are 500.
             raise RuntimeError("Không ghi được lịch sử đăng nhập") from error
 
+    # UC-02 Đăng xuất — A2: kiểm tra tài khoản khóa và phiên bản mật khẩu (specs/use_cases/identity_access/UC-02.md)
     async def get_auth_identity(self, employee_id: int, *, credential_version: str) -> AuthIdentity:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             raise UnauthorizedException(message="Invalid token subject")

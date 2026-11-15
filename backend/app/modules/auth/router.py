@@ -21,6 +21,7 @@ from app.modules.nhan_vien.service import ResponseMeta
 
 
 # UC-01 Đăng nhập — Main 2–6: header chống cache (specs/use_cases/identity_access/UC-01.md)
+# UC-02 Đăng xuất — A1, A2: không cache kết quả xác minh phiên (specs/use_cases/identity_access/UC-02.md)
 def auth_response_headers(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -54,6 +55,7 @@ async def login_for_access_token(
     return await service.authenticate(form_data.username, form_data.password)
 
 
+# UC-02 Đăng xuất — A1, A2: GET /auth/me xác minh phiên hiện tại (specs/use_cases/identity_access/UC-02.md)
 @router.get(
     "/me",
     response_model=MeResponse,

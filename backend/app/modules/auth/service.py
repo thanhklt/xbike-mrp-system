@@ -37,6 +37,7 @@ class AuthService:
         result = _issue_token(identity)
         return TokenResponse(**result.model_dump(exclude={"nhan_vien"}))
 
+    # UC-02 Đăng xuất — R1, A1, A2: kiểm tra token và phiên hiện tại (specs/use_cases/identity_access/UC-02.md)
     async def current_payload(self, token: str) -> dict:
         payload = decode_access_token(token)
         subject = payload.get("sub", "")
@@ -53,6 +54,7 @@ class AuthService:
         payload["roles"] = identity.roles
         return payload
 
+    # UC-02 Đăng xuất — A2: kiểm tra lại tài khoản trước khi trả hồ sơ (specs/use_cases/identity_access/UC-02.md)
     async def get_current_user(self, payload: dict) -> NhanVienRead:
         identity = await self.employees.get_auth_identity(
             int(payload["sub"]), credential_version=payload.get("pwdv")

@@ -174,6 +174,14 @@ sequenceDiagram
     end
 ```
 
+## Đăng xuất (UC-02)
+
+Theo [UC-02 — Đăng xuất](../../specs/use_cases/identity_access/UC-02.md), D1a chỉ kết thúc phiên phía client, không có endpoint đăng xuất. Sau khi người dùng xác nhận, client xóa token khỏi `localStorage`, hủy truy vấn, xóa cache và chuyển về `/dang-nhap`; đóng hộp hỏi giữ nguyên phiên và trang hiện tại (A3). Khi mở lại trang cần đăng nhập, `Protected` chuyển về trang đăng nhập nếu không còn token, kể cả khi còn hồ sơ cũ trong bộ nhớ (R1, A1).
+
+API cần đăng nhập vẫn kiểm tra token và tài khoản như `GET /api/v1/auth/me` ở trên: thiếu/hỏng/hết hạn token hoặc phiên bản mật khẩu cũ trả 401 `chua_xac_thuc` với `WWW-Authenticate: Bearer`; tài khoản khóa trả 403 `tai_khoan_bi_vo_hieu_hoa`. Client nhận 401 hoặc mã tài khoản khóa từ request có Bearer token sẽ kết thúc phiên; thao tác đăng xuất vẫn xóa phiên phía client khi token đã hết hiệu lực (A2). Không ghi lịch sử đăng xuất. Cơ chế `phien_ban_dang_nhap` thuộc UC-07, chưa triển khai trong UC-02.
+
+Giới hạn D1a: đăng xuất không thu hồi JWT trên server; token còn hạn đã được sao chép vẫn dùng được đến khi hết hạn (TTL hiện tại 60 phút), trừ khi bị từ chối bởi kiểm tra tài khoản hoặc phiên bản mật khẩu hiện có.
+
 ## POST /api/v1/auth/doi_mat_khau
 
 JSON gồm `mat_khau_hien_tai` dài 1–1024 và `mat_khau_moi` dài 8–1024 ký tự, giữ nguyên Unicode/khoảng trắng. Không nhận field dư/query; không cần If-Match. Payload xác thực được kiểm tra như `/me` trước khi gọi action.

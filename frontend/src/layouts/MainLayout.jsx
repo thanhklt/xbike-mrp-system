@@ -27,6 +27,7 @@ function adminBreadcrumbs(pathname) {
   return [{ label: "Tổng quan" }];
 }
 
+// UC-02 Đăng xuất — Main 1: cung cấp thao tác đăng xuất trong menu (specs/use_cases/identity_access/UC-02.md)
 export function MainLayout() {
   const { user, logout } = useAuth();
   const { confirm } = useFeedback();
@@ -49,12 +50,14 @@ export function MainLayout() {
     };
   }, [isAdmin]);
 
+  // UC-02 Đăng xuất — Main 1–3, A3: hỏi xác nhận, chỉ đăng xuất khi đồng ý (specs/use_cases/identity_access/UC-02.md)
   function signOut() {
     confirm({
       title: "Đăng xuất",
       description: "Bạn có muốn kết thúc phiên làm việc?",
       hideImpact: true,
       variant: "logout",
+      // UC-02 Đăng xuất — Main 2–3: xóa phiên và chuyển về đăng nhập (specs/use_cases/identity_access/UC-02.md)
       onConfirm: () => {
         logout();
         navigate("/dang-nhap", { replace: true });

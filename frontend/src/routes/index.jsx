@@ -1,6 +1,7 @@
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
 import { canAccessPath, homeFor } from "../features/auth/permissions.js";
+import { sessionGate } from "../features/auth/session.js";
 import { LoginPage } from "../features/auth/LoginPage.jsx";
 import { UsersPage } from "../features/auth/UsersPage.jsx";
 import { RolesPage } from "../features/auth/RolesPage.jsx";
@@ -25,16 +26,18 @@ import { Card } from "../components/Card.jsx";
 import { Button } from "../components/Button.jsx";
 import { ErrorNotice } from "../components/QueryState.jsx";
 
+// UC-02 Đăng xuất — R1, A1, A2: chặn truy cập lại khi chưa đăng nhập (specs/use_cases/identity_access/UC-02.md)
 function Protected() {
   const { token, user, session, logout } = useAuth();
-  if (!token) return <Navigate to="/dang-nhap" replace />;
-  if (!user && session.isPending)
+  const gate = sessionGate({ token, user, isPending: session.isPending, isError: session.isError });
+  if (gate === "login") return <Navigate to="/dang-nhap" replace />;
+  if (gate === "checking")
     return (
       <div className="status-page" role="status">
         Đang kiểm tra phiên đăng nhập…
       </div>
     );
-  if (session.isError)
+  if (gate === "error")
     return (
       <div className="status-page">
         <Card title="Chưa xác minh được phiên đăng nhập">
@@ -50,7 +53,7 @@ function Protected() {
         </Card>
       </div>
     );
-  return user ? <Outlet /> : <Navigate to="/dang-nhap" replace />;
+  return <Outlet />;
 }
 function RoleGate() {
   const { user } = useAuth();
@@ -82,6 +85,7 @@ function StatusPage({ code }) {
     </div>
   );
 }
+// UC-02 Đăng xuất — R1, A1: áp dụng Protected cho các trang cần đăng nhập (specs/use_cases/identity_access/UC-02.md)
 export function AppRoutes() {
   return (
     <>
