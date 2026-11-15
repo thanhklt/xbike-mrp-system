@@ -76,4 +76,96 @@ File đã sửa: `infra/postgres/{init,seed}.sql`, `backend/app/modules/nhan_vie
 | AC-1 – AC-5 UC-04 | `test_uc04_them_tai_khoan.py` | Đạt |
 | Trigger: mã = `NV-` + id, cấm sửa mã/id, `id = 1000000` báo hết dải | `test_nhan_vien_code_trigger_postgres.py` | **Skip** — cần `NHAN_VIEN_CODE_TEST_DATABASE_URL` trỏ tới DB `*_test` cục bộ |
 
-Giới hạn: trigger chưa chạy trên PostgreSQL thật. `init.sql`/`seed.sql` chỉ áp dụng cho DB mới/trống; volume đang chạy không tự cập nhật (AGENTS.md §6).
+Giới hạn ở lần kiểm chứng trên: trigger chưa chạy trên PostgreSQL thật; đã được
+kiểm chứng bổ sung bên dưới. `init.sql`/`seed.sql` chỉ áp dụng cho DB mới/trống;
+volume đang chạy không tự cập nhật (AGENTS.md §6).
+
+## Kiểm chứng bổ sung UC-04 trên PostgreSQL thật — 15/11/2026
+
+### Khảo sát và phạm vi
+
+Checkout `identity_access`, HEAD `7fd30f3`, sạch trước tác vụ. Trigger, FetchedValue,
+mapping P0001, seed và việc bỏ next_employee_code đã có trong commit này, đúng quyết
+định #17 và yêu cầu dev; không viết lại hoặc thay nghiệp vụ đã chạy đúng.
+Baseline trước bổ sung: 42 test service/API hiện có pass; 4 test trigger hiện có
+cũng đã chạy thật và pass trên PostgreSQL riêng.
+
+Phần bổ sung theo yêu cầu dev làm UC-04 trước rồi test:
+
+| Task | File / kết quả | UC / AC |
+|---|---|---|
+| T1 | `test_nhan_vien_code_trigger_postgres.py`: tách fixture DB đã bootstrap nhưng còn trống để kiểm seed; không dùng DB ứng dụng | UC-04 R6 |
+| T2 | Thêm test API với auth/JWT, service, repository, ORM, audit và transaction thật; chỉ override get_db sang UUID DB | AC-1/2/5/6 |
+| T3 | Hai QTV/hai backend PID, barrier sau precheck: tên khác cả hai 201/mã khác; cùng tên chỉ một 201, bên kia 409 đúng lỗi | AC-3/7 |
+| T4 | Identity 999999/1000000 qua HTTP; failure injection sau append và sau flush trước commit, rollback cả account/audit và không reuse mã đã tiêu thụ | AC-5/8, A7 |
+| T5 | Kiểm seed trên UUID DB mới/trống: mã id 1–4 đúng, INSERT tiếp theo nhận NV-000005; chạy toàn backend, Ruff | R6, AC-6 |
+| T6 | Spec UC-04 bổ sung AC-6–AC-9 và truy vết; sequence UC-04 render PNG; sửa comment cũ còn nói hai QTV có thể trùng mã | AC-6–AC-9 |
+
+Không đổi logic runtime, API hoặc DDL đã có. File runtime duy nhất sửa trong lượt
+này là comment `_lock_admin` tại `nhan_vien/service.py`, bỏ mô tả max+1 đã lỗi thời.
+Không đổi UC-01/02/03/05–08, audit/dashboard, frontend, dependency, config hay migration.
+
+### Môi trường và lệnh thực chạy
+
+- Container test riêng `xbike-uc04-test-20261115`, PostgreSQL **16-alpine**, user
+  `uc04_test`, cổng **127.0.0.1:55467**, data tmpfs, không mount volume ứng dụng.
+- `NHAN_VIEN_CODE_TEST_DATABASE_URL` trỏ DB khởi điểm `xbike_uc04_test`. Fixture
+  chỉ chấp nhận user uc04_test/local/*_test, tạo DB `uc04_<uuid>_test`, kiểm trống,
+  bootstrap bằng init.sql thật; đóng engine/connection rồi drop đúng UUID DB đã tạo.
+- Test seed chỉ chạy trên UUID DB trống vừa bootstrap; không seed DB ứng dụng.
+- ASGI app test riêng không lifespan/cache/traffic recorder; get_db dùng session
+  test, cùng session cho account và audit. Không mock auth/service/repository của
+  luồng thành công. Barrier/failure injection chỉ phục vụ cạnh tranh/rollback.
+
+```powershell
+# Tại backend, cấu hình NHAN_VIEN_CODE_TEST_DATABASE_URL cho server test riêng trước.
+..\.venv\Scripts\python.exe -m pytest tests/test_nhan_vien_code_trigger_postgres.py -q -p no:cacheprovider --tb=short
+..\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --tb=short --junitxml=../.venv/uc04-20261115-result.xml
+..\.venv\Scripts\python.exe -m ruff check app tests
+..\.venv\Scripts\ruff.exe format --check app/modules/nhan_vien/service.py tests/test_nhan_vien_code_trigger_postgres.py
+```
+
+| Kiểm tra thực tế | Kết quả |
+|---|---|
+| PostgreSQL UC-04 | **14 pass, 0 skip**, 3.89s; gồm 4 case có sẵn + 10 case bổ sung |
+| Nhóm UC-04 trong lần chạy toàn suite | **56 pass**: create_code 11, them_tai_khoan 31, PostgreSQL 14 |
+| Toàn backend | **342 pass, 22 skip, 0 fail**, 13.41s |
+| 22 skip | Chỉ `test_audit_postgres.py`, thiếu AUDIT_TEST_DATABASE_URL; chưa nghiệm thu PostgreSQL UC-43 trong lượt UC-04 |
+| Ruff check app tests | Pass |
+| Ruff format --check hai file Python thay đổi | Pass |
+| Sequence UC-04 | Mermaid render thành PNG, kiểm hình; [ảnh](../sequence/assets/nhan_vien/uc04-tao-tai-khoan.png) |
+| Kiến trúc | Đối chiếu layer/import và structure map; chưa có architecture declaration nên boundary checker không kết luận tự động; không refactor các cảnh báo code có sẵn |
+| Kiểm tra cuối | git diff --check pass; 23 liên kết file hợp lệ, UTF-8/PNG hợp lệ; AST service không đổi (chỉ sửa comment) |
+| Cleanup | Không còn UUID DB uc04 sau fixture; xác minh ID/nhãn/tmpfs/cổng rồi dừng container test 5d863a262560. Container ứng dụng 484c7efeb50c vẫn chạy cổng 5432 |
+
+### Truy vết test PostgreSQL
+
+Owner HTTP/service: `POST /api/v1/nhan_vien → NhanVienService.create_employee`.
+Spec: [UC-04](../../specs/use_cases/identity_access/UC-04.md).
+File test: [test_nhan_vien_code_trigger_postgres.py](../../backend/tests/test_nhan_vien_code_trigger_postgres.py).
+
+| AC / quy tắc | Test thực tế | Kết quả |
+|---|---|---|
+| AC-1/2/5/6 | `test_api_returns_database_code_and_account_can_login` × 3 vai trò | Đạt backend: 201, Location/ETag, mã DB/audit khớp, đăng nhập được, không lộ mật khẩu |
+| AC-6 | `test_insert_without_code_uses_identity`, `test_trigger_overrides_supplied_code` | Đạt |
+| AC-7/AC-3 | `test_two_administrators_create_concurrently` × tên khác/cùng tên | Đạt với hai PostgreSQL connection thực, không dựa vào sleep |
+| AC-8 | `test_insert_rejects_exhausted_code_range`, `test_api_identity_exhaustion_rolls_back` | Đạt: 999999 hợp lệ, mặc định identity 1000000 -> P0001 -> 409, không ghi account/audit mới |
+| AC-5/8, A7 | `test_create_and_audit_roll_back_together` × audit/commit | Đạt; rollback thật, retry id 3/NV-000003 sau khi id 2 đã tiêu thụ |
+| AC-9 | `test_update_cannot_change_code_or_identity` × id/mã | Đạt; hồ sơ vẫn sửa được |
+| R6 / bootstrap | `test_fresh_bootstrap_seed_preserves_employee_codes` | Đạt seed trên DB trống, sequence tiếp tục từ 5 |
+
+AC-4 và các nhánh validation/phân quyền còn lại được kiểm bằng bộ service/API đã
+có trong lần chạy toàn suite; không xóa, skip hoặc làm yếu các assertion cũ.
+
+### Giới hạn và vận hành
+
+- Không sửa DB ứng dụng, không migration, không reset/xóa volume hoặc seed lại.
+  DB đã tồn tại vẫn cần dev chọn phương án cập nhật riêng trước khi dùng trigger;
+  không hiểu việc kiểm chứng bootstrap test là đã nâng DB đang chạy.
+- Không Playwright/giao diện hoặc frontend/dashboard audit trong bước UC-04.
+- Commit failure được kiểm bằng injection sau flush, không giả định đã kiểm mất
+  điện/mất kết nối PostgreSQL thật. Các UC khác chỉ chạy regression, không đổi nghiệp vụ.
+- Chỉ thêm test/tài liệu và sửa comment; không commit/push.
+- Rollback lượt bổ sung này chỉ cần dev hoàn tác đúng test/tài liệu/comment nếu
+  muốn; không có migration down hoặc thay đổi dữ liệu cần hoàn tác. Không tự gỡ
+  trigger ở database đã có tài khoản hoặc reset identity để lấp khoảng trống.

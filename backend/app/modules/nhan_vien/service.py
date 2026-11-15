@@ -224,7 +224,7 @@ class NhanVienService:
     async def _lock_admin(self, actor: dict) -> dict:
         _require_admin(actor)
         # Lock this actor's row to serialize their writes and refresh credentials
-        # after waiting. Different administrators can still allocate the same code.
+        # after waiting. Employee codes come from the database identity trigger.
         current = await self.repository.lock_credentials_by_id(int(actor["sub"]))
         if current is None:
             raise UnauthorizedException(message="Employee no longer exists")

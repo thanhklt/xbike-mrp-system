@@ -136,20 +136,23 @@ GET không ghi audit hoặc commit. Ngoài các nhánh trên, lỗi không dự 
 
 ## POST /api/v1/nhan_vien — Tạo nhân viên
 
+Ảnh: [UC-04 — Tạo tài khoản, mã từ trigger](assets/nhan_vien/uc04-tao-tai-khoan.png).
+
 Nguồn nghiệp vụ: [UC-04 — Thêm tài khoản](../../specs/use_cases/identity_access/UC-04.md), Main 2–6, R1–R7, A1–A7; [plan UC-04](../plans/UC-04.md) và [plan cấp mã bằng trigger](../plans/UC-04-ma-nv-trigger.md) thay D1, nhánh trùng mã của D2 bằng data model #17.
 
 NhanVienCreate bắt buộc `ten_dang_nhap` trim 1–255 ký tự; `mat_khau` 6–1024 ký tự không trim; `vai_tro_id` integer dương signed 32-bit. Chọn được cả `quan_tri_vien`, `quan_ly`, `nhan_vien`. Hồ sơ nullable là tùy chọn: `ho_ten`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`. `he_so_luong` là decimal JSON string 0–999.99, tối đa 2 số thập phân; ngày YYYY-MM-DD. `ly_do` tùy chọn, trim, tối đa 1000 ký tự, rỗng thành null; chỉ dùng cho lịch sử. Server tự cấp `ma_nhan_vien`, đặt `hoat_dong`; gửi kèm mã hoặc field dư trả 422. Không cần If-Match, không nhận query.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true}}}%%
 sequenceDiagram
     actor C as Client
-    participant R as nhan_vien.router và dependencies
-    participant A as auth.service
+    participant R as nhan_vien.router<br/>dependencies
+    participant A as AuthService
     participant N as NhanVienService
-    participant P as nhan_vien.repository
-    participant AU as audit.service
-    participant AR as audit.repository
-    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemy<br/>NhanVienRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemy<br/>AuditRepository
+    participant T as SqlAlchemy<br/>Transaction
     participant DB as PostgreSQL
     C->>R: POST /api/v1/nhan_vien, JWT, body không có mã NV
     R->>A: current_payload(token)
@@ -237,6 +240,10 @@ Location trỏ GET chi tiết mới; ETag từ hồ sơ trả về, meta có `re
 - Trigger `cap_ma_nhan_vien()` cấp mã từ `id` identity (`NV-` + 6 chữ số). Hai QTV tạo đồng thời nhận id khác nhau nên không tranh cùng mã. `id > 999999` ném P0001 chứa `NV-NNNNNN`; repository chuyển thành 409 `trang_thai_khong_hop_le`, “Đã hết mã nhân viên khả dụng”; rollback, không ghi lịch sử. Trigger chặn UPDATE đổi `id` hoặc mã. Sequence có thể có khoảng trống sau rollback.
 - Username trùng trước cấp mã hoặc lúc INSERT đều trả 409 `ten_dang_nhap_bi_trung`, “Tên đăng nhập đã tồn tại”. Username/mã bất biến sau tạo.
 - Hợp đồng API UC-04 giữ nguyên: client không gửi `ma_nhan_vien` (gửi sẽ nhận 422), mật khẩu từ 6 ký tự, `ly_do` tùy chọn. `init.sql`/`seed.sql` chỉ cập nhật bootstrap cho DB mới/trống; database đã khởi tạo không tự nhận trigger và chưa được thay đổi trong tác vụ này.
+
+Kiểm chứng UC-04 trên PostgreSQL 16 riêng: trigger, ORM/API, đăng nhập theo ba vai trò,
+hai QTV/hai connection tạo đồng thời, hết dải identity và rollback audit/commit.
+Chi tiết test/AC và kết quả ở [plan UC-04 bổ sung](../plans/UC-04-ma-nv-trigger.md).
 
 
 ## PATCH /api/v1/nhan_vien/{id} — Sửa hồ sơ
