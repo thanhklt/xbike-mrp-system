@@ -50,7 +50,7 @@ AuditPage against **trang danh sách có popup chi tiết** (route `/:id?` + `Co
 - [ ] hàng lọc — qua `Collection filters=[…]`, không form riêng; ngày bằng `dateFilters` dùng chung (`tu_ngay`, `den_ngay`, khớp đúng tên query backend) — the shared piece, 7 trang dùng `dateFilters`
 - [ ] filter chọn — `as: "select"`, option đầu `{ value: "", label: "Tất cả" }` như `statusFilter` — the shared piece
 - [ ] filter ID — `type: "number", min: 1, step: 1` như "ID phiếu nhập" của TicketsPage — level 3 (tham chiếu)
-- [ ] ô tìm kiếm — giữ `search` mặc định của `Collection` (backend nhận `search`)
+- [ ] ô tìm kiếm — tắt (`search={false}`): backend chỉ tìm mã thô trong `loai_doi_tuong`/`thao_tac`/`ly_do`, không khớp chữ gợi ý "Tìm mã hoặc tên…"; bộ lọc chuyên biệt thay thế (dev chốt 16/11/2026 khi review PR 13)
 - [ ] bảng — `DataTable` qua `Collection`; thời gian bằng `dateTime`; đối tượng/thao tác hiện nhãn qua helper của `auditFormat.js`, không mã thô — the shared piece
 - [ ] mở chi tiết — cột link cuối, chữ **"Mở →"** trỏ `${base}/${row.id}` (5 of 10 trang, đa số); nhãn cột đổi thành **"Chi tiết"** thay vì "Thao tác" (9 of 9 dùng "Thao tác") vì ở màn này "Thao tác" là cột nghiệp vụ — lệch có chủ đích, báo ở đây
 - [ ] popup — `RecordPanel id query base title="Chi tiết lịch sử thao tác"` + `useDetail(API.audit, id)`; nút Đóng/Tải lại chi tiết có sẵn — the shared piece, 10 of 10

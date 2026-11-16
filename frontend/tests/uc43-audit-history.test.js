@@ -234,6 +234,11 @@ test("all six filters use backend names and dates match the shared UI definition
   assert.match(page, /filters=\{auditFilters\(employeeRows\)\}/);
 });
 
+// UC-43 AC-10: Không có ô tìm kiếm tự do — backend chỉ tìm mã thô, dùng bộ lọc thay thế
+test("audit list hides the free-text search box", () => {
+  assert.match(page, /<Collection[\s\S]*?search=\{false\}[\s\S]*?\/>/);
+});
+
 // UC-43 AC-10: Lọc kết hợp người, đối tượng, thao tác và ngày
 test("combined filters preserve pagination and search while removing blank fields", () => {
   assert.deepEqual(

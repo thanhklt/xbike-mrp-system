@@ -32,8 +32,10 @@ export function AuditPage() {
         title="Lịch sử thao tác"
         subtitle="Tra cứu người thực hiện, thời điểm và dữ liệu trước/sau của các thao tác đã lưu."
       />
+      {/* Tắt ô tìm kiếm: backend chỉ tìm mã thô trong loại đối tượng/thao tác/lý do, đã có bộ lọc chuyên biệt. */}
       <Collection
         collection={collection}
+        search={false}
         filters={auditFilters(employeeRows)}
         columns={[
           { key: "created_at", label: "Thời gian", render: (row) => dateTime(row.created_at) },
