@@ -329,7 +329,7 @@ nếu dữ liệu sai bất biến gây lỗi FK thì lỗi hệ thống và rol
 có người, đối tượng, snapshot trước, `du_lieu_sau={}`, trạng thái `nhap → null`.
 Audit lỗi rollback: bản ghi Nháp và lịch sử cũ vẫn còn. Không đổi tồn/giữ,
 không xóa nhân viên/mặt hàng, không cascade sang chứng từ khác.
-FE ẩn Hủy với Nháp; BE hủy giữ nguyên cho UC-28.
+FE ẩn Hủy với Nháp; BE từ chối hủy Nháp theo UC-28, chỉ xóa theo UC-24.
 
 ## POST /api/v1/yeu_cau_san_xuat/{id}/gui
 
@@ -579,7 +579,58 @@ Tồn thực tế và ledger không đổi; `so_luong_dang_giu` tăng cùng tran
 Kết quả thiếu chỉ ở state FE sau xác nhận đến khi rời yêu cầu; ba dòng chi tiết D5 đọc từ yêu cầu.
 Kiểm thử AC-4 dùng repository giả tuần tự hóa và SQL biên dịch; chưa chạy tranh chấp PostgreSQL thật.
 
+## GET /api/v1/yeu_cau_san_xuat/{id}/huy
+
+Nguồn: UC-28 Main 4, D4. Chỉ QLK; chỉ đọc, không khóa, không ghi hoặc lịch sử.
+
+```mermaid
+sequenceDiagram
+    actor C as QLK / Frontend
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as YeuCauSanXuatService
+    participant P as SqlAlchemyYeuCauSanXuatRepository
+    participant X as PhieuXuatService / repository
+    participant D as PostgreSQL
+    C->>R: GET id/huy, không query
+    R->>A: Xác thực và role quan_ly
+    A->>D: Đọc danh tính hiện hành
+    alt Chưa đăng nhập hoặc sai vai trò
+        R-->>C: 401 / 403
+    else Được phép
+        R->>R: ID dương, không query (sai: 422)
+        R->>S: xem_truoc_huy(id, actor, request_id)
+        S->>P: get_by_id(id)
+        P->>D: SELECT YeuCauSanXuat không khóa
+        alt Không tồn tại hoặc vượt INT32
+            S-->>C: 404 khong_tim_thay
+        else Có yêu cầu
+            S->>X: phieu_cua_yeu_cau(id)
+            X->>D: SELECT mã, loại, trạng thái phiếu theo id, không khóa
+            S->>S: Kiểm D1 và phiếu da_duyet
+            S->>P: giu_hang_dang_giu(id, lock=false)
+            P->>D: SELECT GiuHang dang_giu JOIN MatHang không khóa
+            alt Trạng thái không cho hủy hoặc có phiếu đã duyệt
+                S-->>C: 200 duoc_huy=false và ly_do_khong_huy
+            else Có thể hủy
+                S-->>C: 200 duoc_huy=true, ly_do_khong_huy=null
+            end
+        end
+    end
+```
+
+Response `data` gồm `duoc_huy`, `ly_do_khong_huy`, `hang_tra[]` và `phieu_xuat[]`;
+`meta.request_id` theo quy ước chung. Mỗi dòng có `id`; hàng trả có `mat_hang_id`,
+mã, tên, đơn vị tính, loại giữ và lượng. Danh sách phiếu bị ảnh hưởng chỉ gồm
+`nhap` (xử lý `bo`) và `cho_duyet` (xử lý `tu_choi`), có mã, loại, trạng thái.
+GET không cần `If-Match`, không cấp ETag mới, không phân trang. FE dùng ETag
+của chi tiết đang xem khi xác nhận. POST kiểm lại điều kiện dưới khóa.
+
 ## POST /api/v1/yeu_cau_san_xuat/{id}/huy
+
+Nguồn: UC-28 R1–R7, A1–A5, D1–D3. Body `{ly_do}` trim không rỗng, `If-Match`
+của chi tiết đã xem. Chỉ `da_gui`, `cho_bo_sung_linh_kien`, `dang_thuc_hien` được
+hủy và phải chưa có bất kỳ phiếu xuất nào `da_duyet` của yêu cầu.
 
 ```mermaid
 sequenceDiagram
@@ -587,6 +638,7 @@ sequenceDiagram
     participant R as Router
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
+    participant T as SqlAlchemyTransaction
     participant P as SqlAlchemyYeuCauSanXuatRepository
     participant X as PhieuXuatService / repository
     participant L as AuditService / repository
@@ -599,46 +651,68 @@ sequenceDiagram
     S->>P: get_for_update(id)
     P->>D: FOR UPDATE yêu cầu (không có/vượt INT32: 404)
     S->>S: If-Match (thiếu: 428, cũ/weak/*: 412)
-    alt Yêu cầu hoan_thanh / da_huy
+    alt Yêu cầu nhap / hoan_thanh / da_huy
         S-->>C: 409 trang_thai_khong_hop_le
     else Trạng thái cho phép
-        S->>P: lenh_cua_yeu_cau(lock=true), chung_tu_hoan_thanh_cua_lenh(lock=true)
-        P->>D: FOR UPDATE lệnh theo ID rồi chứng từ hoàn thành theo ID
-        S->>X: co_phieu_da_ghi_so(yeu_cau_id, lenh_ids)
+        S->>X: co_phieu_da_ghi_so(yeu_cau_id)
         X->>D: FOR UPDATE phiếu xuất theo ID, lấy snapshot chi tiết
-        alt Có phiếu xuất / chứng từ hoàn thành da_duyet
+        alt Có phiếu xuất da_duyet
             S-->>C: 409 phu_thuoc_khong_hop_le; rollback
         else Chưa ghi sổ
-            loop Lệnh sâu nhất trước, bỏ qua lệnh đã hủy
-                S->>P: huy_lenh(id)
-                P->>D: UPDATE lệnh da_huy
-                S->>L: append huy (trước/sau + lý do)
+            S->>X: phieu_cua_yeu_cau(id), lấy mã/trạng thái để audit
+            X->>D: SELECT phiếu của yêu cầu đã khóa
+            S->>P: tra_giu_hang(id)
+            P->>D: SELECT MatHang liên quan ORDER BY id FOR UPDATE
+            P->>D: SELECT GiuHang dang_giu JOIN MatHang, FOR UPDATE OF GiuHang
+            P->>D: Trừ tổng so_luong_dang_giu; GiuHang thành da_tra và ket_thuc_at
+            Note over P,D: Không đổi so_luong_ton hoặc ledger; bỏ qua giữ của yêu cầu khác/đã kết thúc
+            S->>X: huy_phieu_chua_ghi_so(id, Yêu cầu đã hủy, actor_id)
+            X->>D: Đọc lại bằng khóa phiếu đang giữ, kiểm lại R2
+            loop Phiếu nhap hoặc cho_duyet
+                alt Phiếu nhap
+                    X->>D: DELETE ChiTietPhieuXuat rồi PhieuXuat
+                    X->>L: append xoa_nhap, snapshot trước, lý do Yêu cầu đã hủy
+                else Phiếu cho_duyet
+                    X->>D: UPDATE tu_choi, lý do Yêu cầu đã hủy, người/thời điểm, phiên bản
+                    X->>L: append tu_choi, cho_duyet sang tu_choi, lý do Yêu cầu đã hủy
+                end
+                L->>D: INSERT lịch sử phiếu cùng session
             end
-            S->>P: Xóa hoàn thành nhap; từ chối cho_duyet; giữ tu_choi
-            P->>D: DELETE hoặc UPDATE chứng từ
-            S->>L: append xoa_nhap / tu_choi + lý do
-            S->>X: huy_phieu_chua_ghi_so(...)
-            X->>D: Khóa/kiểm tra lại phiếu; DELETE chi tiết rồi nhap, UPDATE cho_duyet thành tu_choi
-            X->>L: append xoa_nhap / tu_choi + lý do
-            S->>P: update yêu cầu da_huy
-            P->>D: UPDATE yêu cầu
-            S->>L: append huy yêu cầu + lý do
+            S->>P: update da_huy, huy_at, nguoi_huy_id, ly_do_huy
+            P->>D: UPDATE YeuCauSanXuat, phien_ban + 1, updated_at
+            S->>L: append huy, trạng thái trước/sau, lý do QLK, hang_tra và phieu_xuat
             L->>D: INSERT audit cùng session
-            S->>D: COMMIT; mọi lỗi rollback toàn bộ
-            S-->>C: 200 YeuCauRead + meta + ETag mới
+            alt Ghi dữ liệu, audit hoặc commit lỗi
+                T->>D: ROLLBACK giữ hàng, phiếu, yêu cầu và lịch sử
+                R-->>C: 409 ràng buộc / 500 lỗi khác
+            else Thành công
+                T->>D: COMMIT, nhả khóa
+                R-->>C: 200 YeuCauRead + meta + ETag mới
+            end
         end
     end
 ```
 
-Hủy được cả nháp khi chưa ghi sổ. Chứng từ `tu_choi` và audit cũ giữ nguyên; snapshot
-trước của chứng từ bị xóa được lưu audit. Service phiếu xuất không tự commit.
+Khóa theo thứ tự yêu cầu → phiếu xuất → `MatHang` theo id tăng dần → `GiuHang`.
+Cổng phiếu xuất đọc/khóa lại các phiếu đã giữ khóa trong cùng transaction;
+không mở transaction hoặc commit riêng. Phiếu `tu_choi` và lịch sử cũ giữ nguyên.
+Không đọc cây lệnh hay chứng từ theo lệnh v3 trong luồng hủy.
+`du_lieu_sau` lịch sử yêu cầu gồm snapshot yêu cầu đã hủy, `hang_tra` (id giữ,
+id/mã/tên/ĐVT mặt hàng, loại, số lượng), `phieu_xuat` (mã, xử lý `bo`/`tu_choi`).
+`ly_do` lịch sử yêu cầu là lý do QLK nhập; lịch sử phiếu dùng `Yêu cầu đã hủy`.
+
+FE tải GET trước; lỗi hoặc không được hủy hiện `ErrorNotice` riêng, không mở hộp.
+Hộp có hai bảng hàng trả/phiếu bị ảnh hưởng, lý do bắt buộc, câu tác động
+“Tồn thực tế không đổi.”; đóng hộp không POST. Xác nhận dùng mutation riêng,
+lỗi POST chỉ ở hộp; thành công “Đã hủy yêu cầu.”. Chi tiết `da_huy` thêm Hủy lúc,
+Người hủy, Lý do hủy; không còn thao tác trên yêu cầu. Nháp vẫn xóa theo UC-24.
 
 ## Phạm vi và kiểm chứng
 
 - Endpoint lệnh nằm ở mục *Lệnh sản xuất* bên dưới; `phieu_xuat` là collaborator nội bộ của luồng yêu cầu.
 - Gỡ bốn endpoint `/production/work-orders`; frontend cũ chưa chuyển đổi, sẽ nhận 404.
 - UC-23 kiểm chứng bằng repository/port giả có trạng thái qua ASGI và service, không DB/Docker.
-- Chỉ ORM yêu cầu được đồng bộ v4; lệnh/chứng từ hoàn thành/hủy giữ code hiện tại (D1).
+- ORM yêu cầu và luồng hủy UC-28 dùng v4; lệnh/chứng từ hoàn thành legacy ngoài phạm vi UC-28.
 - UC-25 kiểm chứng danh sách bằng repository/port giả qua ASGI và service, cùng câu SQL
   repository thật được biên dịch PostgreSQL; không DB/Docker, không xác nhận E2E PostgreSQL.
 - Các module cũ có thể còn phụ thuộc schema v3; UC-25 D6 không chuyển đổi module phiếu xuất

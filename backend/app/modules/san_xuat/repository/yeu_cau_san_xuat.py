@@ -17,7 +17,7 @@ from app.modules.san_xuat.models import (
 )
 from app.modules.san_xuat.ports import HangKhaDung
 from app.modules.san_xuat.schemas import (
-    ChungTuRead,
+    HangTraLine,
     LenhRead,
     NhuCauRead,
     YeuCauCreate,
@@ -30,6 +30,47 @@ from app.shared.records import RecordPage
 class SqlAlchemyYeuCauSanXuatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def giu_hang_dang_giu(self, yeu_cau_id: int, *, lock: bool) -> list[HangTraLine]:
+        query = (
+            select(
+                GiuHang.id, GiuHang.mat_hang_id, MatHang.ma_mat_hang, MatHang.ten_mat_hang,
+                MatHang.don_vi_tinh, GiuHang.loai_giu, GiuHang.so_luong,
+            )
+            .join(MatHang, MatHang.id == GiuHang.mat_hang_id)
+            .where(GiuHang.yeu_cau_san_xuat_id == yeu_cau_id, GiuHang.trang_thai == "dang_giu")
+            .order_by(GiuHang.mat_hang_id, GiuHang.id)
+        )
+        if lock:
+            query = query.with_for_update(of=GiuHang)
+        rows = await self.session.execute(query)
+        return [HangTraLine.model_validate(dict(row)) for row in rows.mappings()]
+
+    # UC-28 Hủy yêu cầu sản xuất — R3, R5 khóa mặt hàng theo id rồi trả giữ hàng (specs/use_cases/production/UC-28.md)
+    async def tra_giu_hang(self, yeu_cau_id: int) -> list[HangTraLine]:
+        item_ids = select(GiuHang.mat_hang_id).where(
+            GiuHang.yeu_cau_san_xuat_id == yeu_cau_id, GiuHang.trang_thai == "dang_giu",
+        )
+        await self.session.execute(
+            select(MatHang.id).where(MatHang.id.in_(item_ids))
+            .order_by(MatHang.id).with_for_update()
+        )
+        reservations = await self.giu_hang_dang_giu(yeu_cau_id, lock=True)
+        quantities: dict[int, int] = {}
+        for row in reservations:
+            quantities[row.mat_hang_id] = quantities.get(row.mat_hang_id, 0) + row.so_luong
+        for item_id, quantity in sorted(quantities.items()):
+            await self.session.execute(
+                update(MatHang).where(MatHang.id == item_id)
+                .values(so_luong_dang_giu=MatHang.so_luong_dang_giu - quantity)
+            )
+        if reservations:
+            await self.session.execute(
+                update(GiuHang).where(GiuHang.id.in_([row.id for row in reservations]))
+                .values(trang_thai="da_tra", ket_thuc_at=datetime.now(timezone.utc))
+            )
+        await self.session.flush()
+        return reservations
 
     # UC-27 Xem nhu cầu bổ sung linh kiện — Main 2 đọc yêu cầu chờ theo D1 (specs/use_cases/production/UC-27.md)
     async def yeu_cau_cho_bo_sung(self) -> list[YeuCauRead]:
@@ -259,34 +300,3 @@ class SqlAlchemyYeuCauSanXuatRepository:
             )
             for order in orders
         ]
-
-    async def chung_tu_hoan_thanh_cua_lenh(
-        self, lenh_ids: list[int], *, lock: bool
-    ) -> list[ChungTuRead]:
-        query = (
-            select(ChungTuHoanThanhSx)
-            .where(ChungTuHoanThanhSx.lenh_san_xuat_id.in_(lenh_ids))
-            .order_by(ChungTuHoanThanhSx.id)
-        )
-        if lock:
-            query = query.with_for_update()
-        records = (
-            await self.session.scalars(query.execution_options(populate_existing=True))
-        ).all()
-        return [ChungTuRead.model_validate(record) for record in records]
-
-    async def xoa_chung_tu_nhap(self, document_id: int) -> None:
-        await self.session.execute(
-            delete(ChungTuHoanThanhSx).where(ChungTuHoanThanhSx.id == document_id)
-        )
-
-    async def tu_choi_chung_tu(self, document_id: int) -> ChungTuRead:
-        record = await self.session.get(ChungTuHoanThanhSx, document_id)
-        record.trang_thai = "tu_choi"
-        await self.session.flush()
-        return ChungTuRead.model_validate(record)
-
-    async def huy_lenh(self, lenh_id: int) -> None:
-        order = await self.session.get(LenhSanXuat, lenh_id)
-        order.trang_thai = "da_huy"
-        await self.session.flush()

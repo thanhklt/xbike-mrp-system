@@ -93,6 +93,7 @@ export function sendConfirmEntries(values, items, employees) {
 }
 
 // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — Main 2 thông tin chỉ đọc (specs/use_cases/production/UC-24.md)
+// UC-28 Hủy yêu cầu sản xuất — D5 thông tin hủy trong chi tiết (specs/use_cases/production/UC-28.md)
 export function requestDetailEntries(record, items, employees) {
   return [
     ...sendConfirmEntries(record, items, employees),
@@ -106,6 +107,11 @@ export function requestDetailEntries(record, items, employees) {
       ["Kiểm tra lần đầu lúc", dateTime(record.kiem_tra_lan_dau_at)],
     ] : []),
     ["Hoàn thành lúc", dateTime(record.completed_at)],
+    ...(record.trang_thai === "da_huy" ? [
+      ["Hủy lúc", dateTime(record.huy_at)],
+      ["Người hủy", employeeName(employees, record.nguoi_huy_id)],
+      ["Lý do hủy", record.ly_do_huy],
+    ] : []),
   ];
 }
 
@@ -122,6 +128,43 @@ export function canCancelRequest(record, manager) {
 export function canCheckRequest(record, manager, userId) {
   return Boolean(!manager && record && record.nhan_vien_duoc_giao_id === Number(userId)
     && ["da_gui", "cho_bo_sung_linh_kien"].includes(record.trang_thai));
+}
+
+export const CANCEL_HOLD_COLUMNS = [
+  { key: "ma_mat_hang", label: "Mã" },
+  { key: "ten_mat_hang", label: "Tên" },
+  { key: "don_vi_tinh", label: "Đơn vị tính" },
+  { key: "loai_giu", label: "Loại giữ" },
+  { key: "so_luong", label: "Số lượng", numeric: true },
+];
+
+export const CANCEL_ISSUE_COLUMNS = [
+  { key: "ma_phieu_xuat", label: "Mã phiếu" },
+  { key: "loai_phieu", label: "Loại phiếu" },
+  { key: "trang_thai", label: "Trạng thái" },
+  { key: "xu_ly", label: "Xử lý" },
+];
+
+// UC-28 Hủy yêu cầu sản xuất — Main 4; D4 nội dung xác nhận hàng trả và phiếu bị ảnh hưởng (specs/use_cases/production/UC-28.md)
+export function cancelConfirmEntries(preview) {
+  const holdLabels = {
+    thanh_pham_co_san: "Thành phẩm có sẵn",
+    linh_kien: "Linh kiện",
+    thanh_pham_san_xuat: "Thành phẩm sản xuất",
+  };
+  const issueLabels = {
+    xuat_linh_kien: "Xuất linh kiện",
+    xuat_thanh_pham: "Xuất thành phẩm",
+  };
+  return {
+    hang_tra: preview.hang_tra.map((line) => ({
+      ...line, loai_giu: holdLabels[line.loai_giu], so_luong: number(line.so_luong),
+    })),
+    phieu_xuat: preview.phieu_xuat.map((line) => ({
+      ...line, loai_phieu: issueLabels[line.loai_phieu], trang_thai: STATUS_LABELS[line.trang_thai],
+      xu_ly: line.xu_ly === "bo" ? "Bỏ phiếu nháp" : "Từ chối: Yêu cầu đã hủy",
+    })),
+  };
 }
 
 // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4; A7 thông tin xác nhận (specs/use_cases/production/UC-26.md)

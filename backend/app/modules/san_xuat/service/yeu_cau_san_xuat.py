@@ -24,16 +24,18 @@ from app.modules.san_xuat.ports import (
     YeuCauSanXuatRepository,
 )
 from app.modules.san_xuat.schemas import (
+    HuyPreview,
+    HuyPreviewResponse,
     KiemTraData,
     KiemTraKetQua,
     KiemTraLine,
     KiemTraPreviewResponse,
     KiemTraResponse,
-    LenhRead,
     ListResponseMeta,
     NhuCauBoSungData,
     NhuCauBoSungResponse,
     NhuCauThieuLine,
+    PhieuXuatHuyLine,
     ResponseMeta,
     TongHopLinhKien,
     YeuCauChoBoSung,
@@ -172,21 +174,6 @@ def tong_hop_nhu_cau_bo_sung(
         yeu_cau=requests,
         tong_hop=sorted(totals.values(), key=lambda row: (-row.so_luong_thieu, row.ma_mat_hang)),
     )
-
-
-def _cancel_ordering(orders: list[LenhRead]) -> list[LenhRead]:
-    parents = {order.id: order.lenh_san_xuat_cha_id for order in orders}
-    depths = {}
-    for order in orders:
-        path = {order.id}
-        parent = parents[order.id]
-        while parent is not None:
-            if parent in path or parent not in parents:
-                raise InvalidWorkflowState(message="Cây lệnh không hợp lệ")
-            path.add(parent)
-            parent = parents[parent]
-        depths[order.id] = len(path)
-    return sorted(orders, key=lambda order: (-depths[order.id], order.id))
 
 
 class YeuCauSanXuatService:
@@ -490,43 +477,65 @@ class YeuCauSanXuatService:
             )
         return self._detail(after, request_id)
 
-    async def _cancel_completions(self, documents, actor: dict, reason: str) -> None:
-        for before in documents:
-            if before.trang_thai == "nhap":
-                await self.repository.xoa_chung_tu_nhap(before.id)
-                await self._audit(
-                    "chung_tu_hoan_thanh_san_xuat", "xoa_nhap", actor, before, None, reason=reason
-                )
-            elif before.trang_thai == "cho_duyet":
-                after = await self.repository.tu_choi_chung_tu(before.id)
-                await self._audit(
-                    "chung_tu_hoan_thanh_san_xuat", "tu_choi", actor, before, after, reason=reason
-                )
+    # UC-28 Hủy yêu cầu sản xuất — D4 xem trước chỉ đọc, không khóa hoặc ghi lịch sử (specs/use_cases/production/UC-28.md)
+    async def xem_truoc_huy(
+        self, resource_id: int, actor: dict, request_id: str,
+    ) -> HuyPreviewResponse:
+        _require_manager(actor)
+        record = await self._require_request(resource_id, actor)
+        issues = await self.issues.phieu_cua_yeu_cau(resource_id)
+        reason = None
+        if record.trang_thai not in {"da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien"}:
+            reason = "Chỉ hủy yêu cầu Đã gửi, Chờ bổ sung linh kiện hoặc Đang thực hiện."
+        elif any(row["trang_thai"] == "da_duyet" for row in issues):
+            reason = "Yêu cầu đã có phiếu xuất được duyệt, không thể hủy."
+        return HuyPreviewResponse(
+            data=HuyPreview(
+                duoc_huy=reason is None, ly_do_khong_huy=reason,
+                hang_tra=await self.repository.giu_hang_dang_giu(resource_id, lock=False),
+                phieu_xuat=[
+                    PhieuXuatHuyLine(**row, xu_ly="bo" if row["trang_thai"] == "nhap" else "tu_choi")
+                    for row in issues if row["trang_thai"] in {"nhap", "cho_duyet"}
+                ],
+            ),
+            meta=ResponseMeta(request_id=request_id),
+        )
 
+    # UC-28 Hủy yêu cầu sản xuất — Main 3, 6–7; D1–D3 hủy và trả giữ hàng nguyên tử (specs/use_cases/production/UC-28.md)
     async def huy(
-        self, resource_id: int, reason: str, actor: dict, if_match: str | None, request_id: str
+        self, resource_id: int, reason: str, actor: dict, if_match: str | None, request_id: str,
     ) -> tuple[YeuCauDetailResponse, str]:
         _require_manager(actor)
+        reason = reason.strip()
+        if not reason:
+            raise InvalidInputException(message="Lý do hủy không được để trống")
         async with self.transaction:
             before = await self._require_request(resource_id, actor, lock=True)
             _verify_if_match(if_match, before)
-            if before.trang_thai in {"da_huy", "hoan_thanh"}:
+            if before.trang_thai not in {"da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien"}:
                 raise InvalidWorkflowState()
-            orders = await self.repository.lenh_cua_yeu_cau(resource_id, lock=True)
-            order_ids = [order.id for order in orders]
-            documents = await self.repository.chung_tu_hoan_thanh_cua_lenh(order_ids, lock=True)
-            posted_issue = await self.issues.co_phieu_da_ghi_so(resource_id, order_ids)
-            if posted_issue or any(document.trang_thai == "da_duyet" for document in documents):
+            if await self.issues.co_phieu_da_ghi_so(resource_id):
                 raise PostedProductionDependency()
-            for order in _cancel_ordering(orders):
-                if order.trang_thai != "da_huy":
-                    await self.repository.huy_lenh(order.id)
-                    canceled = order.model_copy(update={"trang_thai": "da_huy"})
-                    await self._audit("lenh_san_xuat", "huy", actor, order, canceled, reason=reason)
-            await self._cancel_completions(documents, actor, reason)
-            await self.issues.huy_phieu_chua_ghi_so(
-                resource_id, order_ids, reason, int(actor["sub"])
-            )
-            after = await self.repository.update(resource_id, {"trang_thai": "da_huy"})
-            await self._audit("yeu_cau_san_xuat", "huy", actor, before, after, reason=reason)
+            issues = await self.issues.phieu_cua_yeu_cau(resource_id)
+            returned = await self.repository.tra_giu_hang(resource_id)
+            await self.issues.huy_phieu_chua_ghi_so(resource_id, "Yêu cầu đã hủy", int(actor["sub"]))
+            after = await self.repository.update(resource_id, {
+                "trang_thai": "da_huy", "huy_at": datetime.now(timezone.utc),
+                "nguoi_huy_id": int(actor["sub"]), "ly_do_huy": reason,
+            })
+            await self.audit.append(CreationAudit(
+                nhan_vien_id=int(actor["sub"]), loai_doi_tuong="yeu_cau_san_xuat",
+                doi_tuong_id=resource_id, thao_tac="huy", ly_do=reason,
+                trang_thai_truoc=before.trang_thai, trang_thai_sau="da_huy",
+                du_lieu_truoc=before.model_dump(mode="json"),
+                du_lieu_sau={
+                    **after.model_dump(mode="json"),
+                    "hang_tra": [row.model_dump(mode="json") for row in returned],
+                    "phieu_xuat": [
+                        {"ma_phieu_xuat": row["ma_phieu_xuat"],
+                         "xu_ly": "bo" if row["trang_thai"] == "nhap" else "tu_choi"}
+                        for row in issues if row["trang_thai"] in {"nhap", "cho_duyet"}
+                    ],
+                },
+            ))
         return self._detail(after, request_id)

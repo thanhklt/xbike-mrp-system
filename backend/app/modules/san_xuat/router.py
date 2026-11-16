@@ -22,6 +22,7 @@ from app.modules.san_xuat.schemas import (
     HoanThanhPatch,
     HoanThanhQuery,
     HoanThanhResponse,
+    HuyPreviewResponse,
     KiemTraInput,
     KiemTraPreviewResponse,
     KiemTraResponse,
@@ -238,6 +239,18 @@ async def kiem_tra(
     return result
 
 
+# UC-28 Hủy yêu cầu sản xuất — D4 xem trước cho QLK (specs/use_cases/production/UC-28.md)
+@yeu_cau_sx_router.get(
+    "/{id}/huy", response_model=HuyPreviewResponse,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+)
+async def xem_truoc_huy(
+    id: ResourceId, actor: WriteActor, service: Service, request_id: RequestId,
+) -> HuyPreviewResponse:
+    return await service.xem_truoc_huy(id, actor, request_id)
+
+
+# UC-28 Hủy yêu cầu sản xuất — Main 3, 6–7 xác nhận với lý do và If-Match (specs/use_cases/production/UC-28.md)
 @yeu_cau_sx_router.post(
     "/{id}/huy",
     response_model=YeuCauDetailResponse,

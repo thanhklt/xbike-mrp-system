@@ -28,6 +28,9 @@ import { useFeedback } from "../../components/FeedbackProvider.jsx";
 import {
   REQUEST_TYPES,
   CHECK_COLUMNS,
+  CANCEL_HOLD_COLUMNS,
+  CANCEL_ISSUE_COLUMNS,
+  cancelConfirmEntries,
   canCheckRequest,
   checkConfirmEntries,
   checkLines,
@@ -139,9 +142,12 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   const [editing, setEditing] = useState(false);
   const [checkError, setCheckError] = useState(null);
   const [checkPending, setCheckPending] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [cancelPending, setCancelPending] = useState(false);
   const mutation = useWrite();
   // Lỗi xác nhận kiểm tra chỉ hiện trong hộp xác nhận, không lặp lại ở chi tiết.
   const checkMutation = useWrite();
+  const cancelMutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
@@ -223,23 +229,65 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
     });
   }
   // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A2 xác nhận xóa và về danh sách (specs/use_cases/production/UC-24.md)
+  // UC-28 Hủy yêu cầu sản xuất — Main 2–5; A2, A3 xem trước rồi xác nhận hủy (specs/use_cases/production/UC-28.md)
   function cancel(remove = false) {
-    confirm({
-      title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu sản xuất",
-      description: record.ma_yeu_cau_san_xuat,
-      reason: !remove,
-      danger: true,
-      onConfirm: async (reason) => {
-        await mutation.mutateAsync({
-          path: `${API.requests}/${record.id}${remove ? "" : "/huy"}`,
-          method: remove ? "delete" : "post",
-          body: remove ? {} : { ly_do: reason },
-          etag: snapshot.etag,
+    if (remove) {
+      confirm({
+        title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu sản xuất",
+        description: record.ma_yeu_cau_san_xuat,
+        reason: !remove,
+        danger: true,
+        onConfirm: async (reason) => {
+          await mutation.mutateAsync({
+            path: `${API.requests}/${record.id}${remove ? "" : "/huy"}`,
+            method: remove ? "delete" : "post",
+            body: remove ? {} : { ly_do: reason },
+            etag: snapshot.etag,
+          });
+          notify("Đã xử lý yêu cầu.");
+          if (remove) navigate(base);
+        },
+      });
+      return;
+    }
+    return (async () => {
+      setCancelError(null);
+      setCancelPending(true);
+      const etag = snapshot.etag;
+      try {
+        const { data: cancellation } = await readResource(`${API.requests}/${record.id}/huy`);
+        if (!cancellation.duoc_huy) {
+          setCancelError(new Error(cancellation.ly_do_khong_huy));
+          return;
+        }
+        const entries = cancelConfirmEntries(cancellation);
+        confirm({
+          title: "Hủy yêu cầu sản xuất",
+          description: record.ma_yeu_cau_san_xuat,
+          reason: true,
+          danger: true,
+          content: <>
+            <h3>Hàng sẽ trả lại</h3>
+            <DataTable rows={entries.hang_tra} columns={CANCEL_HOLD_COLUMNS} empty="Không có hàng đang giữ." />
+            <h3>Phiếu xuất bị ảnh hưởng</h3>
+            <DataTable rows={entries.phieu_xuat} columns={CANCEL_ISSUE_COLUMNS} empty="Không có phiếu xuất chưa duyệt." />
+          </>,
+          impact: "Tồn thực tế không đổi.",
+          onConfirm: async (reason) => {
+            await cancelMutation.mutateAsync({
+              path: `${API.requests}/${record.id}/huy`,
+              body: { ly_do: reason },
+              etag,
+            });
+            notify("Đã hủy yêu cầu.");
+          },
         });
-        notify("Đã xử lý yêu cầu.");
-        if (remove) navigate(base);
-      },
-    });
+      } catch (failure) {
+        setCancelError(failure);
+      } finally {
+        setCancelPending(false);
+      }
+    })();
   }
   // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 mở form điền sẵn (specs/use_cases/production/UC-24.md)
   function edit() {
@@ -270,6 +318,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
       <ErrorNotice error={checkError} />
+      <ErrorNotice error={cancelError} />
       {checkResult && !checkResult.du_linh_kien && (
         <>
           <Notice tone="warning">Yêu cầu Chờ bổ sung linh kiện.</Notice>
@@ -347,7 +396,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       )}
       {canCancelRequest(record, manager) && (
         <div className="actions">
-          <Button variant="secondary" onClick={() => cancel()}>
+          <Button variant="secondary" disabled={cancelPending || cancelMutation.isPending} onClick={() => cancel()}>
             Hủy yêu cầu…
           </Button>
           {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (

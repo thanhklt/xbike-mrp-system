@@ -348,9 +348,17 @@ class SqlAlchemyPhieuXuatRepository:
         resource = await self._resource(issue)
         return PhieuXuatSnapshot(issue.id, issue.trang_thai, resource.model_dump(mode="json"))
 
-    async def lock_by_sources(
-        self, yeu_cau_id: int, lenh_ids: list[int]
-    ) -> list[PhieuXuatSnapshot]:
+    # UC-28 Hủy yêu cầu sản xuất — D4 đọc phiếu của yêu cầu không khóa (specs/use_cases/production/UC-28.md)
+    async def phieu_cua_yeu_cau(self, yeu_cau_id: int) -> list[dict]:
+        rows = await self.session.execute(
+            select(PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai)
+            .where(PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id)
+            .order_by(PhieuXuat.id)
+        )
+        return [dict(row) for row in rows.mappings()]
+
+    # UC-28 Hủy yêu cầu sản xuất — A4 khóa phiếu sau khóa yêu cầu (specs/use_cases/production/UC-28.md)
+    async def lock_by_sources(self, yeu_cau_id: int) -> list[PhieuXuatSnapshot]:
         issues = (
             await self.session.scalars(
                 select(PhieuXuat)
@@ -362,12 +370,14 @@ class SqlAlchemyPhieuXuatRepository:
         ).all()
         return [await self._snapshot(issue) for issue in issues]
 
+    # UC-28 Hủy yêu cầu sản xuất — R4 bỏ phiếu nháp cùng chi tiết (specs/use_cases/production/UC-28.md)
     async def delete_draft(self, issue_id: int) -> None:
         await self.session.execute(
             delete(ChiTietPhieuXuat).where(ChiTietPhieuXuat.phieu_xuat_id == issue_id)
         )
         await self.session.execute(delete(PhieuXuat).where(PhieuXuat.id == issue_id))
 
+    # UC-28 Hủy yêu cầu sản xuất — R4 từ chối phiếu chờ duyệt (specs/use_cases/production/UC-28.md)
     async def reject(self, issue_id: int, actor_id: int, at: datetime) -> PhieuXuatSnapshot:
         resource = await self.change_state(issue_id, "tu_choi", actor_id, at, "Yêu cầu đã hủy")
         return PhieuXuatSnapshot(resource.id, resource.trang_thai, resource.model_dump(mode="json"))

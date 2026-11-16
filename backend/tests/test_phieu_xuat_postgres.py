@@ -303,11 +303,11 @@ async def test_uc34_uc35_gi_ac21_22_internal_cancel_ports(
 ):
     scenario = goods_issue_scenario
     created, pending, source = await goods_issue_pending()
-    # No LenhSanXuat table exists; old lenh_ids are compatibility-only.
+    # UC-28 D2: cổng hủy chỉ nhận yeu_cau_san_xuat_id (bỏ lenh_ids di sản v3).
     async with goods_issue_database.sessions() as session:
         service = issue_service(session)
-        assert not await service.co_phieu_da_ghi_so(source, [2147483647])
-        await service.huy_phieu_chua_ghi_so(source, [2147483647], "Caller cancellation reason", 1)
+        assert not await service.co_phieu_da_ghi_so(source)
+        await service.huy_phieu_chua_ghi_so(source, "Caller cancellation reason", 1)
         await session.commit()
     data = (
         await goods_issue_client.get(created.headers["location"], headers=goods_issue_auth())
@@ -347,7 +347,7 @@ async def test_uc34_uc35_gi_ac21_22_internal_cancel_ports(
     )
     code = draft.json()["data"]["ma_phieu_xuat"]
     async with goods_issue_database.sessions() as session:
-        await issue_service(session).huy_phieu_chua_ghi_so(new_source, [], "Delete draft", 1)
+        await issue_service(session).huy_phieu_chua_ghi_so(new_source, "Delete draft", 1)
         await session.commit()
     assert (
         await goods_issue_client.get(draft.headers["location"], headers=goods_issue_auth())
@@ -368,9 +368,9 @@ async def test_uc34_uc35_gi_ac21_22_internal_cancel_ports(
     before = await scenario.snapshot()
     async with goods_issue_database.sessions() as session:
         service = issue_service(session)
-        assert await service.co_phieu_da_ghi_so(approved_source, [])
+        assert await service.co_phieu_da_ghi_so(approved_source)
         with pytest.raises(PostedProductionDependency):
-            await service.huy_phieu_chua_ghi_so(approved_source, [], "No cancellation", 1)
+            await service.huy_phieu_chua_ghi_so(approved_source, "No cancellation", 1)
         await session.rollback()
     assert await scenario.snapshot() == before
 
@@ -736,7 +736,7 @@ async def test_uc35_gi_ac22_internal_cancel_joins_parent_rollback(
     _, _, source = await goods_issue_pending()
     before = await goods_issue_scenario.snapshot()
     async with goods_issue_database.sessions() as session:
-        await issue_service(session).huy_phieu_chua_ghi_so(source, [], "Parent rollback", 1)
+        await issue_service(session).huy_phieu_chua_ghi_so(source, "Parent rollback", 1)
         await session.flush()
         await session.rollback()
     assert await goods_issue_scenario.snapshot() == before

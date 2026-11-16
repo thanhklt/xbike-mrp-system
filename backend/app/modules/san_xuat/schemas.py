@@ -47,6 +47,31 @@ class LyDoInput(BaseModel):
     ly_do: str = Field(min_length=1)
 
 
+class HangTraLine(BaseModel):
+    id: int
+    mat_hang_id: int
+    ma_mat_hang: str
+    ten_mat_hang: str
+    don_vi_tinh: str
+    loai_giu: Literal["thanh_pham_co_san", "linh_kien", "thanh_pham_san_xuat"]
+    so_luong: int
+
+
+class PhieuXuatHuyLine(BaseModel):
+    id: int
+    ma_phieu_xuat: str
+    loai_phieu: Literal["xuat_linh_kien", "xuat_thanh_pham"]
+    trang_thai: Literal["nhap", "cho_duyet"]
+    xu_ly: Literal["bo", "tu_choi"]
+
+
+class HuyPreview(BaseModel):
+    duoc_huy: bool
+    ly_do_khong_huy: str | None
+    hang_tra: list[HangTraLine]
+    phieu_xuat: list[PhieuXuatHuyLine]
+
+
 class YeuCauListQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -141,6 +166,11 @@ class ChungTuRead(BaseModel):
 
 class ResponseMeta(BaseModel):
     request_id: str
+
+
+class HuyPreviewResponse(BaseModel):
+    data: HuyPreview
+    meta: ResponseMeta
 
 
 class ListResponseMeta(ResponseMeta):

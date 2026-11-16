@@ -380,16 +380,21 @@ class PhieuXuatService:
     async def tong_da_xuat_thanh_pham(self, yeu_cau_ids: list[int]) -> dict[int, int]:
         return await self.repository.tong_da_xuat_thanh_pham(yeu_cau_ids)
 
-    async def co_phieu_da_ghi_so(self, yeu_cau_id: int, lenh_ids: list[int]) -> bool:
+    async def phieu_cua_yeu_cau(self, yeu_cau_id: int) -> list[dict]:
+        return await self.repository.phieu_cua_yeu_cau(yeu_cau_id)
+
+    # UC-28 Hủy yêu cầu sản xuất — R2 khóa phiếu trước khi kiểm tra (specs/use_cases/production/UC-28.md)
+    async def co_phieu_da_ghi_so(self, yeu_cau_id: int) -> bool:
         """UC-35 AC-4 / UC-28 port: caller holds source lock and owns transaction."""
-        records = await self.repository.lock_by_sources(yeu_cau_id, lenh_ids)
+        records = await self.repository.lock_by_sources(yeu_cau_id)
         return any(record.trang_thai == "da_duyet" for record in records)
 
+    # UC-28 Hủy yêu cầu sản xuất — R4 xử lý phiếu và lịch sử trong transaction của yêu cầu (specs/use_cases/production/UC-28.md)
     async def huy_phieu_chua_ghi_so(
-        self, yeu_cau_id: int, lenh_ids: list[int], ly_do: str, actor_id: int
+        self, yeu_cau_id: int, ly_do: str, actor_id: int
     ) -> None:
         """UC-28 port: clean unposted issues inside the caller's cancellation transaction."""
-        records = await self.repository.lock_by_sources(yeu_cau_id, lenh_ids)
+        records = await self.repository.lock_by_sources(yeu_cau_id)
         if any(record.trang_thai == "da_duyet" for record in records):
             raise PostedProductionDependency()
         for record in records:

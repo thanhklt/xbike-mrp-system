@@ -414,12 +414,22 @@ sequenceDiagram
 
 ## Port nội bộ hủy yêu cầu — không phải endpoint
 
-`ProductionService → PhieuXuatService → SqlAlchemyPhieuXuatRepository` giữ chữ ký
-`tong_da_xuat_thanh_pham`, `co_phieu_da_ghi_so`, `huy_phieu_chua_ghi_so`.
-`lenh_ids` chỉ giữ tương thích, không truy vấn bảng lệnh. Caller phải khóa YCSX và
-sở hữu transaction. Có phiếu đã duyệt thì chặn hủy. Nháp: xóa dòng/header và audit
-`xoa_nhap`. Chờ duyệt: chuyển từ chối, processor/time/version, lý do resource
-`Yêu cầu đã hủy`; audit lưu lý do caller và snapshot. Phiếu đã từ chối giữ nguyên.
-Không commit riêng; caller sản xuất chịu trách nhiệm trả giữ hàng. Nguồn đã hủy
-không lập/gửi lại được. API sản xuất legacy chưa đồng bộ v4 nên E2E hủy/thực hiện
-sản xuất vẫn hoãn theo Q5; test port không thay thế nghiệm thu E2E.
+`YeuCauSanXuatService → PhieuXuatService → SqlAlchemyPhieuXuatRepository`:
+
+- `co_phieu_da_ghi_so(yeu_cau_id)` gọi `lock_by_sources(yeu_cau_id)`; khóa mọi phiếu
+  của yêu cầu theo id bằng `FOR UPDATE`, có `da_duyet` thì chặn hủy.
+- `huy_phieu_chua_ghi_so(yeu_cau_id, ly_do, actor_id)` kiểm lại R2 trên các phiếu đã
+  khóa; Nháp xóa chi tiết rồi header và audit `xoa_nhap`; Chờ duyệt chuyển
+  `tu_choi`, ghi người/thời điểm/phiên bản, `ly_do_tu_choi = "Yêu cầu đã hủy"`,
+  audit `tu_choi`. Audit lưu lý do truyền vào và snapshot trước/sau. UC-28 truyền
+  lý do `Yêu cầu đã hủy`; lý do QLK nhập thuộc lịch sử yêu cầu. Giữ phiếu `tu_choi`.
+- `phieu_cua_yeu_cau(yeu_cau_id)` chỉ SELECT id, mã, loại, trạng thái theo id,
+  không khóa, không ghi; phục vụ GET xem trước và snapshot tác động khi hủy.
+- `tong_da_xuat_thanh_pham(yeu_cau_ids)` giữ nguyên.
+
+Đã bỏ `lenh_ids` khỏi hai hàm hủy/kiểm tra và `lock_by_sources`; không truy vấn
+bảng lệnh. Caller khóa yêu cầu trước, sở hữu transaction và trả giữ hàng; thứ tự
+khóa yêu cầu → phiếu → MatHang → GiuHang. Cổng dùng chung session, không commit
+riêng; lỗi lịch sử/ghi dữ liệu rollback cả phiếu, giữ hàng, yêu cầu và audit.
+Luồng endpoint hủy v4 được mô tả trong `san_xuat.md`. Kiểm thử ASGI/service và SQL
+không thay thế nghiệm thu E2E hay kiểm tranh chấp PostgreSQL thật.
