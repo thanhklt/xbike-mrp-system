@@ -50,7 +50,6 @@ receipt_actor = require_roles(["quan_ly"])
 router = APIRouter(
     prefix="/phieu_nhap",
     tags=["phieu_nhap"],
-    dependencies=[Depends(receipt_actor)],
     responses={code: {"model": PhieuNhapErrorResponse} for code in (401, 403, 422, 500)},
 )
 detail_headers = {
@@ -58,10 +57,10 @@ detail_headers = {
 }
 
 
+# UC-22 Xem phiếu nhập — R1, R2; AC-1, AC-2 (specs/use_cases/goods_receipt/UC-22.md)
 @router.get(
     "",
     response_model=PhieuNhapListResponse,
-    description="UC-22; specs/use_cases/goods_receipt/README.md",
     dependencies=[Depends(reject_repeated_query), Depends(reject_body)],
 )
 async def list_receipts(
@@ -73,10 +72,10 @@ async def list_receipts(
     return await service.list_receipts(params, actor, request_id)
 
 
+# UC-22 Xem phiếu nhập — R1, R2; AC-2 (specs/use_cases/goods_receipt/UC-22.md)
 @router.get(
     "/{id}",
     response_model=PhieuNhapDetailResponse,
-    description="UC-22; specs/use_cases/goods_receipt/README.md",
     dependencies=[Depends(reject_query), Depends(reject_body)],
     responses={200: {"headers": detail_headers}, 404: {"model": PhieuNhapErrorResponse}},
 )
@@ -92,10 +91,10 @@ async def get_receipt(
     return result
 
 
+# UC-20 Lập, sửa, xóa phiếu nhập nháp — R1–R3, R6; AC-1–AC-3 (specs/use_cases/goods_receipt/UC-20.md)
 @router.post(
     "",
     status_code=201,
-    description="UC-20; specs/use_cases/goods_receipt/README.md",
     response_model=PhieuNhapDetailResponse,
     dependencies=[Depends(reject_query)],
     responses={
@@ -123,9 +122,9 @@ mutation_errors: dict[int | str, dict[str, Any]] = {
 }
 
 
+# UC-20 Lập, sửa, xóa phiếu nhập nháp — R2, R4, R6; AC-4 (specs/use_cases/goods_receipt/UC-20.md)
 @router.patch(
     "/{id}",
-    description="UC-20; specs/use_cases/goods_receipt/README.md",
     response_model=PhieuNhapDetailResponse,
     dependencies=[Depends(reject_query)],
     responses={**mutation_errors, 200: {"headers": detail_headers}},
@@ -144,10 +143,10 @@ async def patch_receipt(
     return result
 
 
+# UC-20 Lập, sửa, xóa phiếu nhập nháp — R4, R6; AC-4, AC-5 (specs/use_cases/goods_receipt/UC-20.md)
 @router.delete(
     "/{id}",
     status_code=204,
-    description="UC-20; specs/use_cases/goods_receipt/README.md",
     response_class=Response,
     dependencies=[Depends(reject_query), Depends(reject_body)],
     responses=mutation_errors,
@@ -162,9 +161,9 @@ async def delete_receipt(
     return Response(status_code=204)
 
 
+# UC-21 Hoàn tất phiếu nhập — R2–R5; AC-2–AC-5 (specs/use_cases/goods_receipt/UC-21.md)
 @router.post(
     "/{id}/hoan_tat",
-    description="UC-21; specs/use_cases/goods_receipt/README.md",
     response_model=PhieuNhapActionResponse,
     dependencies=[Depends(reject_query)],
     responses={**mutation_errors, 200: {"headers": detail_headers}},

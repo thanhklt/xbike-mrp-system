@@ -12,7 +12,7 @@ from app.core.errors import ConflictException, ForbiddenException, NotFoundExcep
 from app.core.transactions import Transaction
 from app.modules.audit.schemas import CreationAudit
 from app.modules.audit.service import AuditService
-from app.modules.inventory.ports import InventoryWriter, StockReceiptLine
+from app.modules.inventory.ports import InventoryWriter, ReceiptStock, StockReceiptLine
 from app.modules.nhan_vien.schemas import ListResponseMeta, ResponseMeta
 from app.modules.phieu_nhap.errors import (
     ReceiptDependencyInvalid,
@@ -20,7 +20,7 @@ from app.modules.phieu_nhap.errors import (
     ReceiptPreconditionRequired,
     ReceiptReferenced,
 )
-from app.modules.phieu_nhap.ports import ReceivingRepository
+from app.modules.phieu_nhap.ports import ReceiptPart, ReceivingRepository
 from app.modules.phieu_nhap.schemas import (
     INT_MAX,
     ChiTietPhieuNhapCreate,
@@ -38,8 +38,6 @@ from app.modules.phieu_nhap.schemas import (
 
 
 class PhieuNhapService:
-    """UC-20..22; specs/use_cases/goods_receipt/README.md (GR-AC-01..22)."""
-
     def __init__(
         self,
         repository: ReceivingRepository,
@@ -84,23 +82,26 @@ class PhieuNhapService:
         if await self.repository.receipt_postings(record.id):
             raise ReceiptReferenced()
 
-    async def _validate_parts(self, part_ids: list[int]) -> None:
-        parts = await self.repository.lock_parts(part_ids)
-        if len(parts) != len(part_ids):
-            raise NotFoundException(message="Receipt item not found")
+    @staticmethod
+    def _validate_active_components(
+        parts: list[ReceiptPart] | list[ReceiptStock], part_ids: list[int]
+    ) -> None:
+        if {part.id for part in parts} != set(part_ids):
+            raise ReceiptDependencyInvalid(message="Receipt item missing")
         if any(part.is_active is not True or part.loai_mat_hang != "linh_kien" for part in parts):
             raise ReceiptDependencyInvalid()
+
+    async def _validate_parts(self, part_ids: list[int]) -> None:
+        parts = await self.repository.lock_parts(part_ids)
+        self._validate_active_components(parts, part_ids)
 
     async def _validate_stock(self, record: PhieuNhapRead) -> None:
         stocks = await self.inventory.lock_receipt_stock(
             [line.mat_hang_id for line in record.chi_tiet]
         )
         quantities = {line.mat_hang_id: line.so_luong for line in record.chi_tiet}
-        if {stock.id for stock in stocks} != set(quantities):
-            raise ReceiptDependencyInvalid(message="Receipt item missing")
+        self._validate_active_components(stocks, list(quantities))
         for stock in stocks:
-            if stock.loai_mat_hang != "linh_kien" or stock.is_active is not True:
-                raise ReceiptDependencyInvalid()
             if stock.so_luong_ton != stock.ledger_balance:
                 raise ConflictException(message="Stock balance differs from ledger")
             if stock.so_luong_ton + quantities[stock.id] > INT_MAX:
@@ -122,6 +123,7 @@ class PhieuNhapService:
             )
         )
 
+    # UC-20 Lập, sửa, xóa phiếu nhập nháp — R2, R4, R6; AC-4 (specs/use_cases/goods_receipt/UC-20.md)
     async def patch_receipt(
         self,
         record_id: int,
@@ -130,7 +132,6 @@ class PhieuNhapService:
         actor: dict,
         request_id: str,
     ) -> tuple[PhieuNhapDetailResponse, str]:
-        """UC-20: replace draft content with a checked validator; no-op creates no audit."""
         self._require_manager(actor)
         async with self.transaction:
             before = await self._locked_receipt(record_id)
@@ -150,15 +151,10 @@ class PhieuNhapService:
                     raise NotFoundException(message="Supplier not found")
                 changes["ncc_id"] = payload.ncc_id
             if payload.chi_tiet is not None:
-                await self._validate_parts([item.mat_hang_id for item in payload.chi_tiet])
-                current = [
-                    {
-                        "mat_hang_id": item.mat_hang_id,
-                        "so_luong": item.so_luong,
-                        "don_gia_thuc": item.don_gia_thuc,
-                    }
+                current = {
+                    item.mat_hang_id: (item.so_luong, item.don_gia_thuc, item.tong_gia)
                     for item in before.chi_tiet
-                ]
+                }
                 calculated = [
                     ReceiptItemCreate(
                         **item.model_dump(), tong_gia=item.so_luong * item.don_gia_thuc
@@ -166,15 +162,14 @@ class PhieuNhapService:
                     for item in payload.chi_tiet
                 ]
                 total = sum(item.so_luong * item.don_gia_thuc for item in payload.chi_tiet)
-                if (
-                    current != [item.model_dump() for item in payload.chi_tiet]
-                    or before.tong_tien != total
-                    or any(
-                        old.tong_gia != new.tong_gia
-                        for old, new in zip(before.chi_tiet, calculated, strict=False)
-                    )
-                ):
+                replacement = {
+                    item.mat_hang_id: (item.so_luong, item.don_gia_thuc, item.tong_gia)
+                    for item in calculated
+                }
+                if current != replacement:
+                    await self._validate_parts([item.mat_hang_id for item in calculated])
                     items = calculated
+                if items is not None or before.tong_tien != total:
                     changes["tong_tien"] = total
             after = before
             if changes or items is not None:
@@ -182,8 +177,8 @@ class PhieuNhapService:
                 await self._audit_change("sua", before, after, actor)
         return self.detail_response(after, request_id)
 
+    # UC-20 Lập, sửa, xóa phiếu nhập nháp — R4, R6; AC-4, AC-5 (specs/use_cases/goods_receipt/UC-20.md)
     async def delete_receipt(self, record_id: int, if_match: str | None, actor: dict) -> None:
-        """UC-20: delete only an unchanged draft, preserving audit/code history."""
         self._require_manager(actor)
         async with self.transaction:
             before = await self._locked_receipt(record_id)
@@ -192,10 +187,10 @@ class PhieuNhapService:
             await self.repository.delete_draft(record_id)
             await self._audit_change("xoa_nhap", before, None, actor)
 
+    # UC-21 Hoàn tất phiếu nhập — R2–R5; AC-2–AC-5 (specs/use_cases/goods_receipt/UC-21.md)
     async def complete_receipt(
         self, record_id: int, if_match: str | None, actor: dict, request_id: str
     ) -> tuple[PhieuNhapActionResponse, str]:
-        """UC-21: complete once; stock, ledger, metadata and audit share one transaction."""
         self._require_manager(actor)
         async with self.transaction:
             before = await self._locked_receipt(record_id)
@@ -203,6 +198,8 @@ class PhieuNhapService:
             postings = await self.repository.receipt_postings(record_id)
             already_posted = before.trang_thai == "hoan_thanh"
             if already_posted:
+                # A retry still carries the draft ETag (AC-3): validate its format only,
+                # then verify the existing postings without adding stock or audit again.
                 expected = {
                     (item.id, item.mat_hang_id, item.so_luong, "nhap_linh_kien")
                     for item in before.chi_tiet
@@ -287,10 +284,10 @@ class PhieuNhapService:
         etag = f'"{sha256(canonical.encode()).hexdigest()}"'
         return PhieuNhapDetailResponse(data=record, meta=ResponseMeta(request_id=request_id)), etag
 
+    # UC-22 Xem phiếu nhập — R1, R2; AC-1, AC-2 (specs/use_cases/goods_receipt/UC-22.md)
     async def list_receipts(
         self, params: PhieuNhapListQuery, actor: dict, request_id: str
     ) -> PhieuNhapListResponse:
-        """UC-22: QLK-only list in one read-only snapshot, including count and lines."""
         self._require_manager(actor)
         await self.repository.begin_read_snapshot()
         result = await self.repository.list_receipts(params)
@@ -305,10 +302,10 @@ class PhieuNhapService:
             ),
         )
 
+    # UC-22 Xem phiếu nhập — R1, R2; AC-2 (specs/use_cases/goods_receipt/UC-22.md)
     async def get_receipt(
         self, record_id: int, actor: dict, request_id: str
     ) -> tuple[PhieuNhapDetailResponse, str]:
-        """UC-22: QLK-only immutable read with a validator for the same snapshot."""
         self._require_manager(actor)
         await self.repository.begin_read_snapshot()
         if record_id > INT_MAX:
@@ -318,10 +315,10 @@ class PhieuNhapService:
             raise NotFoundException(message="Receipt not found")
         return self.detail_response(record, request_id)
 
+    # UC-20 Lập, sửa, xóa phiếu nhập nháp — R1–R3, R6; AC-1–AC-3 (specs/use_cases/goods_receipt/UC-20.md)
     async def create_receipt(
         self, payload: PhieuNhapCreate, actor: dict, request_id: str
     ) -> tuple[PhieuNhapDetailResponse, str]:
-        """UC-20: create a component receipt draft without stock writes."""
         self._require_manager(actor)
         async with self.transaction:
             if payload.ncc_id is not None and not await self.repository.lock_supplier(

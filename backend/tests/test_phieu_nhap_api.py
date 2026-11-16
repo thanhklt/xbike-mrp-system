@@ -191,7 +191,7 @@ async def test_uc20_uc22_gr_ac01_all_routes_use_current_db_role(
         ("duplicate", 422),
         ("empty", 422),
         ("wrong_type", 409),
-        ("missing_item", 404),
+        ("missing_item", 409),
         ("missing_supplier", 404),
         ("actor", 422),
         ("code", 422),
