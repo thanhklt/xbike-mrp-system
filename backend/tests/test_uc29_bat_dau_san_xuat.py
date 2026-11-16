@@ -365,8 +365,9 @@ async def test_item_reference_sql_excludes_order_tables():
     assert session.execute.call_args.args[1] == {"id": 5}
     assert "LenhSanXuat" not in sql and "ChiTietLenhSanXuat" not in sql
     assert set(re.findall(r'FROM "(\w+)"', sql)) == {
-        "Bom", "ChiTietBom", "ChiTietPhieuNhap", "ChiTietPhieuXuat", "ChiTietPhieuDieuChinhKho",
-        "GiaoDichKho", "YeuCauSanXuat", "ChiTietTicketLoiDieuChinh", "MatHang",
+        # v4 init.sql: điều chỉnh kho v3 đã gỡ; giữ hàng và nhu cầu linh kiện là tham chiếu mới.
+        "Bom", "ChiTietBom", "ChiTietPhieuNhap", "ChiTietPhieuXuat",
+        "GiaoDichKho", "YeuCauSanXuat", "GiuHang", "NhuCauLinhKien", "MatHang",
     }
     assert 'WHERE id=:id AND so_luong_ton > 0' in sql
     assert (result.has_bom, result.has_docs, result.has_stock) == (True, True, False)

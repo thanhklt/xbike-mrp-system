@@ -25,6 +25,7 @@ from app.modules.inventory.service import InventoryService
 from app.modules.luu_luong.repository import SqlAlchemyLuuLuongRepository
 from app.modules.luu_luong.service import LuuLuongService
 from app.modules.mat_hang.cache import MatHangCache
+from app.modules.mat_hang.mutation import MatHangMutation
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
 from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
@@ -121,8 +122,9 @@ def get_mat_hang_cache(request: Request) -> MatHangCache:
 
 def get_mat_hang_reader(
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MatHangReader:
-    return MatHangReader(cache)
+    return MatHangReader(cache, build_bom_service(db, cache))
 
 
 def get_mat_hang_service(
@@ -130,20 +132,32 @@ def get_mat_hang_service(
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
     audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> MatHangService:
-    return MatHangService(SqlAlchemyMatHangRepository(db), audit, SqlAlchemyTransaction(db), cache)
+    boms = build_bom_service(db, cache, audit)
+    return MatHangService(SqlAlchemyMatHangRepository(db), audit, boms.mutation, boms)
 
 
 def get_mat_hang_availability(db: AsyncSession) -> MatHangAvailabilityService:
     return MatHangAvailabilityService(SqlAlchemyMatHangRepository(db))
 
 
-def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
+def build_bom_service(
+    db: AsyncSession, cache: MatHangCache, audit: AuditService | None = None
+) -> BomService:
+    """Callers pass the request's AuditService so catalog and formula rows share it."""
     return BomService(
         SqlAlchemyBomRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-        get_mat_hang_availability(db),
+        audit if audit is not None else AuditService(SqlAlchemyAuditRepository(db)),
+        MatHangMutation(SqlAlchemyTransaction(db), cache),
+        SqlAlchemyMatHangRepository(db),
     )
+
+
+def get_bom_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> BomService:
+    return build_bom_service(db, cache, audit)
 
 
 def get_receiving_service(

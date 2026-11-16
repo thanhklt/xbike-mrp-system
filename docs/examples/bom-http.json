@@ -1,0 +1,484 @@
+{
+  "environment": "isolated PostgreSQL v4 test DB; ASGI real app, no application lifespan",
+  "examples": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/bom",
+        "actor_id": null,
+        "body": null,
+        "If-Match": null
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer"
+        },
+        "body": {
+          "error": {
+            "code": "chua_xac_thuc",
+            "message": "Unauthorized",
+            "details": []
+          },
+          "meta": {
+            "request_id": "fd56b937-5ffa-410d-8375-74eb14dfbc86"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/bom",
+        "actor_id": 3,
+        "body": null,
+        "If-Match": null
+      },
+      "response": {
+        "status": 403,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "khong_co_quyen",
+            "message": "You do not have permission to perform this action",
+            "details": []
+          },
+          "meta": {
+            "request_id": "58c431fd-f3d4-4d19-874d-25fe8e5a5e56"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/mat_hang",
+        "actor_id": 1,
+        "body": {
+          "ten_mat_hang": "Demo Bike",
+          "sku": "demo-bike",
+          "loai_mat_hang": "thanh_pham",
+          "don_vi_tinh": "chiec",
+          "don_gia": 1000,
+          "bom": {
+            "chi_tiet": [
+              {
+                "mat_hang_id": 1,
+                "so_luong": 2
+              }
+            ]
+          }
+        },
+        "If-Match": null
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "etag": "\"eab7e02b1c9a698dc7a68d7256622a7ebb413854a990736767c7c0395a72fe1a\"",
+          "location": "/api/v1/mat_hang/3"
+        },
+        "body": {
+          "data": {
+            "id": 3,
+            "ma_mat_hang": "MH-000003",
+            "ten_mat_hang": "Demo Bike",
+            "sku": "demo-bike",
+            "loai_mat_hang": "thanh_pham",
+            "don_vi_tinh": "chiec",
+            "mau_sac": null,
+            "mo_ta": null,
+            "don_gia": 1000,
+            "is_active": true,
+            "so_luong_ton": 0,
+            "ton_kho_updated_at": null
+          },
+          "meta": {
+            "request_id": "1fca3fcc-b488-40e4-8d1c-dd71e5381b57"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/bom?mat_hang_id=3",
+        "actor_id": 2,
+        "body": null,
+        "If-Match": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {},
+        "body": {
+          "data": [
+            {
+              "id": 1,
+              "mat_hang_id": 3,
+              "version": 1,
+              "created_at": "2026-11-14T11:47:19.852420Z",
+              "kich_hoat_gan_nhat_at": "2026-11-14T11:47:19.872281Z",
+              "is_active": true,
+              "da_duoc_su_dung": false,
+              "chi_tiet": [
+                {
+                  "id": 1,
+                  "mat_hang_id": 1,
+                  "so_luong": 2
+                }
+              ]
+            }
+          ],
+          "meta": {
+            "request_id": "25de4975-8caf-4e4a-969f-5fd19541699a",
+            "page": 1,
+            "page_size": 20,
+            "total": 1,
+            "total_pages": 1
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"3e3de51ef686fa461ca4542fe006ff3d08e964b2b462e5814d42a88f7f45c5d3\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "mat_hang_id": 3,
+            "version": 1,
+            "created_at": "2026-11-14T11:47:19.852420Z",
+            "kich_hoat_gan_nhat_at": "2026-11-14T11:47:19.872281Z",
+            "is_active": true,
+            "da_duoc_su_dung": false,
+            "chi_tiet": [
+              {
+                "id": 1,
+                "mat_hang_id": 1,
+                "so_luong": 2
+              }
+            ]
+          },
+          "meta": {
+            "request_id": "67beffdc-d947-4146-a6db-e63315db91b1"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom/1/phien_ban",
+        "actor_id": 1,
+        "body": {
+          "chi_tiet": [
+            {
+              "mat_hang_id": 2,
+              "so_luong": 4
+            }
+          ]
+        },
+        "If-Match": "\"3e3de51ef686fa461ca4542fe006ff3d08e964b2b462e5814d42a88f7f45c5d3\""
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "location": "/api/v1/bom/2",
+          "etag": "\"9f797dab53c568d201ded208d13d6aa40bab8d9b0267414349ad7b090e5735ad\""
+        },
+        "body": {
+          "data": {
+            "id": 2,
+            "mat_hang_id": 3,
+            "version": 2,
+            "created_at": "2026-11-14T11:47:19.913303Z",
+            "kich_hoat_gan_nhat_at": "2026-11-14T11:47:19.929199Z",
+            "is_active": true,
+            "da_duoc_su_dung": false,
+            "chi_tiet": [
+              {
+                "id": 2,
+                "mat_hang_id": 2,
+                "so_luong": 4
+              }
+            ]
+          },
+          "meta": {
+            "request_id": "37fdead8-6606-4382-8087-35dcd547ee57"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": "\"3e3de51ef686fa461ca4542fe006ff3d08e964b2b462e5814d42a88f7f45c5d3\""
+      },
+      "response": {
+        "status": 412,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "du_lieu_da_thay_doi",
+            "message": "Dữ liệu đã thay đổi; hãy tải lại",
+            "details": []
+          },
+          "meta": {
+            "request_id": "b426c667-3629-475f-882c-d4f93fb354f5"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": null
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"7430fde7f98b1de6705b88152d73194a590faf730f82a1a6da1b0caed022f25d\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "mat_hang_id": 3,
+            "version": 1,
+            "created_at": "2026-11-14T11:47:19.852420Z",
+            "kich_hoat_gan_nhat_at": "2026-11-14T11:47:19.872281Z",
+            "is_active": false,
+            "da_duoc_su_dung": false,
+            "chi_tiet": [
+              {
+                "id": 1,
+                "mat_hang_id": 1,
+                "so_luong": 2
+              }
+            ]
+          },
+          "meta": {
+            "request_id": "36a6154c-de07-4be0-9578-613c5e6d5fa2"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom/1/kich_hoat",
+        "actor_id": 1,
+        "body": {},
+        "If-Match": "\"7430fde7f98b1de6705b88152d73194a590faf730f82a1a6da1b0caed022f25d\""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"bfec269b56424c412103db83a8092533c6ec5230df526adb2e2deb0adf5d897c\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "mat_hang_id": 3,
+            "version": 1,
+            "created_at": "2026-11-14T11:47:19.852420Z",
+            "kich_hoat_gan_nhat_at": "2026-11-14T11:47:19.973028Z",
+            "is_active": true,
+            "da_duoc_su_dung": false,
+            "chi_tiet": [
+              {
+                "id": 1,
+                "mat_hang_id": 1,
+                "so_luong": 2
+              }
+            ]
+          },
+          "meta": {
+            "request_id": "7813c6e6-272e-48dc-a1ac-3d37e14e6eb3"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": "\"bfec269b56424c412103db83a8092533c6ec5230df526adb2e2deb0adf5d897c\""
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom",
+        "actor_id": 1,
+        "body": {},
+        "If-Match": null
+      },
+      "response": {
+        "status": 405,
+        "headers": {},
+        "body": {
+          "detail": "Method Not Allowed"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom/1/phien_ban",
+        "actor_id": 1,
+        "body": {
+          "chi_tiet": [
+            {
+              "mat_hang_id": 1,
+              "so_luong": 3
+            }
+          ]
+        },
+        "If-Match": [
+          "\"598ba5da1444d9381db76a84777005412040b1028b58038e3ce99f8c7a07681f\"",
+          "\"stale\""
+        ]
+      },
+      "response": {
+        "status": 412,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "du_lieu_da_thay_doi",
+            "message": "Dữ liệu đã thay đổi; hãy tải lại",
+            "details": []
+          },
+          "meta": {
+            "request_id": "2db36a25-3dda-487f-8fc7-2cdbd50f8d68"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": [
+          "\"598ba5da1444d9381db76a84777005412040b1028b58038e3ce99f8c7a07681f\"",
+          "\"stale\""
+        ]
+      },
+      "response": {
+        "status": 412,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "du_lieu_da_thay_doi",
+            "message": "Dữ liệu đã thay đổi; hãy tải lại",
+            "details": []
+          },
+          "meta": {
+            "request_id": "948e55e2-dc32-4a3d-881f-5555afd4e770"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/bom/1",
+        "actor_id": 1,
+        "body": null,
+        "If-Match": "\"598ba5da1444d9381db76a84777005412040b1028b58038e3ce99f8c7a07681f\""
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom/1/kich_hoat",
+        "actor_id": 1,
+        "body": {},
+        "If-Match": [
+          "\"7f9edf0f818aba7ebf58cd7e3246f09fa2bea81094fa09ef2434bcea240223d4\"",
+          "\"stale\""
+        ]
+      },
+      "response": {
+        "status": 412,
+        "headers": {},
+        "body": {
+          "error": {
+            "code": "du_lieu_da_thay_doi",
+            "message": "Dữ liệu đã thay đổi; hãy tải lại",
+            "details": []
+          },
+          "meta": {
+            "request_id": "1d5e7181-4040-4ffd-8320-f752d11f7788"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/bom/1/kich_hoat",
+        "actor_id": 1,
+        "body": {},
+        "If-Match": "\"7f9edf0f818aba7ebf58cd7e3246f09fa2bea81094fa09ef2434bcea240223d4\""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "etag": "\"1f4f96ff91ef3e370342d4e93d04a6238d930c1ee32f1e0d6648486f0b8725af\""
+        },
+        "body": {
+          "data": {
+            "id": 1,
+            "mat_hang_id": 3,
+            "version": 1,
+            "created_at": "2026-11-14T14:19:33.570693Z",
+            "kich_hoat_gan_nhat_at": "2026-11-14T14:19:33.839543Z",
+            "is_active": true,
+            "da_duoc_su_dung": false,
+            "chi_tiet": [
+              {
+                "id": 1,
+                "mat_hang_id": 1,
+                "so_luong": 2
+              }
+            ]
+          },
+          "meta": {
+            "request_id": "1d1c7e18-ce35-4679-a471-88d85a297a48"
+          }
+        }
+      }
+    }
+  ],
+  "follow_up_captured_at_utc": "2026-11-14T14:19:33.849313+00:00",
+  "follow_up_note": "Actual repaired mutation scope and repeated physical If-Match headers; Authorization omitted."
+}

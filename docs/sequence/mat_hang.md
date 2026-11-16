@@ -1,354 +1,390 @@
 # Sequence — mat_hang
 
-Module sở hữu ORM `MatHang` ánh xạ bảng `"MatHang"`. Có sáu endpoint thực tế; đường dẫn danh mục cũng thuộc router này. Q/N được đọc, admin nhận 403, chỉ Q (`quan_ly`) được ghi.
+Endpoint thực tế; phần phụ thuộc BOM theo [plan đã duyệt](../../specs/use_cases/bom/PLAN.md). Không mô tả toàn bộ catalog như đã đạt UC v4. Role đọc hiện có QLK/NV, ghi QLK; không thay quyền QTV trong tác vụ BOM.
 
-GET trả cả bản ghi hoạt động và bị khóa; `is_active=false` không làm mất khả năng đọc. GET mặt hàng không truy vấn bảng MatHang; auth vẫn đọc DB để kiểm tra danh tính hiện hành. Giá là JSON integer VND không âm, bắt buộc có trong POST và không cho PATCH null. BIGINT hỗ trợ đến 9223372036854775807 VND; không nhận float, bool hoặc chuỗi thay số. Số dư và thời điểm tồn chỉ đọc. Snapshot gồm DTO bất biến, không giữ ORM/session.
+Tạo chỉ nhận hai loại thanh_pham/linh_kien; mã do Identity/trigger cấp. Thành phẩm bắt buộc có `bom.chi_tiet`, không nhận mã/trạng thái/số tồn từ client. Linh kiện không có công thức. MatHangRead giữ các field đang công khai.
 
-Phụ thuộc phiếu xuất v3: `MatHang.don_gia` trong bootstrap SQL/ORM là BIGINT NOT NULL. Khi Q duyệt phiếu xuất, backend đọc giá từ DB dưới khóa FOR UPDATE, không dùng snapshot cache làm giá ghi sổ. Giá đã chốt trên phiếu không đổi khi sửa giá danh mục sau đó. Đây là thay đổi bootstrap cho DB mới/trống, không phải cập nhật database đang chạy.
+GET danh mục/list dùng cache hiện tại; filter/page/sort giữ nguyên (list page 1/20, max 100). GET detail đọc DB qua BomService.item_detail để body và ETag dùng cùng snapshot; tag thành phẩm có ngữ cảnh BOM. PATCH/DELETE so sánh tag của GET mặt hàng, không dùng tag BOM. Cache của instance xử lý được publish sau commit; instance khác theo LISTEN/NOTIFY và reconciliation hiện có.
 
 ## GET /api/v1/danh_muc_mat_hang/
 
-Trả toàn bộ snapshot, không phân trang; meta.total và meta.request_id.
+[PNG](assets/mat_hang/mat-hang-1.png). Quyền QLK/NV.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
-        A-->>C: 403
-    end
-    R->>A: Yêu cầu Q/N, admin nhận 403
-    alt Không có vai trò được phép
-        A-->>C: 403
-    end
-    R->>R: Validate path/query (422 nếu không hợp lệ)
-    R->>S: danh_muc()
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangReader
     participant K as MatHangCache
-    S->>K: Chụp một snapshot
-    alt Chưa nạp hoặc đồng bộ lỗi
-        K-->>C: 503 danh_muc_chua_san_sang
-    else Snapshot sẵn sàng
-        K-->>S: DTO bất biến, gồm mọi trạng thái
-        S->>S: Lọc / tra ID / tính metadata
-        alt ID không tồn tại hoặc filter/sort không hợp lệ
-            S-->>C: 404 (chi tiết) hoặc 422 (list)
-        else Thành công
-            S-->>R: Response DTO
-            R-->>C: 200 + data/meta.request_id
+    participant DB as PostgreSQL
+    C->>R: GET /api/v1/danh_muc_mat_hang/
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
+        A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
+    end
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: danh_muc
+        S->>K: snapshot, lọc/page/sort nếu là list
+        alt cache unavailable
+            K-->>C: 503
+        else dữ liệu sẵn sàng
+            K-->>S: immutable records
+            S-->>R: data + meta
+            R-->>C: 200
         end
     end
 ```
 
 ## GET /api/v1/mat_hang
 
-Tìm mã/tên/SKU, lọc trạng thái chỉ khi được gửi; sort whitelist có ID làm tie-break; meta phân trang. Không lọc is_active mặc định.
+[PNG](assets/mat_hang/mat-hang-2.png). Quyền QLK/NV.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
-        A-->>C: 403
-    end
-    R->>A: Yêu cầu Q/N, admin nhận 403
-    alt Không có vai trò được phép
-        A-->>C: 403
-    end
-    R->>R: Validate path/query (422 nếu không hợp lệ)
-    R->>S: list_mat_hang(filters, sort, page)
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangReader
     participant K as MatHangCache
-    S->>K: Chụp một snapshot
-    alt Chưa nạp hoặc đồng bộ lỗi
-        K-->>C: 503 danh_muc_chua_san_sang
-    else Snapshot sẵn sàng
-        K-->>S: DTO bất biến, gồm mọi trạng thái
-        S->>S: Lọc / tra ID / tính metadata
-        alt ID không tồn tại hoặc filter/sort không hợp lệ
-            S-->>C: 404 (chi tiết) hoặc 422 (list)
-        else Thành công
-            S-->>R: Response DTO
-            R-->>C: 200 + data/meta.request_id
+    participant DB as PostgreSQL
+    C->>R: GET /api/v1/mat_hang
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
+        A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
+    end
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: list_mat_hang
+        S->>K: snapshot, lọc/page/sort nếu là list
+        alt cache unavailable
+            K-->>C: 503
+        else dữ liệu sẵn sàng
+            K-->>S: immutable records
+            S-->>R: data + meta
+            R-->>C: 200
         end
     end
 ```
 
 ## GET /api/v1/mat_hang/{id}
 
-Trả envelope data/meta và ETag; ID không có trong snapshot trả 404, kể cả khi client biết ID từ nguồn khác.
+[PNG](assets/mat_hang/mat-hang-3.png). Quyền QLK/NV.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangReader
+    participant B as SqlAlchemyBomRepository
+    participant DB as PostgreSQL
+    participant BS as BomService
+    C->>R: GET /api/v1/mat_hang/{id}
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
         A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
     end
-    R->>A: Yêu cầu Q/N, admin nhận 403
-    alt Không có vai trò được phép
-        A-->>C: 403
-    end
-    R->>R: Validate path/query (422 nếu không hợp lệ)
-    R->>S: get_mat_hang(id)
-    participant K as MatHangCache
-    S->>K: Chụp một snapshot
-    alt Chưa nạp hoặc đồng bộ lỗi
-        K-->>C: 503 danh_muc_chua_san_sang
-    else Snapshot sẵn sàng
-        K-->>S: DTO bất biến, gồm mọi trạng thái
-        S->>S: Lọc / tra ID / tính metadata và ETag
-        alt ID không tồn tại hoặc filter/sort không hợp lệ
-            S-->>C: 404 (chi tiết) hoặc 422 (list)
-        else Thành công
-            S-->>R: Response DTO
-            R-->>C: 200 + data/meta.request_id + ETag
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: get_mat_hang
+        S->>BS: item_detail(id)
+        BS->>B: context(id)
+        B->>DB: một SELECT item + version state
+        DB-->>B: snapshot
+        B-->>BS: detached context
+        alt không tồn tại
+            BS-->>C: 404
+        else tồn tại
+            BS-->>S: item và strong ETag
+            S-->>R: data, ETag
+            R-->>C: 200 + ETag
         end
     end
 ```
 
 ## POST /api/v1/mat_hang
 
-Tên bắt buộc không trắng, mã/SKU duy nhất; số dư server mặc định 0.
+[PNG](assets/mat_hang/mat-hang-4.png). Quyền QLK. UC-10/16: tạo thành phẩm và công thức cùng lúc.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
-        A-->>C: 403
-    end
-    R->>A: Yêu cầu quan_ly
-    alt Admin / Nhân viên
-        A-->>C: 403
-    end
-    R->>R: Validate input (422)
-    R->>S: create_mat_hang(payload, actor)
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangService
+    participant B as SqlAlchemyBomRepository
+    participant I as SqlAlchemyMatHangRepository
+    participant M as MatHangMutation
+    participant T as SqlAlchemyTransaction
     participant K as MatHangCache
-    participant U as AuditService
-    S->>K: Lấy khóa công bố, yêu cầu snapshot sẵn sàng
-    alt Cache không sẵn sàng
-        K-->>C: 503
+    participant AU as AuditService
+    participant AR as SqlAlchemyAuditRepository
+    participant DB as PostgreSQL
+    participant BS as BomService
+    C->>R: POST /api/v1/mat_hang
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
+        A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
     end
-    S->>D: Mở transaction dùng chung theo request
-    S->>D: Kiểm tra mã/SKU, INSERT MatHang
-    alt Không có ID / thiếu If-Match / ETag cũ
-        D-->>S: Dữ liệu hiện hành
-        S->>D: ROLLBACK
-        S-->>C: 404 / 428 / 412 (PATCH, DELETE)
-    else Trùng mã/SKU hoặc vi phạm bất biến
-        S->>D: ROLLBACK
-        S-->>C: 409
-    else Hợp lệ
-        S->>D: Flush thay đổi
-        opt Có thao tác cần ghi lịch sử
-            S->>U: append(tao, snapshot trước/sau)
-            U->>D: Thêm LichSuThaoTac cùng transaction
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: create_mat_hang
+        S->>S: require_manager
+        S->>M: scope()
+        M->>K: lock + snapshot
+        M->>T: transaction chung
+        S->>BS: lock_catalog
+        BS->>B: advisory lock
+        B->>DB: pg_advisory_xact_lock
+        alt không thỏa quyền / dữ liệu / trạng thái
+            S-->>R: 403 / 404 / 409 / 422
+        else điều kiện hợp lệ
+            S->>I: add (exclude bom, không mã client)
+            I->>DB: INSERT MatHang, trigger cấp mã, refresh
+            opt loại thanh_pham
+                S->>BS: create_initial_formula (UC-16)
+                BS->>I: khóa và kiểm tra linh kiện
+                BS->>B: INSERT Bom v1 + ChiTietBom
+                B->>DB: flush (không commit)
+                BS->>AU: audit tạo công thức
+            end
+            S->>AU: audit tạo mặt hàng
+            AU->>AR: append
+            AR->>DB: session.add, không commit
         end
-        S->>K: Chuẩn bị snapshot mới, chưa công bố
-        alt Audit / constraint / commit lỗi
-            S->>D: ROLLBACK
-            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
-            S-->>C: 409 (constraint) hoặc 500
-        else Commit thành công
-            S->>D: COMMIT
-            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
-            S->>K: Công bố snapshot trước khi trả response
-            S-->>R: DTO / hoàn tất
-            R-->>C: 201 + Location + ETag + data/meta
+        alt ghi/audit/commit lỗi
+            T->>DB: ROLLBACK
+            M->>K: không publish / unavailable nếu commit chưa rõ
+            R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
+        else thành công
+            M->>K: prepare snapshot
+            T->>DB: COMMIT một lần
+            M->>K: publish
+            S-->>R: kết quả
+            R-->>C: 201 + Location + ETag
         end
     end
 ```
 
 ## PATCH /api/v1/mat_hang/{id}
 
-PATCH bỏ qua field giữ nguyên; field NOT NULL không được gửi null; giữ các field bất biến sau tham chiếu.
+[PNG](assets/mat_hang/mat-hang-5.png). Quyền QLK. Phần UC-12/18/19 liên quan trạng thái công thức.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
-        A-->>C: 403
-    end
-    R->>A: Yêu cầu quan_ly
-    alt Admin / Nhân viên
-        A-->>C: 403
-    end
-    R->>R: Validate input (422)
-    R->>S: patch_mat_hang(id, payload, If-Match, actor)
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangService
+    participant B as SqlAlchemyBomRepository
+    participant I as SqlAlchemyMatHangRepository
+    participant M as MatHangMutation
+    participant T as SqlAlchemyTransaction
     participant K as MatHangCache
-    participant U as AuditService
-    S->>K: Lấy khóa công bố, yêu cầu snapshot sẵn sàng
-    alt Cache không sẵn sàng
-        K-->>C: 503
+    participant AU as AuditService
+    participant AR as SqlAlchemyAuditRepository
+    participant DB as PostgreSQL
+    participant BS as BomService
+    C->>R: PATCH /api/v1/mat_hang/{id}
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
+        A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
     end
-    S->>D: Mở transaction dùng chung theo request
-    S->>D: SELECT MatHang FOR UPDATE, đọc lại ETag
-    alt Không có ID / thiếu If-Match / ETag cũ
-        D-->>S: Dữ liệu hiện hành
-        S->>D: ROLLBACK
-        S-->>C: 404 / 428 / 412 (PATCH, DELETE)
-    else Trùng mã/SKU hoặc vi phạm bất biến
-        S->>D: ROLLBACK
-        S-->>C: 409
-    else Hợp lệ
-        S->>D: Flush thay đổi
-        opt Có thao tác cần ghi lịch sử
-            S->>U: append(sua, snapshot trước/sau)
-            U->>D: Thêm LichSuThaoTac cùng transaction
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: patch_mat_hang
+        S->>S: require_manager
+        S->>M: scope()
+        M->>K: lock + snapshot
+        M->>T: transaction chung
+        S->>BS: lock_catalog
+        BS->>B: advisory lock
+        B->>DB: pg_advisory_xact_lock
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
+        BS->>B: khóa versions / context
+        B->>DB: đọc snapshot
+        S->>S: so If-Match (428/412)
+        alt không thỏa quyền / dữ liệu / trạng thái
+            S-->>R: 403 / 404 / 409 / 422
+        else điều kiện hợp lệ
+            S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
+            BS->>B: ngừng / dùng version gần kích hoạt nhất
+            B->>DB: UPDATE Bom, không sửa định mức
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
+            I->>DB: UPDATE MatHang
+            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+            S->>I: update thuộc tính mô tả nếu có, kiểm tra tham chiếu ĐVT
+            I->>DB: SELECT references / UPDATE fields
+            S->>AU: audit sửa nếu có thuộc tính gửi sửa
+            AU->>AR: append
+            AR->>DB: session.add, không commit
         end
-        S->>K: Chuẩn bị snapshot mới, chưa công bố
-        alt Audit / constraint / commit lỗi
-            S->>D: ROLLBACK
-            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
-            S-->>C: 409 (constraint) hoặc 500
-        else Commit thành công
-            S->>D: COMMIT
-            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
-            S->>K: Công bố snapshot trước khi trả response
-            S-->>R: DTO / hoàn tất
-            R-->>C: 200 + ETag + data/meta
+        alt ghi/audit/commit lỗi
+            T->>DB: ROLLBACK
+            M->>K: không publish / unavailable nếu commit chưa rõ
+            R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
+        else thành công
+            M->>K: prepare snapshot
+            T->>DB: COMMIT một lần
+            M->>K: publish
+            S-->>R: kết quả
+            R-->>C: 200 + ETag
         end
     end
 ```
 
 ## DELETE /api/v1/mat_hang/{id}
 
-Chỉ UPDATE is_active=false; cho phép có BOM/chứng từ/tồn dương. Không DELETE SQL hoặc sửa số dư. Nếu đã false, ETag hiện hành trả 204 và không thêm audit.
+[PNG](assets/mat_hang/mat-hang-6.png). Quyền QLK. Phần UC-12/18/19 liên quan trạng thái công thức.
 
 ```mermaid
 sequenceDiagram
-actor C as Client
-    participant R as Router
-    participant A as Auth/role dependencies
-    participant S as Service
-    participant D as Repository/PostgreSQL
-    C->>R: Request + Bearer JWT
-    R->>A: Kiểm tra JWT, tài khoản và vai trò hiện hành
-    A->>D: Đọc danh tính hiện hành qua public nhân viên service
-    alt Chưa xác thực / token lỗi
-        A-->>C: 401
-    else Tài khoản bị khóa
-        A-->>C: 403
-    end
-    R->>A: Yêu cầu quan_ly
-    alt Admin / Nhân viên
-        A-->>C: 403
-    end
-    R->>R: Validate input (422)
-    R->>S: delete_mat_hang(id, If-Match, actor)
+    participant C as Client
+    participant R as Router + schema
+    participant A as AuthService + role dependency
+    participant N as NhanVienService
+    participant NR as SqlAlchemyNhanVienRepository
+    participant S as MatHangService
+    participant B as SqlAlchemyBomRepository
+    participant I as SqlAlchemyMatHangRepository
+    participant M as MatHangMutation
+    participant T as SqlAlchemyTransaction
     participant K as MatHangCache
-    participant U as AuditService
-    S->>K: Lấy khóa công bố, yêu cầu snapshot sẵn sàng
-    alt Cache không sẵn sàng
-        K-->>C: 503
+    participant AU as AuditService
+    participant AR as SqlAlchemyAuditRepository
+    participant DB as PostgreSQL
+    participant BS as BomService
+    C->>R: DELETE /api/v1/mat_hang/{id}
+    R->>A: get_current_user_payload / require_roles
+    A->>N: get_auth_identity (trạng thái, role từ DB, pwdv)
+    N->>NR: get_credentials_by_id
+    NR->>DB: SELECT NhanVien + VaiTro
+    DB-->>NR: credentials
+    NR-->>N: identity
+    N-->>A: identity
+    alt token thiếu / sai / hết hạn / credential cũ
+        A-->>C: 401 + WWW-Authenticate
+    else tài khoản khóa / role không được phép
+        A-->>C: 403
+    else hợp lệ
+        A-->>R: actor
     end
-    S->>D: Mở transaction dùng chung theo request
-    S->>D: SELECT MatHang FOR UPDATE, đọc lại ETag
-    alt Không có ID / thiếu If-Match / ETag cũ
-        D-->>S: Dữ liệu hiện hành
-        S->>D: ROLLBACK
-        S-->>C: 404 / 428 / 412 (PATCH, DELETE)
-    else Trùng mã/SKU hoặc vi phạm bất biến
-        S->>D: ROLLBACK
-        S-->>C: 409
-    else Hợp lệ
-        S->>D: Flush thay đổi is_active=false
-        opt Có thao tác cần ghi lịch sử
-            S->>U: append(vo_hieu_hoa, snapshot trước/sau)
-            U->>D: Thêm LichSuThaoTac cùng transaction
+    R->>R: Schema/query validation
+    alt input không hợp lệ
+        R-->>C: 422
+    else hợp lệ
+        R->>S: delete_mat_hang
+        S->>S: require_manager
+        S->>M: scope()
+        M->>K: lock + snapshot
+        M->>T: transaction chung
+        S->>BS: lock_catalog
+        BS->>B: advisory lock
+        B->>DB: pg_advisory_xact_lock
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
+        BS->>B: khóa versions / context
+        B->>DB: đọc snapshot
+        S->>S: so If-Match (428/412)
+        alt không thỏa quyền / dữ liệu / trạng thái
+            S-->>R: 403 / 404 / 409 / 422
+        else điều kiện hợp lệ
+            S->>BS: stop_for_item_in_transaction (luôn gọi; bỏ qua nếu đã ngừng và khớp công thức)
+            BS->>B: ngừng / dùng version gần kích hoạt nhất
+            B->>DB: UPDATE Bom, không sửa định mức
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
+            I->>DB: UPDATE MatHang
+            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+            AU->>AR: append
+            AR->>DB: session.add, không commit
         end
-        S->>K: Chuẩn bị snapshot mới, chưa công bố
-        alt Audit / constraint / commit lỗi
-            S->>D: ROLLBACK
-            Note over S,K: Không công bố#59; commit không xác định thì cache unavailable
-            S-->>C: 409 (constraint) hoặc 500
-        else Commit thành công
-            S->>D: COMMIT
-            D-->>S: Thành công#59; trigger phát NOTIFY sau commit
-            S->>K: Công bố snapshot trước khi trả response
-            S-->>R: DTO / hoàn tất
-            R-->>C: 204 không body
+        alt ghi/audit/commit lỗi
+            T->>DB: ROLLBACK
+            M->>K: không publish / unavailable nếu commit chưa rõ
+            R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
+        else thành công
+            M->>K: prepare snapshot
+            T->>DB: COMMIT một lần
+            M->>K: publish
+            S-->>R: kết quả
+            R-->>C: 204 rỗng
         end
     end
 ```
-
-## Startup, đồng bộ và shutdown
-
-Listener riêng đăng ký trước khi đọc dữ liệu; refresh dùng session ngắn riêng. Tín hiệu được gom bằng Event; tín hiệu đến trong lúc refresh sẽ kích hoạt lần đọc kế tiếp. Khóa refresh dùng cùng thứ tự với ghi cục bộ để dữ liệu đọc trước không ghi đè commit mới. GET giữ snapshot cũ nguyên vẹn trong khi một lần refresh bình thường đang chạy.
-
-```mermaid
-sequenceDiagram
-participant L as FastAPI lifespan
-    participant W as MatHangSynchronizer
-    participant K as MatHangCache
-    participant D as PostgreSQL
-    L->>W: start()
-    W->>D: Kết nối riêng, LISTEN mat_hang_changed
-    W->>D: Session riêng SELECT toàn bộ MatHang
-    W->>K: Công bố snapshot đầu tiên
-    alt Startup lỗi
-        W->>D: Đóng listener
-        W-->>L: Startup thất bại, không phục vụ danh mục rỗng giả
-    else Đã nạp
-        W-->>L: Cho ứng dụng phục vụ
-        loop NOTIFY hoặc mỗi 30 giây
-            D-->>W: Tín hiệu sau commit / timer
-            W->>K: Lấy khóa refresh
-            W->>D: Đọc dữ liệu đã commit
-            W->>K: Thay snapshot nguyên tử
-        end
-        alt Mất listener hoặc refresh lỗi
-            W->>K: Đánh dấu unavailable (GET trả 503)
-            W->>D: Reconnect có backoff, LISTEN lại và full reload
-            W->>K: Khôi phục snapshot khi nạp thành công
-        end
-        L->>W: stop()
-        W->>W: Hủy và đợi worker
-        W->>D: Đóng listener
-        W->>K: Đánh dấu unavailable
-    end
-```
-
-NOTIFY không lưu bền cho client đã mất kết nối; full reload khi reconnect và đối soát định kỳ bù khoảng trống này. Tính GET thấy ngay sau API ghi được kiểm chứng cho một worker. Nhiều worker có snapshot riêng, đồng bộ bất đồng bộ; chưa cam kết tính thấy-ngay giữa các worker.
-
-Các module dùng ton_kho/ORM cũ chưa chuyển đổi. Public MatHangAvailabilityService kiểm tra/khóa DB khi tạo tài liệu, không dùng cache làm quyết định ghi; xem sequence các module liên quan. Chưa có endpoint yêu cầu sản xuất theo contract và không mô tả nó như đã triển khai.
