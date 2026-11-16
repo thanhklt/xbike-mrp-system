@@ -24,6 +24,7 @@ from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
 from app.modules.phieu_nhap.router import router as phieu_nhap_router
 from app.modules.phieu_xuat.router import router as phieu_xuat_router
+from app.modules.reporting.router import router as reporting_router
 from app.modules.san_xuat.router import (
     chung_tu_hoan_thanh_router,
     nhu_cau_bo_sung_router,
@@ -120,6 +121,7 @@ app.include_router(vai_tro_router, prefix=api_v1_prefix)
 app.include_router(nha_cung_cap_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
 app.include_router(inventory_router, prefix=api_v1_prefix)
+app.include_router(reporting_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(phieu_nhap_router, prefix=api_v1_prefix)
 app.include_router(phieu_xuat_router, prefix=api_v1_prefix)

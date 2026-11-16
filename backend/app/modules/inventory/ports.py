@@ -4,15 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, Protocol
 
-from app.modules.inventory.schemas import StockLevelResponse, StockMovementResponse
+from app.modules.inventory.schemas import StockLevelResponse
 from app.shared.pagination import PageParams
 from app.shared.records import RecordPage
 
 
 class InventoryRepository(Protocol):
     async def list_stock(self, params: PageParams) -> RecordPage[StockLevelResponse]: ...
-
-    async def list_movements(self, params: PageParams) -> RecordPage[StockMovementResponse]: ...
 
 
 class StockReceiptLine(NamedTuple):

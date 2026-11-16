@@ -19,7 +19,7 @@ const navigation = {
         ["/kho/mat-hang", "Mặt hàng và tồn kho"],
         ["/kho/nha-cung-cap", "Nhà cung cấp"],
         ["/kho/phieu-nhap", "Phiếu nhập kho"],
-        ["/kho/giao-dich", "Giao dịch kho"],
+        ["/kho/giao-dich", "Lịch sử biến động kho"],
       ],
     },
     {
@@ -37,7 +37,7 @@ const navigation = {
       items: [
         ["/kho/dieu-chinh", "Điều chỉnh kho"],
         ["/kho/ticket", "Ticket sự cố"],
-        ["/kho/thong-ke", "Thống kê nhập – xuất – tồn"],
+        ["/kho/thong-ke", "Báo cáo nhập – xuất – tồn"],
         ["/kho/lich-su", "Lịch sử thao tác"],
       ],
     },

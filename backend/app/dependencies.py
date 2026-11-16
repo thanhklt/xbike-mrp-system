@@ -36,6 +36,8 @@ from app.modules.phieu_nhap.repository import SqlAlchemyPhieuNhapRepository
 from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatService
+from app.modules.reporting.repository import SqlAlchemyBaoCaoRepository
+from app.modules.reporting.service import BaoCaoService
 from app.modules.san_xuat.repository import (
     SqlAlchemyYeuCauSanXuatRepository,
 )
@@ -69,6 +71,10 @@ def get_pagination_params(
 
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db)]) -> AuditService:
     return AuditService(SqlAlchemyAuditRepository(db))
+
+
+def get_bao_cao_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BaoCaoService:
+    return BaoCaoService(SqlAlchemyBaoCaoRepository(db))
 
 
 def get_luu_luong_service(db: Annotated[AsyncSession, Depends(get_db)]) -> LuuLuongService:

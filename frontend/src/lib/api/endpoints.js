@@ -16,4 +16,6 @@ export const API = {
   tickets: "/ticket_loi_dieu_chinh",
   audit: "/audit",
   traffic: "/luu_luong_truy_cap",
+  inventoryReport: "/bao_cao/nhap_xuat_ton",
+  stockMovements: "/bao_cao/bien_dong_kho",
 };

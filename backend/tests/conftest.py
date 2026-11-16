@@ -1,9 +1,15 @@
-"""Opt-in goods-issue/receipt fixtures; never connect to the application DB."""
+"""Fixtures for goods flows and opt-in reporting/audit PostgreSQL checks.
+
+Goods flows keep their dedicated test database guards. Reporting/audit uses
+TEST_DATABASE_URL: postgres_database rolls back, while committed_postgres_database
+persists setup and caller commits as documented by those tests.
+"""
 
 import os
 import re
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -12,13 +18,109 @@ from uuid import uuid4
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.database import get_db
 from app.core.security import create_access_token, password_version
 from app.main import app
+
+
+async def _add_employee(raw, role="quan_ly", prefix="postgres"):
+    role_id = await raw.fetchval('SELECT id FROM "VaiTro" WHERE ma_vai_tro=$1', role)
+    assert role_id is not None, f"Existing database is missing seed role {role}"
+    return await raw.fetchrow(
+        """
+        INSERT INTO "NhanVien" (vai_tro_id, ten_dang_nhap, mat_khau)
+        VALUES ($1, $2, 'test-credential-hash') RETURNING id, ma_nhan_vien
+    """,
+        role_id,
+        f"{prefix}_{uuid4().hex}",
+    )
+
+
+@pytest.fixture
+async def postgres_engine():
+    configured = os.environ.get("TEST_DATABASE_URL")
+    if not configured:
+        pytest.skip("Local PostgreSQL not verified: TEST_DATABASE_URL is required")
+    url = make_url(configured)
+    if url.drivername != "postgresql+asyncpg" or url.host not in ("localhost", "127.0.0.1"):
+        pytest.fail("TEST_DATABASE_URL must use postgresql+asyncpg on localhost/127.0.0.1")
+    engine = create_async_engine(url, echo=False)
+    statements = []
+
+    def record_statement(_conn, _cursor, statement, _params, _context, _many):
+        # Preserve SQL read/write assertions without counting fixture savepoints.
+        if (
+            not statement.lstrip()
+            .upper()
+            .startswith(("SAVEPOINT", "RELEASE SAVEPOINT", "ROLLBACK TO SAVEPOINT"))
+        ):
+            statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        yield SimpleNamespace(engine=engine, statements=statements)
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture
+async def postgres_database(postgres_engine):
+    async with postgres_engine.engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            # begin() is lazy: start asyncpg's transaction before raw.transaction()
+            # so raw nested transactions and ORM commits only release savepoints.
+            await connection.exec_driver_sql("SELECT 1")
+            raw = (await connection.get_raw_connection()).driver_connection
+            factory = async_sessionmaker(
+                bind=connection,
+                join_transaction_mode="create_savepoint",
+                expire_on_commit=False,
+                autoflush=False,
+            )
+            async with factory() as session:
+                yield SimpleNamespace(
+                    engine=postgres_engine.engine,
+                    connection=connection,
+                    raw=raw,
+                    session=session,
+                    factory=factory,
+                    statements=postgres_engine.statements,
+                    add_employee=partial(_add_employee, raw),
+                )
+        finally:
+            await transaction.rollback()
+
+
+@pytest.fixture
+async def committed_postgres_database(postgres_engine):
+    """Real commits for independent-session visibility and HTTP auth/read tests.
+
+    Callers commit their raw setup explicitly. Rows intentionally remain in the
+    existing DB, including immutable audit entries; there is no delete cleanup.
+    """
+    async with postgres_engine.engine.connect() as connection:
+        await connection.exec_driver_sql("SELECT 1")
+        raw = (await connection.get_raw_connection()).driver_connection
+        factory = async_sessionmaker(
+            postgres_engine.engine,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+        async with factory() as session:
+            yield SimpleNamespace(
+                engine=postgres_engine.engine,
+                connection=connection,
+                raw=raw,
+                session=session,
+                factory=factory,
+                statements=postgres_engine.statements,
+                add_employee=partial(_add_employee, raw),
+            )
 
 
 @pytest.fixture
@@ -39,10 +141,15 @@ async def receipt_api():
     from app.shared.records import RecordPage
 
     data = {
-        "receipts": {}, "stock": {1: 10, 2: 20}, "ledger": [], "audit": [],
-        "parts": {1: ReceiptPart(1, "linh_kien", True),
-                  2: ReceiptPart(2, "linh_kien", True),
-                  3: ReceiptPart(3, "thanh_pham", True)},
+        "receipts": {},
+        "stock": {1: 10, 2: 20},
+        "ledger": [],
+        "audit": [],
+        "parts": {
+            1: ReceiptPart(1, "linh_kien", True),
+            2: ReceiptPart(2, "linh_kien", True),
+            3: ReceiptPart(3, "thanh_pham", True),
+        },
         "production": {7: {"trang_thai": "cho_bo_sung_linh_kien"}},
     }
     pending = None
@@ -75,15 +182,24 @@ async def receipt_api():
     async def add_draft(payload, *, created_at):
         record_id = max(current()["receipts"], default=0) + 1
         record = PhieuNhapRead(
-            id=record_id, ma_phieu_nhap=f"PN-202611-{record_id:06d}",
+            id=record_id,
+            ma_phieu_nhap=f"PN-202611-{record_id:06d}",
             nha_cung_cap={
-                "id": payload.ncc_id, "ma_ncc": f"NCC-{payload.ncc_id:06d}",
-                "ten_ncc": "Fixture supplier", "so_dien_thoai": "0900000000",
-                "dia_chi": "Fixture address", "phuong": "Fixture ward", "tinh": "Fixture province",
+                "id": payload.ncc_id,
+                "ma_ncc": f"NCC-{payload.ncc_id:06d}",
+                "ten_ncc": "Fixture supplier",
+                "so_dien_thoai": "0900000000",
+                "dia_chi": "Fixture address",
+                "phuong": "Fixture ward",
+                "tinh": "Fixture province",
             },
-            **payload.model_dump(exclude={"items"}), created_at=created_at,
-            updated_at=created_at, hoan_thanh_at=None, nguoi_hoan_thanh_id=None,
-            phien_ban=1, items=[
+            **payload.model_dump(exclude={"items"}),
+            created_at=created_at,
+            updated_at=created_at,
+            hoan_thanh_at=None,
+            nguoi_hoan_thanh_id=None,
+            phien_ban=1,
+            items=[
                 {"id": record_id * 100 + index, **item.model_dump()}
                 for index, item in enumerate(payload.items, 1)
             ],
@@ -93,8 +209,11 @@ async def receipt_api():
 
     async def patch_draft(record_id, changes, items):
         before = current()["receipts"][record_id]
-        updates = {**changes, "updated_at": datetime.now(timezone.utc),
-                   "phien_ban": before.phien_ban + 1}
+        updates = {
+            **changes,
+            "updated_at": datetime.now(timezone.utc),
+            "phien_ban": before.phien_ban + 1,
+        }
         if items is not None:
             updates["chi_tiet"] = [
                 type(before.chi_tiet[0])(id=record_id * 100 + index, **item.model_dump())
@@ -111,26 +230,40 @@ async def receipt_api():
         before = current()["receipts"][record_id]
         if before.trang_thai != "nhap" or before.phien_ban != expected_version:
             return None
-        after = before.model_copy(update={
-            "trang_thai": "hoan_thanh", "hoan_thanh_at": completed_at,
-            "nguoi_hoan_thanh_id": actor_id, "updated_at": completed_at,
-            "phien_ban": expected_version + 1,
-        })
+        after = before.model_copy(
+            update={
+                "trang_thai": "hoan_thanh",
+                "hoan_thanh_at": completed_at,
+                "nguoi_hoan_thanh_id": actor_id,
+                "updated_at": completed_at,
+                "phien_ban": expected_version + 1,
+            }
+        )
         current()["receipts"][record_id] = after
         return after
 
     async def postings(record_id):
         receipt = current()["receipts"][record_id]
         ids = {line.id for line in receipt.chi_tiet}
-        return [ReceiptPosting(row["id"], row["source"], row["item"], row["quantity"],
-                               "nhap_linh_kien")
-                for row in current()["ledger"] if row["source"] in ids]
+        return [
+            ReceiptPosting(row["id"], row["source"], row["item"], row["quantity"], "nhap_linh_kien")
+            for row in current()["ledger"]
+            if row["source"] in ids
+        ]
 
     async def lock_stock(ids):
-        return [ReceiptStock(key, current()["parts"][key].loai_mat_hang,
-                             current()["parts"][key].is_active,
-                             current()["stock"][key], 0, current()["stock"][key])
-                for key in sorted(ids) if key in current()["parts"] and key in current()["stock"]]
+        return [
+            ReceiptStock(
+                key,
+                current()["parts"][key].loai_mat_hang,
+                current()["parts"][key].is_active,
+                current()["stock"][key],
+                0,
+                current()["stock"][key],
+            )
+            for key in sorted(ids)
+            if key in current()["parts"] and key in current()["stock"]
+        ]
 
     async def scalar(statement, params):
         assert pending is not None
@@ -141,9 +274,11 @@ async def receipt_api():
             return current()["stock"][params["id"]]
         assert sql.startswith('INSERT INTO "GiaoDichKho"')
         assert "'nhap_linh_kien'" in sql and "so_luong_ton_sau" in sql
-        assert any(record.trang_thai == "hoan_thanh"
-                   and any(line.id == params["source"] for line in record.chi_tiet)
-                   for record in current()["receipts"].values())
+        assert any(
+            record.trang_thai == "hoan_thanh"
+            and any(line.id == params["source"] for line in record.chi_tiet)
+            for record in current()["receipts"].values()
+        )
         movement_id = len(current()["ledger"]) + 1
         current()["ledger"].append({"id": movement_id, **params})
         return movement_id
@@ -192,14 +327,26 @@ async def receipt_api():
 
     test_app.dependency_overrides[get_current_user_payload] = actor
     test_app.dependency_overrides[get_receiving_service] = lambda: service
-    payload = {"ncc_id": 1, "ngay_nhap": "2026-11-16", "ghi_chu": "Draft",
-               "chi_tiet": [{"mat_hang_id": 1, "so_luong": 50, "don_gia_thuc": 100}]}
+    payload = {
+        "ncc_id": 1,
+        "ngay_nhap": "2026-11-16",
+        "ghi_chu": "Draft",
+        "chi_tiet": [{"mat_hang_id": 1, "so_luong": 50, "don_gia_thuc": 100}],
+    }
     async with AsyncClient(
         transport=ASGITransport(test_app, raise_app_exceptions=False), base_url="http://test"
     ) as client:
-        yield SimpleNamespace(client=client, data=data, repo=repository, inventory=inventory,
-                              session=session, audit=audit, service=service, payload=payload,
-                              sql_calls=sql_calls)
+        yield SimpleNamespace(
+            client=client,
+            data=data,
+            repo=repository,
+            inventory=inventory,
+            session=session,
+            audit=audit,
+            service=service,
+            payload=payload,
+            sql_calls=sql_calls,
+        )
 
 
 @pytest.fixture
