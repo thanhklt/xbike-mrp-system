@@ -1,10 +1,13 @@
 import { ROLE_LABELS } from "../../lib/format.js";
 
 const ACTION_LABELS = {
+  dang_nhap: "Đăng nhập",
   tao: "Tạo",
   sua: "Cập nhật",
   xoa_nhap: "Xóa nháp",
   gui: "Gửi",
+  gui_lai: "Gửi lại",
+  kiem_tra: "Kiểm tra",
   bat_dau: "Bắt đầu",
   duyet: "Duyệt",
   tu_choi: "Từ chối",
@@ -23,6 +26,11 @@ const ACTION_LABELS = {
   mo_khoa: "Mở khóa",
   doi_vai_tro: "Đổi vai trò",
   doi_mat_khau: "Đổi mật khẩu",
+  // Mã thao tác dữ liệu nền v4 (UC-43 D5).
+  ngung: "Ngừng",
+  dung_lai: "Dùng lại",
+  tao_phien_ban: "Tạo phiên bản",
+  dung_lai_phien_ban: "Dùng lại phiên bản",
 };
 
 const ACCOUNT_ACTIONS_V4 = {
@@ -67,6 +75,14 @@ const PROFILE_FIELDS = [
   ["ngay_vao_lam", "ngày vào làm"],
   ["he_so_luong", "hệ số lương"],
 ];
+
+export function auditActionLabel(code) {
+  return ACCOUNT_ACTIONS_V4[code] || ACTION_LABELS[code] || code;
+}
+
+export function auditObjectLabel(code) {
+  return OBJECT_LABELS[code] || code;
+}
 
 export function formatAuditAction(entry) {
   if (entry.loai_doi_tuong === "nhan_vien") {

@@ -478,7 +478,7 @@ class YeuCauSanXuatService:
                         await self.repository.update(
                             resource_id,
                             {
-                                "trang_thai": "cho_bo_sung_vat_tu"
+                                "trang_thai": "cho_bo_sung_linh_kien"
                                 if result.thieu_vat_tu
                                 else "da_gui",
                             },

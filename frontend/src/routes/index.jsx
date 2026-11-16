@@ -102,7 +102,7 @@ export function AppRoutes() {
               <Route path="/admin" element={<DashboardPage />} />
               <Route path="/admin/tai-khoan/:id?" element={<UsersPage />} />
               <Route path="/admin/vai-tro" element={<RolesPage />} />
-              <Route path="/admin/lich-su" element={<AuditPage />} />
+              <Route path="/admin/lich-su/:id?" element={<AuditPage />} />
             </Route>
             <Route element={<RoleGate />}>
               <Route path="/kho" element={<DashboardPage />} />
@@ -119,7 +119,7 @@ export function AppRoutes() {
               <Route path="/kho/ticket/:id?" element={<TicketsPage />} />
               <Route path="/kho/giao-dich" element={<MovementsPage />} />
               <Route path="/kho/thong-ke" element={<ReportsPage />} />
-              <Route path="/kho/lich-su" element={<AuditPage />} />
+              <Route path="/kho/lich-su/:id?" element={<AuditPage />} />
             </Route>
             <Route element={<RoleGate />}>
               <Route path="/nv" element={<DashboardPage />} />

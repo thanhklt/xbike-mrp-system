@@ -495,6 +495,10 @@ function AdminDashboard() {
             </table>
           </div>
         </QueryState>
+        {/* UC-43 Xem lịch sử thao tác — Main 1: lối vào lịch sử cho Quản trị viên (specs/use_cases/audit/UC-43.md) */}
+        <div className="actions actions-end">
+          <Link to="/admin/lich-su">Xem tất cả →</Link>
+        </div>
       </section>
     </div>
   );
@@ -531,9 +535,9 @@ function WarehouseDashboard() {
           href="/kho/lenh-sx"
         />
         <Metric
-          label="Chờ bổ sung vật tư"
+          label="Chờ bổ sung linh kiện"
           path={API.requests}
-          params={{ trang_thai: "cho_bo_sung_vat_tu" }}
+          params={{ trang_thai: "cho_bo_sung_linh_kien" }}
           href="/kho/yeu-cau"
         />
         <Metric

@@ -22,6 +22,12 @@ function adminBreadcrumbs(pathname) {
   }
   if (pathname === "/admin/tai-khoan") return [{ label: "Quản lý tài khoản" }];
   if (pathname === "/admin/vai-tro") return [{ label: "Quản lý vai trò" }];
+  if (pathname.startsWith("/admin/lich-su/")) {
+    return [
+      { label: "Lịch sử thao tác", to: "/admin/lich-su" },
+      { label: "Chi tiết lịch sử" },
+    ];
+  }
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
   if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
