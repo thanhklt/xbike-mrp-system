@@ -4,13 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from app.modules.bom.ports import ActiveBom
 from app.modules.san_xuat.schemas import (
     ChungTuRead,
     HoanThanhCreate,
     HoanThanhQuery,
     HoanThanhRead,
-    LenhDuKien,
     LenhQuery,
     LenhRead,
     VatTuLenhLine,
@@ -19,11 +17,6 @@ from app.modules.san_xuat.schemas import (
     YeuCauRead,
 )
 from app.shared.records import RecordPage
-
-
-class PlanningBomReader(Protocol):
-    async def lock_graph(self) -> None: ...
-    async def active_graph(self) -> dict[int, ActiveBom]: ...
 
 
 class AssigneeReader(Protocol):
@@ -48,7 +41,7 @@ class YeuCauSanXuatRepository(Protocol):
     async def update(self, request_id: int, changes: dict[str, object]) -> YeuCauRead: ...
     async def delete(self, request_id: int) -> None: ...
     async def has_dependencies(self, request_id: int) -> bool: ...
-    async def add_lenh_tree(self, request_id: int, planned: list[LenhDuKien]) -> list[LenhRead]: ...
+    async def bom_dang_dung(self, mat_hang_id: int) -> int: ...
     async def lenh_cua_yeu_cau(self, request_id: int, *, lock: bool) -> list[LenhRead]: ...
     async def chung_tu_hoan_thanh_cua_lenh(
         self, lenh_ids: list[int], *, lock: bool

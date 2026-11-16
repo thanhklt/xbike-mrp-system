@@ -22,8 +22,6 @@ from app.modules.san_xuat.schemas import (
     HoanThanhPatch,
     HoanThanhQuery,
     HoanThanhResponse,
-    KeHoachPreviewResponse,
-    KeHoachResponse,
     LenhEmptyInput,
     LenhErrorResponse,
     LenhListResponse,
@@ -32,7 +30,6 @@ from app.modules.san_xuat.schemas import (
     LenhResponse,
     LyDoInput,
     SanXuatErrorResponse,
-    TinhKeHoachInput,
     VatTuLenhResponse,
     YeuCauCreate,
     YeuCauDetailResponse,
@@ -113,6 +110,7 @@ async def get_entry(
     return result
 
 
+# UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1 (specs/use_cases/production/UC-23.md)
 @yeu_cau_sx_router.post(
     "",
     status_code=201,
@@ -165,21 +163,7 @@ async def delete_entry(
     return Response(status_code=204)
 
 
-@yeu_cau_sx_router.post(
-    "/{id}/tinh_ke_hoach",
-    response_model=KeHoachPreviewResponse,
-    dependencies=[Depends(read_actor), Depends(reject_query)],
-)
-async def tinh_ke_hoach(
-    id: ResourceId,
-    payload: TinhKeHoachInput,
-    actor: ReadActor,
-    service: Service,
-    request_id: RequestId,
-) -> KeHoachPreviewResponse:
-    return await service.tinh_ke_hoach(id, actor, request_id)
-
-
+# UC-23 Lập và gửi yêu cầu sản xuất — Main 7–9; A3 (specs/use_cases/production/UC-23.md)
 @yeu_cau_sx_router.post(
     "/{id}/gui",
     response_model=GuiYeuCauResponse,
@@ -195,23 +179,9 @@ async def gui(
     response: Response,
     if_match: IfMatch = None,
 ) -> GuiYeuCauResponse:
-    result, etag = await service.gui(id, payload.ke_hoach_token, actor, if_match, request_id)
+    result, etag = await service.gui(id, actor, if_match, request_id)
     response.headers["ETag"] = etag
     return result
-
-
-@yeu_cau_sx_router.get(
-    "/{id}/ke_hoach",
-    response_model=KeHoachResponse,
-    dependencies=[Depends(read_actor), Depends(reject_query)],
-)
-async def ke_hoach(
-    id: ResourceId,
-    actor: ReadActor,
-    service: Service,
-    request_id: RequestId,
-) -> KeHoachResponse:
-    return await service.ke_hoach(id, actor, request_id)
 
 
 @yeu_cau_sx_router.post(

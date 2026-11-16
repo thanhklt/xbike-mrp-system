@@ -6,15 +6,14 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, false, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.bom.models import Bom
 from app.modules.san_xuat.models import (
-    ChiTietLenhSanXuat,
     ChungTuHoanThanhSx,
     LenhSanXuat,
     YeuCauSanXuat,
 )
 from app.modules.san_xuat.schemas import (
     ChungTuRead,
-    LenhDuKien,
     LenhRead,
     NhuCauRead,
     YeuCauCreate,
@@ -29,30 +28,17 @@ class SqlAlchemyYeuCauSanXuatRepository:
         self.session = session
 
     async def _requests(self, records: list[YeuCauSanXuat]) -> list[YeuCauRead]:
-        orders: dict[int, list[int]] = {}
-        if records:
-            rows = await self.session.execute(
-                select(LenhSanXuat.yeu_cau_san_xuat_id, LenhSanXuat.id)
-                .where(LenhSanXuat.yeu_cau_san_xuat_id.in_([record.id for record in records]))
-                .order_by(LenhSanXuat.id)
-            )
-            for request_id, order_id in rows:
-                orders.setdefault(request_id, []).append(order_id)
-        return [
-            YeuCauRead.model_validate(record).model_copy(
-                update={
-                    "lenh_san_xuat_ids": orders.get(record.id, []),
-                }
-            )
-            for record in records
-        ]
+        return [YeuCauRead.model_validate(record) for record in records]
 
     async def list_entries(
         self, params: YeuCauListQuery, actor_id: int | None
     ) -> RecordPage[YeuCauRead]:
         query = select(YeuCauSanXuat)
         if actor_id is not None:
-            query = query.where(YeuCauSanXuat.nhan_vien_duoc_giao_id == actor_id)
+            query = query.where(
+                YeuCauSanXuat.nhan_vien_duoc_giao_id == actor_id,
+                YeuCauSanXuat.trang_thai != "nhap",
+            )
         for name in ("mat_hang_id", "trang_thai", "nhan_vien_duoc_giao_id"):
             value = getattr(params, name)
             if value is not None:
@@ -101,7 +87,7 @@ class SqlAlchemyYeuCauSanXuatRepository:
         return (await self._requests([record]))[0] if record else None
 
     async def next_code(self, prefix: str) -> tuple[int, str]:
-        table_name = {"YCSX": "YeuCauSanXuat", "LSX": "LenhSanXuat"}[prefix]
+        table_name = {"YCSX": "YeuCauSanXuat"}[prefix]
         row = (
             await self.session.execute(
                 text(
@@ -113,6 +99,7 @@ class SqlAlchemyYeuCauSanXuatRepository:
         ).one()
         return row[0], f"{prefix}-{row[1]}-{row[0]:06d}"
 
+    # UC-23 Lập và gửi yêu cầu sản xuất — Main 5 (specs/use_cases/production/UC-23.md)
     async def add(self, payload: YeuCauCreate, actor_id: int) -> YeuCauRead:
         record_id, code = await self.next_code("YCSX")
         record = YeuCauSanXuat(
@@ -129,6 +116,8 @@ class SqlAlchemyYeuCauSanXuatRepository:
         record = await self.session.get(YeuCauSanXuat, request_id)
         for name, value in changes.items():
             setattr(record, name, value)
+        record.phien_ban += 1
+        record.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         return (await self._requests([record]))[0]
 
@@ -146,33 +135,14 @@ class SqlAlchemyYeuCauSanXuatRepository:
     async def delete(self, request_id: int) -> None:
         await self.session.execute(delete(YeuCauSanXuat).where(YeuCauSanXuat.id == request_id))
 
-    async def add_lenh_tree(self, request_id: int, planned: list[LenhDuKien]) -> list[LenhRead]:
-        order_ids: dict[str, int] = {}
-        for order in planned:
-            order_id, code = await self.next_code("LSX")
-            self.session.add(
-                LenhSanXuat(
-                    id=order_id,
-                    ma_lenh_san_xuat=code,
-                    yeu_cau_san_xuat_id=request_id,
-                    lenh_san_xuat_cha_id=order_ids.get(order.ma_cha_tam),
-                    mat_hang_id=order.mat_hang_id,
-                    bom_id=order.bom_id,
-                    so_luong=order.so_luong,
-                    nhan_vien_id=None,
-                )
-            )
-            # Parent snapshot must exist before the database validates a child order.
-            await self.session.flush()
-            self.session.add_all(
-                [
-                    ChiTietLenhSanXuat(lenh_san_xuat_id=order_id, **need.model_dump())
-                    for need in order.nhu_cau_truc_tiep
-                ]
-            )
-            await self.session.flush()
-            order_ids[order.ma_tam] = order_id
-        return await self.lenh_cua_yeu_cau(request_id, lock=False)
+    # UC-23 Lập và gửi yêu cầu sản xuất — Main 8 (specs/use_cases/production/UC-23.md)
+    async def bom_dang_dung(self, mat_hang_id: int) -> int:
+        result = await self.session.execute(
+            select(Bom.id)
+            .where(Bom.mat_hang_id == mat_hang_id, Bom.is_active.is_(True))
+            .with_for_update(read=True)
+        )
+        return result.scalar_one()
 
     async def so_luong_da_hoan_thanh(self, lenh_ids: list[int]) -> dict[int, int]:
         rows = await self.session.execute(

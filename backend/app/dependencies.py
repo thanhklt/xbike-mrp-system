@@ -14,7 +14,7 @@ from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
-from app.modules.bom.service import BomPlanningReader, BomService
+from app.modules.bom.service import BomService
 from app.modules.dieu_chinh_kho.repository import (
     SqlAlchemyPhieuDieuChinhRepository,
     SqlAlchemyTicketDieuChinhRepository,
@@ -169,7 +169,6 @@ def get_yeu_cau_san_xuat_service(
         transaction,
         get_mat_hang_availability(db),
         NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
-        BomPlanningReader(SqlAlchemyBomRepository(db)),
         PhieuXuatService(
             SqlAlchemyPhieuXuatRepository(db), audit, transaction, SqlAlchemyInventoryRepository(db)
         ),

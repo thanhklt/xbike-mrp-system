@@ -1,8 +1,19 @@
 """Mappings for the agreed PostgreSQL bootstrap; no legacy inventory ownership."""
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Identity, Index, Integer, String, text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,33 +26,83 @@ class YeuCauSanXuat(Base):
             "trang_thai IN ('nhap', 'da_gui', 'cho_bo_sung_linh_kien', 'dang_thuc_hien', 'hoan_thanh', 'da_huy')",
             name="ck_yeu_cau_san_xuat_trang_thai",
         ),
-        CheckConstraint("so_luong > 0", name="ck_yeu_cau_san_xuat_so_luong"),
+        CheckConstraint("loai_yeu_cau IN ('dap_ung', 'cho_kho')", name="ck_ycsx_loai"),
         CheckConstraint(
-            "trang_thai IN ('nhap','da_huy') OR nhan_vien_duoc_giao_id IS NOT NULL",
-            name="ck_yeu_cau_nguoi_duoc_giao",
+            "loai_yeu_cau = 'dap_ung' OR COALESCE(so_luong_dung_thanh_pham, 0) = 0",
+            name="ck_ycsx_cho_kho",
+        ),
+        CheckConstraint("so_luong > 0", name="ck_ycsx_so_luong"),
+        CheckConstraint("phien_ban > 0", name="ck_ycsx_phien_ban"),
+        CheckConstraint(
+            "trang_thai = 'nhap' OR (bom_id IS NOT NULL AND gui_at IS NOT NULL)",
+            name="ck_ycsx_bom_chot",
+        ),
+        CheckConstraint(
+            "(so_luong_dung_thanh_pham IS NULL AND so_luong_can_san_xuat IS NULL AND kiem_tra_lan_dau_at IS NULL) "
+            "OR (so_luong_dung_thanh_pham >= 0 AND so_luong_can_san_xuat >= 0 "
+            "AND so_luong_dung_thanh_pham + so_luong_can_san_xuat = so_luong "
+            "AND kiem_tra_lan_dau_at IS NOT NULL)",
+            name="ck_ycsx_so_luong_chot",
+        ),
+        CheckConstraint(
+            "trang_thai NOT IN ('cho_bo_sung_linh_kien', 'dang_thuc_hien', 'hoan_thanh') OR so_luong_can_san_xuat IS NOT NULL",
+            name="ck_ycsx_da_kiem_tra",
+        ),
+        CheckConstraint(
+            "started_at IS NULL OR (so_luong_can_san_xuat > 0 AND trang_thai IN ('dang_thuc_hien', 'hoan_thanh'))",
+            name="ck_ycsx_bat_dau",
+        ),
+        CheckConstraint(
+            "(trang_thai = 'hoan_thanh') = (completed_at IS NOT NULL)",
+            name="ck_ycsx_hoan_thanh",
+        ),
+        CheckConstraint(
+            "(trang_thai = 'da_huy') = (huy_at IS NOT NULL AND nguoi_huy_id IS NOT NULL AND COALESCE(btrim(ly_do_huy), '') <> '')",
+            name="ck_ycsx_huy",
         ),
         CheckConstraint(
             "ma_yeu_cau_san_xuat ~ '^YCSX-[0-9]{4}(0[1-9]|1[0-2])-[0-9]{6}$' AND right(ma_yeu_cau_san_xuat, 6) <> '000000'",
-            name="ck_yeu_cau_san_xuat_ma",
+            name="ck_ycsx_ma",
         ).ddl_if(dialect="postgresql"),
+        Index("ix_ycsx_nhan_vien_duoc_giao", "nhan_vien_duoc_giao_id", "trang_thai", "created_at"),
+        Index("ix_ycsx_trang_thai", "trang_thai", "created_at"),
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     ma_yeu_cau_san_xuat: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    loai_yeu_cau: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'dap_ung'"))
     mat_hang_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
     so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
+    han_hoan_thanh: Mapped[date] = mapped_column(Date, nullable=False)
     nhan_vien_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("NhanVien.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )
-    nhan_vien_duoc_giao_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("NhanVien.id", deferrable=True, initially="IMMEDIATE"), nullable=True
+    nhan_vien_duoc_giao_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("NhanVien.id", deferrable=True, initially="IMMEDIATE"), nullable=False
+    )
+    bom_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Bom.id", deferrable=True, initially="IMMEDIATE"), nullable=True
     )
     trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'nhap'"))
+    so_luong_dung_thanh_pham: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    so_luong_can_san_xuat: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    gui_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    kiem_tra_lan_dau_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    huy_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    nguoi_huy_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("NhanVien.id", deferrable=True, initially="IMMEDIATE"), nullable=True
+    )
+    ly_do_huy: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phien_ban: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
 
 
 class LenhSanXuat(Base):

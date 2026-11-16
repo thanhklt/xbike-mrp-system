@@ -1,21 +1,12 @@
-"""Production request policy, deterministic planning and atomic transitions."""
+"""Production request policy and atomic transitions (UC-23)."""
 
-import hmac
-from collections import deque
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from jose import JWTError, jwt
-
-from app.config.settings import settings
 from app.core.errors import (
-    BomCycleException,
-    ChangedProductionPlan,
     ForbiddenException,
     InvalidAssignee,
     InvalidInputException,
     InvalidWorkflowState,
-    MissingBomException,
     NotFoundException,
     PostedProductionDependency,
     PreconditionFailedException,
@@ -25,27 +16,17 @@ from app.core.errors import (
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
 from app.modules.audit.schemas import CreationAudit
-from app.modules.mat_hang.ports import MatHangRead, MatHangStockReader
+from app.modules.mat_hang.ports import MatHangStockReader
+from app.modules.mat_hang.service import InactiveMatHang
 from app.modules.san_xuat.ports import (
-    ActiveBom,
     AssigneeReader,
-    PlanningBomReader,
     ProductionIssues,
     YeuCauSanXuatRepository,
 )
 from app.modules.san_xuat.schemas import (
-    GuiYeuCauRead,
-    GuiYeuCauResponse,
-    KeHoachPreview,
-    KeHoachPreviewResponse,
-    KeHoachRead,
-    KeHoachResponse,
-    LenhDuKien,
     LenhRead,
     ListResponseMeta,
-    NhuCauDuKien,
     ResponseMeta,
-    VatTuDuKien,
     YeuCauCreate,
     YeuCauDetailResponse,
     YeuCauListQuery,
@@ -54,8 +35,6 @@ from app.modules.san_xuat.schemas import (
     YeuCauRead,
 )
 from app.modules.san_xuat.service.common import canonical_hash
-
-PLAN_AUDIENCE = "ke_hoach_san_xuat"
 
 
 def generate_yeu_cau_etag(record: YeuCauRead) -> str:
@@ -67,160 +46,6 @@ def _verify_if_match(if_match: str | None, record: YeuCauRead) -> None:
         raise PreconditionRequiredException()
     if if_match.strip() != generate_yeu_cau_etag(record):
         raise PreconditionFailedException()
-
-
-@dataclass(frozen=True)
-class PlanCalculation:
-    ton_thanh_pham: int
-    so_luong_can_san_xuat: int
-    lenh_du_kien: list[LenhDuKien]
-    vat_tu: list[VatTuDuKien]
-    thieu_bom: bool
-    ton_da_doc: dict[int, int]
-
-    @property
-    def thieu_vat_tu(self) -> bool:
-        return any(line.so_luong_thieu > 0 for line in self.vat_tu)
-
-    @property
-    def ket_qua_hash(self) -> str:
-        return canonical_hash(
-            {
-                "ton_thanh_pham": self.ton_thanh_pham,
-                "so_luong_can_san_xuat": self.so_luong_can_san_xuat,
-                "lenh": [order.model_dump(mode="json") for order in self.lenh_du_kien],
-                "vat_tu": [line.model_dump(mode="json") for line in self.vat_tu],
-                "thieu_bom": self.thieu_bom,
-                "ton": self.ton_da_doc,
-            }
-        )
-
-
-def calculate_plan(
-    request: YeuCauRead, graph: dict[int, ActiveBom], items: dict[int, MatHangRead]
-) -> PlanCalculation:
-    """Consume a shared stock snapshot once across BFS branches; never reserve stock."""
-    stock = {item_id: item.so_luong_ton for item_id, item in items.items()}
-    finished_stock = stock[request.mat_hang_id]
-    remaining = stock.copy()
-    remaining[request.mat_hang_id] -= min(finished_stock, request.so_luong)
-    production = max(request.so_luong - finished_stock, 0)
-    orders: list[LenhDuKien] = []
-    warehouse_needs: dict[int, int] = {}
-    used_stock = {request.mat_hang_id: finished_stock}
-    missing_bom = False
-    pending: deque[tuple[int, int, str | None, frozenset[int]]] = deque()
-    if production:
-        pending.append((request.mat_hang_id, production, None, frozenset()))
-    while pending:
-        item_id, quantity, parent_code, ancestors = pending.popleft()
-        # Shared DAG nodes may produce many orders; only an ancestor repeat is a cycle.
-        if item_id in ancestors:
-            raise BomCycleException()
-        bom = graph.get(item_id)
-        order = LenhDuKien(
-            ma_tam=f"L{len(orders) + 1}",
-            ma_cha_tam=parent_code,
-            mat_hang_id=item_id,
-            bom_id=bom.bom_id if bom else None,
-            so_luong=quantity,
-        )
-        orders.append(order)
-        if bom is None:
-            missing_bom = True
-            continue
-        for component_id, per_unit in bom.components:
-            need = per_unit * quantity
-            if need > 2**31 - 1:
-                raise InvalidInputException(message="Nhu cầu trực tiếp vượt giới hạn INT32")
-            order.nhu_cau_truc_tiep.append(
-                NhuCauDuKien(mat_hang_id=component_id, so_luong_can=need)
-            )
-            component = items[component_id]
-            used_stock[component_id] = stock[component_id]
-            if component.loai_mat_hang == "ban_thanh_pham":
-                supplied = min(remaining[component_id], need)
-                remaining[component_id] -= supplied
-                if supplied:
-                    warehouse_needs[component_id] = warehouse_needs.get(component_id, 0) + supplied
-                if need > supplied:
-                    pending.append(
-                        (component_id, need - supplied, order.ma_tam, ancestors | {item_id})
-                    )
-            elif component.loai_mat_hang in {"nguyen_vat_lieu", "linh_kien"}:
-                warehouse_needs[component_id] = warehouse_needs.get(component_id, 0) + need
-            else:
-                raise InvalidInputException(message="Thành phần BOM không hợp lệ")
-    materials = [
-        VatTuDuKien(
-            mat_hang_id=item_id,
-            ma_mat_hang=items[item_id].ma_mat_hang,
-            ten_mat_hang=items[item_id].ten_mat_hang,
-            don_vi_tinh=items[item_id].don_vi_tinh,
-            so_luong_can_tu_kho=need,
-            so_luong_hien_co=stock[item_id],
-            so_luong_thieu=max(need - stock[item_id], 0),
-        )
-        for item_id, need in sorted(warehouse_needs.items())
-    ]
-    return PlanCalculation(finished_stock, production, orders, materials, missing_bom, used_stock)
-
-
-def sign_plan_token(
-    request: YeuCauRead,
-    calculation: PlanCalculation,
-    secret_key: str,
-    algorithm: str,
-    *,
-    now: datetime | None = None,
-) -> str:
-    issued_at = now or datetime.now(timezone.utc)
-    return jwt.encode(
-        {
-            "aud": PLAN_AUDIENCE,
-            "iat": issued_at,
-            "exp": issued_at + timedelta(minutes=10),
-            "yeu_cau_san_xuat_id": request.id,
-            "nhan_vien_duoc_giao_id": request.nhan_vien_duoc_giao_id,
-            "so_luong": request.so_luong,
-            "ket_qua_hash": calculation.ket_qua_hash,
-        },
-        secret_key,
-        algorithm=algorithm,
-    )
-
-
-def verify_plan_token(
-    token: str,
-    request: YeuCauRead,
-    calculation: PlanCalculation,
-    secret_key: str,
-    algorithm: str,
-) -> None:
-    try:
-        payload = jwt.decode(
-            token,
-            secret_key,
-            algorithms=[algorithm],
-            audience=PLAN_AUDIENCE,
-            options={"require_exp": True, "require_aud": True},
-        )
-    except JWTError as exc:
-        raise ChangedProductionPlan() from exc
-    expected = {
-        "yeu_cau_san_xuat_id": request.id,
-        "nhan_vien_duoc_giao_id": request.nhan_vien_duoc_giao_id,
-        "so_luong": request.so_luong,
-    }
-    if any(payload.get(key) != value for key, value in expected.items()):
-        raise ChangedProductionPlan()
-    digest = payload.get("ket_qua_hash")
-    if (
-        not isinstance(digest, str)
-        or not digest.isascii()
-        or not hmac.compare_digest(digest, calculation.ket_qua_hash)
-    ):
-        raise ChangedProductionPlan()
 
 
 def _require_manager(actor: dict) -> None:
@@ -265,7 +90,6 @@ class YeuCauSanXuatService:
         transaction: Transaction,
         items: MatHangStockReader,
         employees: AssigneeReader,
-        boms: PlanningBomReader,
         issues: ProductionIssues,
     ):
         self.repository = repository
@@ -273,7 +97,6 @@ class YeuCauSanXuatService:
         self.transaction = transaction
         self.items = items
         self.employees = employees
-        self.boms = boms
         self.issues = issues
 
     async def _with_progress(self, records: list[YeuCauRead]) -> list[YeuCauRead]:
@@ -300,13 +123,22 @@ class YeuCauSanXuatService:
             if lock
             else await self.repository.get_by_id(request_id)
         )
-        if record is None:
+        if record is None or ("quan_ly" not in actor.get("roles", []) and record.trang_thai == "nhap"):
             raise NotFoundException()
         _require_scope(record, actor)
         return (await self._with_progress([record]))[0]
 
     async def _audit(
-        self, kind: str, action: str, actor: dict, before, after, *, reason: str | None = None
+        self,
+        kind: str,
+        action: str,
+        actor: dict,
+        before,
+        after,
+        *,
+        reason: str | None = None,
+        trang_thai_truoc: str | None = None,
+        trang_thai_sau: str | None = None,
     ) -> None:
         record = after if after is not None else before
         await self.audit.append(
@@ -318,6 +150,8 @@ class YeuCauSanXuatService:
                 du_lieu_truoc=before.model_dump(mode="json") if before else None,
                 du_lieu_sau=after.model_dump(mode="json") if after else {},
                 ly_do=reason,
+                trang_thai_truoc=trang_thai_truoc,
+                trang_thai_sau=trang_thai_sau,
             )
         )
 
@@ -327,6 +161,7 @@ class YeuCauSanXuatService:
             generate_yeu_cau_etag(record),
         )
 
+    # UC-23 Lập và gửi yêu cầu sản xuất — A2; D5 (specs/use_cases/production/UC-23.md)
     async def list_entries(
         self, params: YeuCauListQuery, actor: dict, request_id: str
     ) -> YeuCauListResponse:
@@ -345,6 +180,7 @@ class YeuCauSanXuatService:
             ),
         )
 
+    # UC-23 Lập và gửi yêu cầu sản xuất — A2; D5 (specs/use_cases/production/UC-23.md)
     async def get_entry(
         self, resource_id: int, actor: dict, request_id: str
     ) -> tuple[YeuCauDetailResponse, str]:
@@ -352,23 +188,29 @@ class YeuCauSanXuatService:
 
     async def _validate_product(self, item_id: int) -> None:
         records = await self.items.read_items([item_id], lock=True)
+        if not records[0].is_active:
+            raise InactiveMatHang()
         if records[0].loai_mat_hang != "thanh_pham":
             raise InvalidInputException(message="mat_hang_id phải là thành phẩm")
 
+    # UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1 (specs/use_cases/production/UC-23.md)
     async def create_entry(
         self, payload: YeuCauCreate, actor: dict, request_id: str
     ) -> tuple[YeuCauDetailResponse, str]:
         _require_manager(actor)
         async with self.transaction:
             await self._validate_product(payload.mat_hang_id)
-            if payload.nhan_vien_duoc_giao_id is not None:
-                await self.employees.kiem_tra_nguoi_duoc_giao(
-                    payload.nhan_vien_duoc_giao_id, lock=True
-                )
+            await self.employees.kiem_tra_nguoi_duoc_giao(
+                payload.nhan_vien_duoc_giao_id, lock=True
+            )
             created = (
                 await self._with_progress([await self.repository.add(payload, int(actor["sub"]))])
             )[0]
-            await self._audit("yeu_cau_san_xuat", "tao", actor, None, created)
+            await self._audit(
+                "yeu_cau_san_xuat", "tao", actor, None, created,
+                trang_thai_truoc=None,
+                trang_thai_sau="nhap",
+            )
         return self._detail(created, request_id)
 
     async def patch_entry(
@@ -406,109 +248,41 @@ class YeuCauSanXuatService:
             await self.repository.delete(resource_id)
             await self._audit("yeu_cau_san_xuat", "xoa_nhap", actor, before, None)
 
-    async def _assignee_valid(self, record: YeuCauRead, *, lock: bool) -> bool:
-        if record.nhan_vien_duoc_giao_id is None:
-            return False
-        try:
-            await self.employees.kiem_tra_nguoi_duoc_giao(record.nhan_vien_duoc_giao_id, lock=lock)
-        except (NotFoundException, InvalidAssignee):
-            return False
-        return True
-
-    async def _calculate(self, record: YeuCauRead, *, lock: bool) -> PlanCalculation:
-        if lock:
-            await self.boms.lock_graph()
-        graph = await self.boms.active_graph()
-        reachable = {record.mat_hang_id}
-        pending = [record.mat_hang_id]
-        while pending:
-            bom = graph.get(pending.pop())
-            if bom:
-                for component, _ in bom.components:
-                    if component not in reachable:
-                        reachable.add(component)
-                        pending.append(component)
-        items = await self.items.read_items(sorted(reachable), lock=lock)
-        return calculate_plan(record, graph, {item.id: item for item in items})
-
-    async def tinh_ke_hoach(
-        self, resource_id: int, actor: dict, request_id: str
-    ) -> KeHoachPreviewResponse:
-        record = await self._require_request(resource_id, actor)
-        _require_draft(record)
-        result = await self._calculate(record, lock=False)
-        valid_assignee = await self._assignee_valid(record, lock=False)
-        now = datetime.now(timezone.utc)
-        return KeHoachPreviewResponse(
-            data=KeHoachPreview(
-                yeu_cau_san_xuat_id=record.id,
-                tinh_luc=now,
-                ke_hoach_token=sign_plan_token(
-                    record, result, settings.secret_key, settings.algorithm, now=now
-                ),
-                so_luong_yeu_cau=record.so_luong,
-                ton_thanh_pham=result.ton_thanh_pham,
-                so_luong_can_san_xuat=result.so_luong_can_san_xuat,
-                du_dieu_kien_gui=not result.thieu_bom and valid_assignee,
-                thieu_vat_tu=result.thieu_vat_tu,
-                lenh_du_kien=result.lenh_du_kien,
-                vat_tu=result.vat_tu,
-            ),
-            meta=ResponseMeta(request_id=request_id),
-        )
-
+    # UC-23 Lập và gửi yêu cầu sản xuất — Main 7–9; A3 (specs/use_cases/production/UC-23.md)
     async def gui(
-        self, resource_id: int, token: str, actor: dict, if_match: str | None, request_id: str
-    ) -> tuple[GuiYeuCauResponse, str]:
+        self, resource_id: int, actor: dict, if_match: str | None, request_id: str
+    ) -> tuple[YeuCauDetailResponse, str]:
         _require_manager(actor)
         async with self.transaction:
             before = await self._require_request(resource_id, actor, lock=True)
             _verify_if_match(if_match, before)
             _require_draft(before)
-            if not await self._assignee_valid(before, lock=True):
-                raise InvalidAssignee()
-            result = await self._calculate(before, lock=True)
-            verify_plan_token(token, before, result, settings.secret_key, settings.algorithm)
-            if result.thieu_bom:
-                raise MissingBomException(message="Thiếu BOM hiện hành cho kế hoạch")
-            orders = await self.repository.add_lenh_tree(resource_id, result.lenh_du_kien)
-            after = (
-                await self._with_progress(
-                    [
-                        await self.repository.update(
-                            resource_id,
-                            {
-                                "trang_thai": "cho_bo_sung_linh_kien"
-                                if result.thieu_vat_tu
-                                else "da_gui",
-                            },
-                        )
-                    ]
+            try:
+                await self._validate_product(before.mat_hang_id)
+            except InactiveMatHang as exc:
+                raise InvalidWorkflowState(
+                    message="Thành phẩm đã ngừng hoạt động, không thể gửi yêu cầu"
+                ) from exc
+            try:
+                await self.employees.kiem_tra_nguoi_duoc_giao(
+                    before.nhan_vien_duoc_giao_id, lock=True
                 )
-            )[0]
-            await self._audit("yeu_cau_san_xuat", "gui", actor, before, after)
-            for order in orders:
-                await self._audit("lenh_san_xuat", "tao", actor, None, order)
-            response = GuiYeuCauResponse(
-                data=GuiYeuCauRead(
-                    yeu_cau=after,
-                    ke_hoach=KeHoachRead(yeu_cau_san_xuat_id=resource_id, lenh=orders),
-                ),
-                meta=ResponseMeta(request_id=request_id),
+            except (NotFoundException, InvalidAssignee) as exc:
+                raise InvalidAssignee(
+                    message="Nhân viên được giao đã bị khóa hoặc không còn hợp lệ"
+                ) from exc
+            bom_id = await self.repository.bom_dang_dung(before.mat_hang_id)
+            after = await self.repository.update(
+                resource_id,
+                {"trang_thai": "da_gui", "bom_id": bom_id, "gui_at": datetime.now(timezone.utc)},
             )
-        return response, generate_yeu_cau_etag(after)
-
-    async def ke_hoach(self, resource_id: int, actor: dict, request_id: str) -> KeHoachResponse:
-        record = await self._require_request(resource_id, actor)
-        if record.trang_thai == "nhap":
-            raise InvalidWorkflowState()
-        return KeHoachResponse(
-            data=KeHoachRead(
-                yeu_cau_san_xuat_id=resource_id,
-                lenh=await self.repository.lenh_cua_yeu_cau(resource_id, lock=False),
-            ),
-            meta=ResponseMeta(request_id=request_id),
-        )
+            after = (await self._with_progress([after]))[0]
+            await self._audit(
+                "yeu_cau_san_xuat", "gui", actor, before, after,
+                trang_thai_truoc="nhap",
+                trang_thai_sau="da_gui",
+            )
+        return self._detail(after, request_id)
 
     async def _cancel_completions(self, documents, actor: dict, reason: str) -> None:
         for before in documents:

@@ -6,11 +6,10 @@ import {
   useChoices,
   useCollection,
   useDetail,
-  useResource,
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { itemName, dateTime, number } from "../../lib/format.js";
+import { itemName, dateTime, number, formatDate } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -18,7 +17,6 @@ import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Field } from "../../components/Field.jsx";
 import { Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
-import { DataTable } from "../../components/DataTable.jsx";
 import {
   ItemSelect,
   EmployeeSelect,
@@ -27,6 +25,14 @@ import {
 } from "../../components/ResourceFields.jsx";
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
+import {
+  REQUEST_TYPES,
+  REQUEST_TYPE_LABELS,
+  initialRequestValues,
+  requestCreateBody,
+  sendConfirmEntries,
+} from "./requestForm.js";
+
 export function RequestsPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -40,12 +46,12 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Yêu cầu thành phẩm" : "Yêu cầu phụ trách"}
-        subtitle="Kiểm tra tồn thành phẩm, lập kế hoạch BOM nhiều cấp và theo dõi lượng đã xuất."
+        title={manager ? "Yêu cầu sản xuất" : "Yêu cầu phụ trách"}
+        subtitle="Lập yêu cầu sản xuất và gửi cho nhân viên được giao."
         action={
           manager && (
             <Link className="btn btn-primary" to={`${base}/moi`}>
-              Tạo yêu cầu thành phẩm
+              Tạo yêu cầu sản xuất
             </Link>
           )
         }
@@ -74,6 +80,16 @@ export function RequestsPage() {
             label: "Thành phẩm",
             render: (row) => itemName(items, row.mat_hang_id),
           },
+          {
+            key: "loai_yeu_cau",
+            label: "Loại",
+            render: (row) => REQUEST_TYPE_LABELS[row.loai_yeu_cau],
+          },
+          {
+            key: "han_hoan_thanh",
+            label: "Hạn hoàn thành",
+            render: (row) => formatDate(row.han_hoan_thanh),
+          },
           { key: "so_luong", label: "Nhu cầu", numeric: true },
           { key: "so_luong_da_xuat", label: "Đã xuất", numeric: true },
           {
@@ -92,7 +108,7 @@ export function RequestsPage() {
         id={id}
         query={detail}
         base={base}
-        title={id === "moi" ? "Tạo yêu cầu thành phẩm" : "Chi tiết yêu cầu"}
+        title={id === "moi" ? "Tạo yêu cầu sản xuất" : "Chi tiết yêu cầu"}
       >
         {(snapshot) => (
           <QueryState query={catalog}>
@@ -111,93 +127,57 @@ export function RequestsPage() {
 }
 function RequestEditor({ snapshot, items, employees, manager, base }) {
   const record = snapshot?.data;
-  const initial = {
-    mat_hang_id: String(record?.mat_hang_id || ""),
-    so_luong: String(record?.so_luong || ""),
-    nhan_vien_duoc_giao_id: String(record?.nhan_vien_duoc_giao_id || ""),
-  };
+  const initial = initialRequestValues(record);
   const [values, setValues] = useState(initial);
-  const [preview, setPreview] = useState(null);
   const mutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
   const editable = manager && (!record || record.trang_thai === "nhap");
   const dirty = JSON.stringify(values) !== JSON.stringify(initial);
-  const frozen = useResource(
-    `${API.requests}/${record?.id}/ke_hoach`,
-    {},
-    Boolean(record && record.trang_thai !== "nhap"),
-  );
   const field = (name) => ({
     value: values[name],
     onChange: (event) => {
       setValues({ ...values, [name]: event.target.value });
-      setPreview(null);
     },
   });
+  // UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1, A2 (specs/use_cases/production/UC-23.md)
   function submit(event) {
     event.preventDefault();
     save(
       {
         path: record ? `${API.requests}/${record.id}` : API.requests,
         method: record ? "patch" : "post",
-        body: {
-          mat_hang_id: Number(values.mat_hang_id),
-          so_luong: Number(values.so_luong),
-          nhan_vien_duoc_giao_id: values.nhan_vien_duoc_giao_id
-            ? Number(values.nhan_vien_duoc_giao_id)
-            : null,
-        },
+        body: requestCreateBody(values),
         etag: snapshot?.etag,
         versioned: Boolean(record),
       },
       (result) => {
-        setPreview(null);
         navigate(`${base}/${result.data.id}`);
+        if (!record) send(result.data, result.etag);
       },
     );
   }
-  async function calculate() {
-    try {
-      const result = await mutation.mutateAsync({
-        path: `${API.requests}/${record.id}/tinh_ke_hoach`,
-        versioned: false,
-      });
-      setPreview(result.data);
-    } catch {
-      setPreview(null);
-    }
-  }
-  function send() {
+  // UC-23 Lập và gửi yêu cầu sản xuất — Main 6–9; A2, A3 (specs/use_cases/production/UC-23.md)
+  function send(request, etag) {
     confirm({
       title: "Gửi yêu cầu sản xuất",
-      description: `${record.ma_yeu_cau_san_xuat} · ${itemName(items, record.mat_hang_id)} × ${record.so_luong}.`,
-      content: (
-        <InfoGrid
-          entries={[
-            ["Tồn thành phẩm khi tính", preview.ton_thanh_pham],
-            ["Cần sản xuất", preview.so_luong_can_san_xuat],
-            ["Số lệnh dự kiến", preview.lenh_du_kien.length],
-          ]}
-        />
-      ),
-      impact:
-        "Chốt kế hoạch và sinh lệnh nếu cần; chưa thay đổi tồn kho. Kế hoạch có hiệu lực 10 phút và được backend kiểm tra lại khi gửi.",
+      description: request.ma_yeu_cau_san_xuat,
+      content: <InfoGrid entries={sendConfirmEntries(request, items, employees.data || [])} />,
+      impact: "Chưa thay đổi tồn kho và phần đang giữ.",
       onConfirm: async () => {
         await mutation.mutateAsync({
-          path: `${API.requests}/${record.id}/gui`,
-          body: { ke_hoach_token: preview.ke_hoach_token },
-          etag: snapshot.etag,
+          path: `${API.requests}/${request.id}/gui`,
+          body: {},
+          etag,
         });
-        setPreview(null);
-        notify("Đã gửi yêu cầu và chốt kế hoạch.");
+        notify("Đã gửi yêu cầu cho nhân viên.");
       },
     });
   }
   function cancel(remove = false) {
     confirm({
-      title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu thành phẩm",
+      title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu sản xuất",
       description: record.ma_yeu_cau_san_xuat,
       reason: !remove,
       danger: true,
@@ -240,6 +220,13 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
         <QueryState query={employees}>
           <form className="stack" onSubmit={submit}>
             <div className="form-grid">
+              <Field as="select" label="Loại yêu cầu" required {...field("loai_yeu_cau")}>
+                {REQUEST_TYPES.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Field>
               <ItemSelect
                 label="Thành phẩm"
                 required
@@ -256,10 +243,16 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
                 max="2147483647"
                 {...field("so_luong")}
               />
+              <Field label="Hạn hoàn thành" type="date" required {...field("han_hoan_thanh")} />
             </div>
-            <EmployeeSelect employees={employees.data} {...field("nhan_vien_duoc_giao_id")} />
+            <EmployeeSelect
+              employees={employees.data}
+              required
+              label="Nhân viên được giao"
+              {...field("nhan_vien_duoc_giao_id")}
+            />
             <Button type="submit" disabled={busy}>
-              Lưu nháp
+              {record ? "Lưu nháp" : "Tạo"}
             </Button>
           </form>
         </QueryState>
@@ -279,24 +272,9 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
       {record && editable && (
         <div className="actions">
           <Button
-            variant="secondary"
-            reason={dirty ? "Lưu thay đổi trước khi tính kế hoạch." : undefined}
+            reason={dirty ? "Lưu thay đổi trước khi gửi." : undefined}
             disabled={mutation.isPending}
-            onClick={calculate}
-          >
-            {preview ? "Tính lại" : "Tính kế hoạch"}
-          </Button>
-          <Button
-            reason={
-              dirty
-                ? "Lưu thay đổi và tính lại kế hoạch."
-                : !preview
-                  ? "Cần tính kế hoạch trước khi gửi."
-                  : !preview.du_dieu_kien_gui
-                    ? "Chưa đủ điều kiện gửi; kiểm tra BOM và người phụ trách."
-                    : undefined
-            }
-            onClick={send}
+            onClick={() => send(record, snapshot.etag)}
           >
             Gửi yêu cầu cho nhân viên
           </Button>
@@ -308,47 +286,6 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
             Xóa nháp
           </Button>
         </div>
-      )}
-      {preview && (
-        <>
-          <InfoGrid
-            entries={[
-              ["Tồn thành phẩm", preview.ton_thanh_pham],
-              ["Cần sản xuất", preview.so_luong_can_san_xuat],
-              ["Tính lúc", dateTime(preview.tinh_luc)],
-            ]}
-          />
-          {preview.thieu_vat_tu && (
-            <Notice tone="warning">
-              Kế hoạch có linh kiện thiếu. Gửi yêu cầu sẽ chuyển sang chờ bổ sung linh kiện theo kết
-              quả backend; chưa giữ chỗ hoặc thay đổi kho.
-            </Notice>
-          )}
-          <h3>Vật tư dự kiến</h3>
-          <DataTable
-            rows={preview.vat_tu.map((line) => ({ ...line, id: line.mat_hang_id }))}
-            columns={[
-              { key: "ten_mat_hang", label: "Vật tư" },
-              { key: "so_luong_can_tu_kho", label: "Cần từ kho", numeric: true },
-              { key: "so_luong_hien_co", label: "Hiện có", numeric: true },
-              { key: "so_luong_thieu", label: "Thiếu", numeric: true },
-            ]}
-          />
-          <h3>Cây lệnh dự kiến</h3>
-          <OrderTree orders={preview.lenh_du_kien} items={items} temporary />
-        </>
-      )}
-      {record && record.trang_thai !== "nhap" && (
-        <>
-          <h3>Kế hoạch đã chốt</h3>
-          <QueryState query={frozen}>
-            <OrderTree
-              orders={frozen.data?.data.lenh || []}
-              items={items}
-              prefix={manager ? "/kho" : "/nv"}
-            />
-          </QueryState>
-        </>
       )}
       {manager && record && !["hoan_thanh", "da_huy"].includes(record.trang_thai) && (
         <div className="actions">
@@ -370,41 +307,5 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
         </div>
       )}
     </div>
-  );
-}
-function OrderTree({ orders, items, prefix, temporary = false, parent = null }) {
-  const nodes = orders.filter(
-    (order) => (temporary ? order.ma_cha_tam : order.lenh_san_xuat_cha_id) === parent,
-  );
-  if (!orders.length) return <Notice>Không có lệnh sản xuất trong kế hoạch.</Notice>;
-  return (
-    <ul className="tree">
-      {nodes.map((order) => {
-        const id = temporary ? order.ma_tam : order.id;
-        return (
-          <li key={id}>
-            {temporary ? (
-              <strong>{order.ma_tam}</strong>
-            ) : (
-              <Link to={`${prefix}/lenh-sx/${id}`}>{order.ma_lenh_san_xuat}</Link>
-            )}{" "}
-            · {itemName(items, order.mat_hang_id)} × {order.so_luong} · BOM #
-            {order.bom_id || "chưa có"}
-            {!temporary && <Badge status={order.trang_thai} />}
-            {orders.some(
-              (child) => (temporary ? child.ma_cha_tam : child.lenh_san_xuat_cha_id) === id,
-            ) && (
-              <OrderTree
-                orders={orders}
-                items={items}
-                prefix={prefix}
-                temporary={temporary}
-                parent={id}
-              />
-            )}
-          </li>
-        );
-      })}
-    </ul>
   );
 }

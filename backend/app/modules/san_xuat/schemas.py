@@ -1,4 +1,4 @@
-"""Production request and frozen planning representations (contract v3 §8)."""
+"""Production requests (UC-23 v4), orders and completion representations."""
 
 from datetime import date, datetime, timezone
 from typing import Annotated, Literal, Self
@@ -12,20 +12,25 @@ YeuCauStatus = Literal[
 YeuCauSort = Literal[
     "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat"
 ]
+LoaiYeuCau = Literal["dap_ung", "cho_kho"]
 LenhStatus = Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
 
 
 class YeuCauCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    loai_yeu_cau: LoaiYeuCau = "dap_ung"
+    han_hoan_thanh: date
     mat_hang_id: int = Field(gt=0, strict=True)
     so_luong: int = Field(gt=0, le=2**31 - 1, strict=True)
-    nhan_vien_duoc_giao_id: int | None = Field(default=None, gt=0, strict=True)
+    nhan_vien_duoc_giao_id: int = Field(gt=0, strict=True)
 
 
 class YeuCauPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    loai_yeu_cau: LoaiYeuCau | None = None
+    han_hoan_thanh: date | None = None
     mat_hang_id: int | None = Field(default=None, gt=0, strict=True)
     so_luong: int | None = Field(default=None, gt=0, le=2**31 - 1, strict=True)
     nhan_vien_duoc_giao_id: int | None = Field(default=None, gt=0, strict=True)
@@ -34,20 +39,14 @@ class YeuCauPatch(BaseModel):
     def validate_patch(self):
         if not self.model_fields_set:
             raise ValueError("Cần ít nhất một trường cập nhật")
-        for name in ("mat_hang_id", "so_luong"):
+        for name in ("mat_hang_id", "so_luong", "loai_yeu_cau", "han_hoan_thanh"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} không nhận null")
         return self
 
 
-class TinhKeHoachInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
 class GuiYeuCauInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    ke_hoach_token: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
 
 
 class LyDoInput(BaseModel):
@@ -81,53 +80,33 @@ class YeuCauRead(BaseModel):
 
     id: int
     ma_yeu_cau_san_xuat: str
+    loai_yeu_cau: LoaiYeuCau
+    han_hoan_thanh: date
     mat_hang_id: int
     so_luong: int
     nhan_vien_id: int
-    nhan_vien_duoc_giao_id: int | None
+    nhan_vien_duoc_giao_id: int
     trang_thai: YeuCauStatus
     created_at: datetime
     completed_at: datetime | None
     so_luong_da_xuat: int = 0
     so_luong_con_phai_xuat: int = 0
-    lenh_san_xuat_ids: list[int] = Field(default_factory=list)
+    bom_id: int | None
+    so_luong_dung_thanh_pham: int | None
+    so_luong_can_san_xuat: int | None
+    updated_at: datetime
+    gui_at: datetime | None
+    kiem_tra_lan_dau_at: datetime | None
+    started_at: datetime | None
+    huy_at: datetime | None
+    nguoi_huy_id: int | None
+    ly_do_huy: str | None
+    phien_ban: int
 
 
 class NhuCauDuKien(BaseModel):
     mat_hang_id: int
     so_luong_can: int
-
-
-class LenhDuKien(BaseModel):
-    ma_tam: str
-    ma_cha_tam: str | None
-    mat_hang_id: int
-    bom_id: int | None
-    so_luong: int
-    nhu_cau_truc_tiep: list[NhuCauDuKien] = Field(default_factory=list)
-
-
-class VatTuDuKien(BaseModel):
-    mat_hang_id: int
-    ma_mat_hang: str
-    ten_mat_hang: str
-    don_vi_tinh: str
-    so_luong_can_tu_kho: int
-    so_luong_hien_co: int
-    so_luong_thieu: int
-
-
-class KeHoachPreview(BaseModel):
-    yeu_cau_san_xuat_id: int
-    tinh_luc: datetime
-    ke_hoach_token: str
-    so_luong_yeu_cau: int
-    ton_thanh_pham: int
-    so_luong_can_san_xuat: int
-    du_dieu_kien_gui: bool
-    thieu_vat_tu: bool
-    lenh_du_kien: list[LenhDuKien]
-    vat_tu: list[VatTuDuKien]
 
 
 class NhuCauRead(NhuCauDuKien):
@@ -169,16 +148,6 @@ class ChungTuRead(BaseModel):
     created_at: datetime
 
 
-class KeHoachRead(BaseModel):
-    yeu_cau_san_xuat_id: int
-    lenh: list[LenhRead]
-
-
-class GuiYeuCauRead(BaseModel):
-    yeu_cau: YeuCauRead
-    ke_hoach: KeHoachRead
-
-
 class ResponseMeta(BaseModel):
     request_id: str
 
@@ -200,19 +169,7 @@ class YeuCauListResponse(BaseModel):
     meta: ListResponseMeta
 
 
-class KeHoachPreviewResponse(BaseModel):
-    data: KeHoachPreview
-    meta: ResponseMeta
-
-
-class KeHoachResponse(BaseModel):
-    data: KeHoachRead
-    meta: ResponseMeta
-
-
-class GuiYeuCauResponse(BaseModel):
-    data: GuiYeuCauRead
-    meta: ResponseMeta
+GuiYeuCauResponse = YeuCauDetailResponse
 
 
 class SanXuatError(BaseModel):
