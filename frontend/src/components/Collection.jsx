@@ -10,15 +10,19 @@ export function Collection({
   filters = [],
   search = true,
   title = "Danh sách",
+  validate,
 }) {
   const [draft, setDraft] = useState(collection.params);
+  const [filterError, setFilterError] = useState(null);
   return (
     <Card title={title}>
       <form
         className="filters"
         onSubmit={(event) => {
           event.preventDefault();
-          collection.filter(draft);
+          const message = validate?.(draft) ?? null;
+          setFilterError(message);
+          if (!message) collection.filter(draft);
         }}
       >
         {search && (
@@ -43,6 +47,11 @@ export function Collection({
           Lọc
         </Button>
       </form>
+      {filterError && (
+        <div className="notice notice-error" role="alert">
+          {filterError}
+        </div>
+      )}
       <QueryState query={collection.query}>
         <DataTable columns={columns} rows={collection.query.data?.data} caption={title} />
         <Pagination

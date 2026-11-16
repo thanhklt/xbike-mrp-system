@@ -14,7 +14,7 @@ from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
-from app.modules.bom.service import BomPlanningReader, BomService
+from app.modules.bom.service import BomService
 from app.modules.dieu_chinh_kho.repository import (
     SqlAlchemyPhieuDieuChinhRepository,
     SqlAlchemyTicketDieuChinhRepository,
@@ -37,15 +37,15 @@ from app.modules.phieu_nhap.service import PhieuNhapService
 from app.modules.phieu_xuat.repository import SqlAlchemyPhieuXuatRepository
 from app.modules.phieu_xuat.service import PhieuXuatService
 from app.modules.san_xuat.repository import (
-    SqlAlchemyHoanThanhRepository,
-    SqlAlchemyLenhSanXuatRepository,
     SqlAlchemyYeuCauSanXuatRepository,
 )
+from app.modules.san_xuat.repository.chung_tu_hoan_thanh_sx import (
+    SqlAlchemyChungTuHoanThanhRepository,
+)
 from app.modules.san_xuat.service import (
-    ChungTuHoanThanhService,
-    LenhSanXuatService,
     YeuCauSanXuatService,
 )
+from app.modules.san_xuat.service.chung_tu_hoan_thanh_sx import ChungTuHoanThanhService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -88,6 +88,7 @@ def get_auth_service(
     return AuthService(employees)
 
 
+# UC-02 Đăng xuất — R1, A1, A2: yêu cầu token và tài khoản hợp lệ (specs/use_cases/identity_access/UC-02.md)
 async def get_current_user_payload(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     service: Annotated[AuthService, Depends(get_auth_service)],
@@ -178,37 +179,24 @@ def get_yeu_cau_san_xuat_service(
         transaction,
         get_mat_hang_availability(db),
         NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
-        BomPlanningReader(SqlAlchemyBomRepository(db)),
         PhieuXuatService(
             SqlAlchemyPhieuXuatRepository(db), audit, transaction, SqlAlchemyInventoryRepository(db)
         ),
     )
 
 
-def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
-    return InventoryService(SqlAlchemyInventoryRepository(db))
-
-
-def get_lenh_san_xuat_service(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    audit: Annotated[AuditService, Depends(get_audit_service)],
-) -> LenhSanXuatService:
-    transaction = SqlAlchemyTransaction(db)
-    return LenhSanXuatService(
-        SqlAlchemyLenhSanXuatRepository(db),
-        audit,
-        transaction,
-        NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
-    )
-
-
 def get_chung_tu_hoan_thanh_service(
     db: Annotated[AsyncSession, Depends(get_db)],
-    audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> ChungTuHoanThanhService:
     return ChungTuHoanThanhService(
-        SqlAlchemyHoanThanhRepository(db), audit, SqlAlchemyTransaction(db)
+        SqlAlchemyChungTuHoanThanhRepository(db), SqlAlchemyYeuCauSanXuatRepository(db),
+        AuditService(SqlAlchemyAuditRepository(db)), SqlAlchemyTransaction(db),
+        inventory=SqlAlchemyInventoryRepository(db),
     )
+
+
+def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
+    return InventoryService(SqlAlchemyInventoryRepository(db))
 
 
 def get_phieu_xuat_service(

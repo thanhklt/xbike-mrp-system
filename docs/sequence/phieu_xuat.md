@@ -1,587 +1,435 @@
-# Luồng API phiếu xuất — contract v3
+# Sequence phiếu xuất v4 — UC-34 đến UC-40
 
-## Ảnh PNG cho từng endpoint
+Nguồn: [spec](../../specs/use_cases/goods_issue/README.md),
+[plan và kết quả](../../specs/use_cases/goods_issue/PLAN.md),
+`phieu_xuat/{router,schemas,service,ports,repository,models}.py`,
+`inventory/{ports,repository}.py`, `audit/{service,repository,schemas,models}.py`,
+`dependencies.py`, `core/{request_context,sqlalchemy_transaction}.py` và `init.sql` v4.
 
-| Endpoint | Ảnh sequence |
-|---|---|
-| GET `/api/v1/phieu_xuat` | [01 — Danh sách](assets/phieu_xuat/01-danh-sach.png) |
-| GET `/api/v1/phieu_xuat/{id}` | [02 — Chi tiết](assets/phieu_xuat/02-chi-tiet.png) |
-| POST `/api/v1/phieu_xuat` | [03 — Tạo nháp](assets/phieu_xuat/03-tao-nhap.png) |
-| PATCH `/api/v1/phieu_xuat/{id}` | [04 — Sửa nháp](assets/phieu_xuat/04-sua-nhap.png) |
-| DELETE `/api/v1/phieu_xuat/{id}` | [05 — Xóa nháp](assets/phieu_xuat/05-xoa-nhap.png) |
-| POST `/api/v1/phieu_xuat/{id}/gui` | [06 — Gửi](assets/phieu_xuat/06-gui.png) |
-| POST `/api/v1/phieu_xuat/{id}/duyet` | [07 — Duyệt](assets/phieu_xuat/07-duyet.png) |
-| POST `/api/v1/phieu_xuat/{id}/tu_choi` | [08 — Từ chối](assets/phieu_xuat/08-tu-choi.png) |
-| POST `/api/v1/phieu_xuat/{id}/ve_nhap` | [09 — Về nháp](assets/phieu_xuat/09-ve-nhap.png) |
+| Endpoint hiện có | UC | PNG |
+|---|---|---|
+| GET `/api/v1/phieu_xuat` | UC-40 | [Danh sách](assets/phieu_xuat/01-danh-sach.png) |
+| GET `/api/v1/phieu_xuat/{id}` | UC-40 | [Chi tiết](assets/phieu_xuat/02-chi-tiet.png) |
+| POST `/api/v1/phieu_xuat` | UC-34/37 | [Tạo nháp](assets/phieu_xuat/03-tao-nhap.png) |
+| POST `/api/v1/phieu_xuat/{id}/gui` | UC-34/37 | [Gửi hoặc gửi lại](assets/phieu_xuat/06-gui.png) |
+| POST `/api/v1/phieu_xuat/{id}/duyet` | UC-35/38 | [Duyệt](assets/phieu_xuat/07-duyet.png) |
+| POST `/api/v1/phieu_xuat/{id}/tu_choi` | UC-36/39 | [Từ chối](assets/phieu_xuat/08-tu-choi.png) |
 
-Ảnh PNG của GET danh sách, GET chi tiết và duyệt chưa được tái tạo sau cập nhật ngày 04/11/2026. Dùng các sơ đồ Mermaid bên dưới để đối chiếu luồng hiện tại.
+Chỉ sáu endpoint trên được đăng ký. PATCH/DELETE `/{id}` trả 405; `/{id}/ve_nhap`
+và các alias xuất cũ không có route. Không tạo route `gui_lai`: gửi lại dùng `/gui`.
+QLK (`quan_ly`) đọc danh sách/chi tiết, duyệt, từ chối. NV (`nhan_vien`) đọc/lập/gửi
+phiếu thuộc yêu cầu hiện được giao. QTV không được vào các endpoint này. JWT được
+kiểm tra chữ ký/hạn, tài khoản, hash phiên mật khẩu và vai trò hiện tại từ DB.
+Phần auth hiện hữu chưa được nâng sang `phien_ban_dang_nhap` v4 trong tác vụ này.
 
-Đối chiếu `docs/api_contract_v3.md` §2, §3, §10, §14 và code hiện tại. Nguồn schema là `infra/postgres/init.sql`, bảng PascalCase. Đơn giá mặt hàng và ba cột tiền phiếu xuất dùng BIGINT theo quyết định của dev; API trả JSON integer VND, không trả chuỗi Decimal. Không chạy migration hoặc cập nhật database đang có dữ liệu.
-
-Q được đọc và ghi mọi phiếu, kể cả tự duyệt phiếu mình lập. N chỉ đọc phiếu thuộc lệnh/yêu cầu hiện được giao, không kiểm tra N là người lập. A bị từ chối. Vai trò, tài khoản và phiên bản mật khẩu được kiểm tra từ DB mỗi request. Người lập và người ghi audit/ledger lấy từ JWT đã xác minh.
-
-Chỉ đăng ký chín endpoint dưới đây. `/material-issuing` và `/finished-goods-issuing` đã được gỡ khỏi app.main, không còn đường ghi cũ để vượt quyền/giá v3. Phần tương tác nội bộ với module sản xuất vẫn dùng `PhieuXuatService` và `SqlAlchemyPhieuXuatRepository`.
-
-Response thành công `{data,meta}`, lỗi `{error:{code,message,details},meta:{request_id}}`. GET chi tiết và các response ghi trả strong ETag trên resource gồm trạng thái và chi tiết sắp theo ID. POST trả 201 + Location, DELETE 204 không body, còn lại 200. Validation 422 không echo input nhạy cảm. 405 theo FastAPI mặc định.
-
-POST chỉ nhận loại, đúng một FK nguồn và chi_tiet gồm mặt hàng/số lượng. Không nhận đơn giá, tổng, người lập, mã phiếu hoặc trạng thái. Nháp/chờ duyệt/từ chối giữ giá và tổng null. PATCH chỉ nhận chi_tiet, bỏ qua giữ nguyên, null/array rỗng bị từ chối, gửi array thì thay toàn bộ dòng. PATCH không đổi dữ liệu không ghi thêm audit.
-
-Giao dịch ghi dùng chung AsyncSession với auth, audit và inventory. Để đồng bộ với hủy yêu cầu sản xuất, thứ tự khóa là yêu cầu → lệnh (nếu có) → phiếu → chi tiết → mặt hàng tăng dần ID. lock_context đọc FK bất biến trước, khóa nguồn, rồi đọc lại phiếu FOR UPDATE và kiểm tra ETag dưới khóa khi cần. GET rollback transaction chỉ đọc của auth, bắt đầu transaction REPEATABLE READ READ ONLY và không khóa dòng. COUNT, trang, chi tiết và kiểm tra người được giao cùng một snapshot nên tổng khớp trang và ETag nhất quán. Danh sách lấy chi tiết của cả trang bằng một truy vấn, không N+1. Session đóng sẽ kết thúc transaction đọc, không commit.
-
-Thay đổi phiếu cần If-Match: thiếu/rỗng 428, weak/wildcard/sai định dạng/cũ 412. Riêng duyệt lại phiếu da_duyet bỏ qua If-Match hoàn toàn theo contract §2.2 (thiếu, rỗng, wildcard, weak hoặc cũ đều được), sau khi kiểm tra quyền và khóa đối tượng. Trả resource hiện tại với da_ghi_so_truoc_do=true và các ID ledger đã có; vẫn phải còn quyền. Không ghi kho/audit lần hai. Phiếu da_duyet bất biến.
-
-Mã PX-YYYYMM-NNNNNN do PostgreSQL xác định tháng Asia/Ho_Chi_Minh; advisory transaction lock (20261022,3) bảo vệ cấp mã. Xét cả mã hiện có và snapshot audit để không tái sử dụng mã đã xóa. ID do IDENTITY cấp, có thể khuyết khi rollback.
-
-AuditService.append → SqlAlchemyAuditRepository.append chỉ session.add, chưa INSERT. SqlAlchemyTransaction.commit flush cả audit rồi COMMIT. Lỗi bất kỳ ở giá/trạng thái/ledger/tồn/tiến độ/audit hoặc commit đều rollback toàn bộ. Không có ticket khi duyệt xuất thất bại.
+Thành công dùng `{data,meta}`; lỗi nghiệp vụ `{error,meta}` có `request_id`. POST tạo
+201 + Location + ETag; các thao tác và GET chi tiết 200 + ETag. Tiền là integer VND
+trong BIGINT, giá/tổng null trước duyệt. Thời gian UTC với Z. ETag là SHA-256 JSON
+canonical của header và chi tiết sắp theo ID, gồm metadata/phien_ban, không có request_id.
+If-Match bắt buộc với gửi/duyệt/từ chối: thiếu/trắng 428; weak/wildcard/nhiều header/
+nhiều tag/sai định dạng 412; tag cũ 412, ngoại lệ replay duyệt bên dưới.
+Sơ đồ biểu diễn nhóm lỗi, không cam kết ưu tiên giữa auth và validation khi cùng sai.
 
 ## GET /api/v1/phieu_xuat
 
-Q/N. Query: page/page_size, q, sort, loai_phieu, trang_thai, nhan_vien_id, lenh_san_xuat_id, yeu_cau_san_xuat_id, tu_ngay/den_ngay. Ngày lọc theo Asia/Ho_Chi_Minh, sort whitelist thêm ID. Không ETag danh sách.
+QLK-only. Bộ lọc AND: `q` chứa mã (không phân biệt hoa thường, `%`/`_` là ký tự thường),
+`loai_phieu`, `trang_thai`, `nhan_vien_id`, `yeu_cau_san_xuat_id`, `tu_ngay`, `den_ngay`.
+Ngày theo Asia/Ho_Chi_Minh, hai đầu bao gồm cả ngày. Page 1, size 20, tối đa 100.
+Sort whitelist `id`, `created_at`, `ma_phieu_xuat`, có tiền tố `-`; mặc định
+`-created_at`, ID tăng dần khi trùng. Không có lọc theo lệnh, không ETag danh sách.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
+    actor C as Client QLK
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
     participant S as PhieuXuatService
     participant P as SqlAlchemyPhieuXuatRepository
     participant DB as PostgreSQL
-    C->>R: GET /api/v1/phieu_xuat + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
+    C->>R: GET /api/v1/phieu_xuat + JWT + query
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Read current employee and role
+    break Missing / invalid / revoked credentials
+        R-->>C: 401
     end
-    break Account locked or role not allowed
+    break Locked account or role other than quan_ly
         R-->>C: 403
     end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
+    R->>R: Validate query, reject repeated keys and GET body
+    break Invalid / unknown filters, range or pagination
+        R-->>C: 422
     end
     R->>S: list_issues(query, actor, request_id)
-    S->>P: begin_read_snapshot()
-    P->>DB: ROLLBACK auth read transaction if active
-    P->>DB: Begin REPEATABLE READ READ ONLY transaction
-    S->>P: list_issues with assignment scope for N, all for Q
-    P->>DB: COUNT with EXISTS current assignment and filters
-    P->>DB: Read page headers with sort and pagination, no row locks
-    opt Page contains records
-        P->>DB: Read all page lines in one query, sorted by issue ID then line ID
+    S->>S: Require quan_ly
+    S->>P: begin_read_snapshot
+    P->>DB: Roll back auth read TX, start REPEATABLE READ READ ONLY
+    S->>P: list_issues
+    P->>DB: COUNT with AND filters
+    P->>DB: Page headers sorted with ID tie-break
+    opt Nonempty page
+        P->>DB: One query for all page lines ordered by ID
     end
-    Note over P,DB: COUNT, page and lines share one read-only snapshot
-    DB-->>P: Records and total, empty results allowed
-    P-->>S: RecordPage PhieuXuatRead
-    S-->>R: data + pagination meta + request_id
-    R-->>C: 200, no stock/state/audit writes
+    P-->>S: RecordPage of detached read DTOs
+    S-->>R: data + pagination + request_id
+    R-->>C: 200, including valid empty page
+    Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
 ```
 
 ## GET /api/v1/phieu_xuat/{id}
 
-Q/N. N ngoài công việc hiện được giao nhận 403; phiếu không tồn tại 404. Không cần N là người lập.
+Missing ID hoặc lớn hơn PostgreSQL INTEGER trả 404; không đưa ID quá dải vào asyncpg.
+NV ngoài phạm vi nhận 403. Không nhận query hoặc GET body.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
+    actor C as Client QLK / NV
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
     participant S as PhieuXuatService
     participant P as SqlAlchemyPhieuXuatRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/phieu_xuat/{id} + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Current account, role, password version
+    break Invalid credentials / locked or forbidden role
+        R-->>C: 401 / 403
     end
-    break Account locked or role not allowed
-        R-->>C: 403
-    end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
+    R->>R: Positive ID, no query or body
+    break Structural validation failure
+        R-->>C: 422
     end
     R->>S: get_issue(id, actor, request_id)
-    S->>P: begin_read_snapshot()
-    P->>DB: ROLLBACK auth read transaction if active
-    P->>DB: Begin REPEATABLE READ READ ONLY transaction
-    S->>P: get_issue(id, lock=false)
-    P->>DB: Read issue then sorted lines without row locks
-    break Issue missing or ID outside INTEGER
-        S-->>C: 404 khong_tim_thay
+    S->>P: begin_read_snapshot
+    P->>DB: REPEATABLE READ READ ONLY after releasing auth read TX
+    S->>P: get_issue(lock=false)
+    P->>DB: Read PhieuXuat and ordered ChiTietPhieuXuat
+    break Not found / ID outside INTEGER range
+        S-->>C: 404
     end
-    opt Actor N
+    opt NV
         S->>P: assigned_to(record, employee_id)
-        P->>DB: EXISTS order/request current assignee in the same snapshot
-        break Assignment belongs to another employee
-            S-->>C: 403 khong_co_quyen
+        P->>DB: Read current YeuCauSanXuat assignment in same snapshot
+        break Assigned to another employee
+            S-->>C: 403
         end
     end
-    S->>S: Hash resource for strong ETag
-    S-->>R: data, meta, ETag
-    R-->>C: 200 + ETag
+    S->>S: Build canonical resource ETag
+    S-->>R: resource and ETag
+    R-->>C: 200 data/meta + strong ETag
+    Note over S,DB: Same snapshot for representation, assignment and validator, no writes
 ```
 
 ## POST /api/v1/phieu_xuat
 
-Chỉ Q, không If-Match. Kiểm tra đúng nguồn, trạng thái và mặt hàng active thuộc nhu cầu trực tiếp. Không kiểm tồn hoặc ghi kho ở bước tạo nháp.
+Input chỉ `{loai_phieu, yeu_cau_san_xuat_id}`. Loại `xuat_linh_kien` hoặc
+`xuat_thanh_pham`. Source phải `dang_thuc_hien`, giao đúng NV. LK lấy đúng đủ
+NhuCauLinhKien đã chốt, cần lượng sản xuất > 0. TP chỉ `xuat_giao`, lượng toàn bộ yêu
+cầu; nếu cần sản xuất thì chứng từ hoàn thành của nguồn phải `da_duyet`. Không tính
+lại BOM; TP đã ngừng vẫn được hoàn tất yêu cầu đã gửi hợp lệ (UC-12 R7).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
+    actor C as Assigned NV
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
     participant S as PhieuXuatService
     participant P as SqlAlchemyPhieuXuatRepository
-    participant DB as PostgreSQL
-    participant T as SqlAlchemyTransaction
-    participant A as AuditService
+    participant AU as AuditService
     participant AR as SqlAlchemyAuditRepository
-    C->>R: POST /api/v1/phieu_xuat + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
-    end
-    break Account locked or role not allowed
-        R-->>C: 403
-    end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
-    end
-    R->>S: create_issue(payload, actor, request_id)
-    S->>T: __aenter__
-    S->>P: lock_source then lock_parts in ascending ID, FOR SHARE
-    P->>DB: Lock request/order, read demand and active items
-    break Source/item missing or source state invalid
-        S-->>C: 404 / 409 trang_thai_khong_hop_le
-    end
-    break Inactive/wrong item, wrong source demand or excessive quantity
-        S-->>C: 409 mat_hang_ngung_hoat_dong / phu_thuoc_khong_hop_le / vuot_nhu_cau
-    end
-    S->>P: add draft with actor_id and null prices
-    P->>DB: Advisory code lock, monthly code from rows/audit, INSERT header/lines with IDENTITY
-    S->>A: append(CreationAudit with before/after and reason)
-    A->>AR: append(entry)
-    AR->>AR: session.add audit, no independent commit
-    S->>T: __aexit__ success
-    T->>DB: session.commit, flush pending audit then COMMIT
-    break Write, audit, flush or commit failure
-        T->>DB: ROLLBACK all document, stock, ledger and progress changes
-        T-->>C: 409 database constraint or 500 safe error
-    end
-    S-->>R: Draft resource, meta, strong ETag
-    R-->>C: 201 + Location + ETag
-```
-
-## PATCH /api/v1/phieu_xuat/{id}
-
-Chỉ Q, chỉ nháp. Chi tiết được thay nguyên danh sách khi gửi, ID dòng do server cấp. Không ghi kho.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
-    participant S as PhieuXuatService
-    participant P as SqlAlchemyPhieuXuatRepository
-    participant DB as PostgreSQL
     participant T as SqlAlchemyTransaction
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    C->>R: PATCH /api/v1/phieu_xuat/{id} + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
-    end
-    break Account locked or role not allowed
-        R-->>C: 403
-    end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
-    end
-    R->>S: patch_issue(id, payload, actor, If-Match, request_id)
-    S->>T: __aenter__, use existing request session
-    S->>P: lock_context(id)
-    P->>DB: Peek immutable FK, lock request then order then issue and lines
-    break Source or issue missing
-        S-->>C: 404 khong_tim_thay
-    end
-    S->>S: Require strong If-Match, compare current resource under lock
-    break Header missing / stale, weak or wildcard
-        S-->>C: 428 thieu_if_match / 412 du_lieu_da_thay_doi
-    end
-    break Not draft or already referenced by ledger
-        S-->>C: 409 trang_thai_khong_hop_le / dang_duoc_tham_chieu
-    end
-    opt chi_tiet supplied
-        S->>P: lock_parts FOR SHARE
-        P->>DB: Read active items in ascending ID
-        S->>S: Validate source, types and demand, errors 404/409
-        opt Lines actually changed
-            S->>P: replace_lines, keep prices null
-            P->>DB: DELETE old lines, INSERT replacement lines
-            S->>A: append sua with snapshots
-            A->>AR: append
-            AR->>AR: session.add
-        end
-    end
-    S->>T: __aexit__, session.commit flushes pending writes
-    T->>DB: COMMIT, rollback on write/flush/audit failure
-    S-->>R: Current resource and ETag
-    R-->>C: 200 + ETag, unchanged on no-op
-```
-
-## DELETE /api/v1/phieu_xuat/{id}
-
-Chỉ Q, chỉ nháp chưa có ledger. Audit giữ snapshot trước khi xóa.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
-    participant S as PhieuXuatService
-    participant P as SqlAlchemyPhieuXuatRepository
     participant DB as PostgreSQL
-    participant T as SqlAlchemyTransaction
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    C->>R: DELETE /api/v1/phieu_xuat/{id} + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
+    C->>R: POST /api/v1/phieu_xuat + JWT + source/type
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Current employee and role
+    break Invalid credentials / not active NV
+        R-->>C: 401 / 403
     end
-    break Account locked or role not allowed
-        R-->>C: 403
+    R->>R: Strict positive source ID, type, forbid extras and query
+    break Invalid input / extra fields
+        R-->>C: 422
     end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
+    R->>S: create_issue
+    S->>T: Enter shared session transaction
+    S->>P: lock_source(type, request_id)
+    P->>DB: YCSX FOR UPDATE, frozen demand and completion projection
+    break Source missing / NV outside assignment
+        S->>T: Roll back
+        S-->>C: 404 / 403
     end
-    R->>S: delete_issue(id, actor, If-Match)
-    S->>T: __aenter__, use existing request session
-    S->>P: lock_context(id)
-    P->>DB: Peek immutable FK, lock request then order then issue and lines
-    break Source or issue missing
-        S-->>C: 404 khong_tim_thay
+    S->>S: Check source state, type and completion prerequisites
+    S->>P: lock_parts, exists_for_source
+    P->>DB: Item type snapshot FOR SHARE, existing issue lookup
+    break Invalid source/demand or duplicate request/type
+        S->>T: Roll back
+        S-->>C: 409
     end
-    S->>S: Require strong If-Match, compare current resource under lock
-    break Header missing / stale, weak or wildcard
-        S-->>C: 428 thieu_if_match / 412 du_lieu_da_thay_doi
+    S->>P: add(payload, actor_id, frozen demand)
+    P->>DB: Advisory code lock, monthly VN code including audit history
+    P->>DB: INSERT Identity header and exact lines with null prices
+    S->>AU: append tao, state/snapshot after
+    AU->>AR: append
+    AR->>AR: session.add LichSuThaoTac
+    S->>T: Commit
+    T->>DB: Flush audit and COMMIT all writes
+    alt Success
+        S-->>R: Draft resource and ETag
+        R-->>C: 201 + Location + ETag + data/meta
+    else Constraint / unexpected write or commit error
+        T->>DB: ROLLBACK
+        R-->>C: 409 / safe 500
     end
-    break Not draft or referenced by ledger
-        S-->>C: 409 trang_thai_khong_hop_le / dang_duoc_tham_chieu
-    end
-    S->>P: delete_draft
-    P->>DB: DELETE lines then header
-    S->>A: append(CreationAudit with before/after and reason)
-    A->>AR: append(entry)
-    AR->>AR: session.add audit, no independent commit
-    S->>T: __aexit__ success
-    T->>DB: session.commit, flush pending audit then COMMIT
-    break Write, audit, flush or commit failure
-        T->>DB: ROLLBACK all document, stock, ledger and progress changes
-        T-->>C: 409 database constraint or 500 safe error
-    end
-    R-->>C: 204, empty body
+    Note over S,DB: No stock, reservation or ledger writes during creation
 ```
 
 ## POST /api/v1/phieu_xuat/{id}/gui
 
-Chỉ Q. nhap → cho_duyet. Body JSON object rỗng bắt buộc. Không thay đổi tồn kho.
+Body bắt buộc `{}`. NV đúng nguồn gửi nháp hoặc gửi lại từ chối trực tiếp sang
+`cho_duyet`; giữ nguyên ID/chi tiết. Tăng phiên bản, cập nhật gui_at/updated_at,
+xóa metadata xử lý/lý do trên resource khi gửi lại; lý do cũ vẫn trong audit.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
+    actor C as Assigned NV
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
     participant S as PhieuXuatService
     participant P as SqlAlchemyPhieuXuatRepository
-    participant DB as PostgreSQL
-    participant T as SqlAlchemyTransaction
-    participant A as AuditService
+    participant AU as AuditService
     participant AR as SqlAlchemyAuditRepository
-    C->>R: POST /api/v1/phieu_xuat/{id}/gui + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
-    end
-    break Account locked or role not allowed
-        R-->>C: 403
-    end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
-    end
-    R->>S: transition(id, gui, actor, If-Match, request_id, reason)
-    S->>T: __aenter__, use existing request session
-    S->>P: lock_context(id)
-    P->>DB: Peek immutable FK, lock request then order then issue and lines
-    break Source or issue missing
-        S-->>C: 404 khong_tim_thay
-    end
-    S->>S: Require strong If-Match, compare current resource under lock
-    break Header missing / stale, weak or wildcard
-        S-->>C: 428 thieu_if_match / 412 du_lieu_da_thay_doi
-    end
-    break Current state is not nhap
-        S-->>C: 409 trang_thai_khong_hop_le
-    end
-    S->>P: lock_parts FOR SHARE, read current source/demand
-    P->>DB: Read active items and source
-    S->>S: Validate allowed item types, source state and demand, 404/409 on failure
-    S->>P: change_state(cho_duyet)
-    P->>DB: UPDATE issue state
-    S->>A: append(CreationAudit with before/after and reason)
-    A->>AR: append(entry)
-    AR->>AR: session.add audit, no independent commit
-    S->>T: __aexit__ success
-    T->>DB: session.commit, flush pending audit then COMMIT
-    break Write, audit, flush or commit failure
-        T->>DB: ROLLBACK all document, stock, ledger and progress changes
-        T-->>C: 409 database constraint or 500 safe error
-    end
-    S-->>R: Updated resource, meta and ETag
-    R-->>C: 200 + ETag
-```
-
-## POST /api/v1/phieu_xuat/{id}/tu_choi
-
-Chỉ Q. cho_duyet → tu_choi. LyDoInput bắt buộc, trim lý do không rỗng và lưu audit. Không thay đổi tồn kho.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
-    participant S as PhieuXuatService
-    participant P as SqlAlchemyPhieuXuatRepository
-    participant DB as PostgreSQL
     participant T as SqlAlchemyTransaction
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    C->>R: POST /api/v1/phieu_xuat/{id}/tu_choi + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
-    end
-    break Account locked or role not allowed
-        R-->>C: 403
-    end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
-    end
-    R->>S: transition(id, tu_choi, actor, If-Match, request_id, reason)
-    S->>T: __aenter__, use existing request session
-    S->>P: lock_context(id)
-    P->>DB: Peek immutable FK, lock request then order then issue and lines
-    break Source or issue missing
-        S-->>C: 404 khong_tim_thay
-    end
-    S->>S: Require strong If-Match, compare current resource under lock
-    break Header missing / stale, weak or wildcard
-        S-->>C: 428 thieu_if_match / 412 du_lieu_da_thay_doi
-    end
-    break Current state is not cho_duyet
-        S-->>C: 409 trang_thai_khong_hop_le
-    end
-    S->>P: change_state(tu_choi)
-    P->>DB: UPDATE issue state
-    S->>A: append(CreationAudit with before/after and reason)
-    A->>AR: append(entry)
-    AR->>AR: session.add audit, no independent commit
-    S->>T: __aexit__ success
-    T->>DB: session.commit, flush pending audit then COMMIT
-    break Write, audit, flush or commit failure
-        T->>DB: ROLLBACK all document, stock, ledger and progress changes
-        T-->>C: 409 database constraint or 500 safe error
-    end
-    S-->>R: Updated resource, meta and ETag
-    R-->>C: 200 + ETag
-```
-
-## POST /api/v1/phieu_xuat/{id}/ve_nhap
-
-Chỉ Q. tu_choi → nhap. LyDoInput bắt buộc, trim lý do không rỗng và lưu audit. Không thay đổi tồn kho.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
-    participant S as PhieuXuatService
-    participant P as SqlAlchemyPhieuXuatRepository
     participant DB as PostgreSQL
-    participant T as SqlAlchemyTransaction
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    C->>R: POST /api/v1/phieu_xuat/{id}/ve_nhap + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
+    C->>R: POST /api/v1/phieu_xuat/{id}/gui + JWT + If-Match + empty object
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Current account and role
+    break Invalid credentials / not active NV
+        R-->>C: 401 / 403
     end
-    break Account locked or role not allowed
-        R-->>C: 403
+    R->>R: Validate ID, required empty body, no query, preserve all If-Match headers
+    break Invalid structure
+        R-->>C: 422
     end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
+    R->>S: submit_issue
+    S->>T: Enter transaction
+    S->>P: lock_context
+    P->>DB: Lock YCSX then PhieuXuat, ordered lines, completion if present
+    break Missing issue / wrong assignment
+        S->>T: Roll back
+        S-->>C: 404 / 403
     end
-    R->>S: transition(id, ve_nhap, actor, If-Match, request_id, reason)
-    S->>T: __aenter__, use existing request session
-    S->>P: lock_context(id)
-    P->>DB: Peek immutable FK, lock request then order then issue and lines
-    break Source or issue missing
-        S-->>C: 404 khong_tim_thay
+    S->>S: Validate one strong If-Match and compare under lock
+    break Missing / malformed / stale validator
+        S->>T: Roll back
+        S-->>C: 428 / 412
     end
-    S->>S: Require strong If-Match, compare current resource under lock
-    break Header missing / stale, weak or wildcard
-        S-->>C: 428 thieu_if_match / 412 du_lieu_da_thay_doi
+    S->>P: lock_parts
+    P->>DB: Read item types FOR SHARE
+    S->>S: Source eligible, nhap or tu_choi, exact frozen lines and null prices
+    break Invalid source / workflow / demand
+        S->>T: Roll back
+        S-->>C: 409
     end
-    break Current state is not tu_choi
-        S-->>C: 409 trang_thai_khong_hop_le
-    end
-    S->>P: change_state(nhap)
-    P->>DB: UPDATE issue state
-    S->>A: append(CreationAudit with before/after and reason)
-    A->>AR: append(entry)
-    AR->>AR: session.add audit, no independent commit
-    S->>T: __aexit__ success
-    T->>DB: session.commit, flush pending audit then COMMIT
-    break Write, audit, flush or commit failure
-        T->>DB: ROLLBACK all document, stock, ledger and progress changes
-        T-->>C: 409 database constraint or 500 safe error
-    end
-    S-->>R: Updated resource, meta and ETag
-    R-->>C: 200 + ETag
+    S->>P: change_state cho_duyet, timestamps, version +1, clear processing metadata
+    P->>DB: UPDATE PhieuXuat
+    S->>AU: append gui or gui_lai, before/after state and snapshots
+    AU->>AR: append
+    AR->>AR: session.add
+    S->>T: Commit
+    T->>DB: Flush audit and COMMIT, any error ROLLBACK
+    R-->>C: 200 + resource ETag, or 409 / safe 500
+    Note over S,DB: Stock, holds, ledger unchanged, no separate gui_lai route
 ```
 
 ## POST /api/v1/phieu_xuat/{id}/duyet
 
-Chỉ Q, body {}. Được duyệt phiếu mình lập. Duyệt mới chỉ từ cho_duyet. Tồn/giá/ledger/tiến độ/audit cùng transaction. Hai yêu cầu khác nhau dùng chung mặt hàng vẫn được tuần tự hóa bằng khóa dòng MatHang.
+Body bắt buộc `{}`, QLK-only. Thứ tự khóa: nguồn YCSX → phiếu/chi tiết → chứng từ
+hoàn thành nếu có → MatHang tăng dần ID → GiuHang tăng dần item/ID. Nhu cầu đã chốt
+bất biến; chứng từ hoàn thành đã duyệt bất biến. Service kiểm tra lượng đúng đủ,
+giữ nguồn/loại/lượng/chứng từ đúng, tổng giữ khớp các khoản đang giữ, tồn khớp tổng
+ledger, giá integer và không tràn BIGINT. Không dùng cache để quyết định giá/tồn.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router / dependencies
-    participant AU as AuthService
-    participant NV as NhanVienService
-    participant NR as SqlAlchemyNhanVienRepository
+    actor C as QLK
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
     participant S as PhieuXuatService
     participant P as SqlAlchemyPhieuXuatRepository
-    participant DB as PostgreSQL
-    participant T as SqlAlchemyTransaction
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
     participant I as SqlAlchemyInventoryRepository
-    C->>R: POST /api/v1/phieu_xuat/{id}/duyet + JWT
-    R->>AU: current_payload(token)
-    AU->>NV: get_auth_identity(subject, pwdv)
-    NV->>NR: get_credentials_by_id
-    NR->>DB: Read current employee and role
-    break Missing/invalid/revoked JWT or missing account
-        AU-->>C: 401 chua_xac_thuc + WWW-Authenticate Bearer
+    participant AU as AuditService
+    participant AR as SqlAlchemyAuditRepository
+    participant T as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    C->>R: POST /api/v1/phieu_xuat/{id}/duyet + JWT + If-Match + empty object
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Current account, role and credential version
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
     end
-    break Account locked or role not allowed
-        R-->>C: 403
+    R->>R: Validate ID, empty body, no query, retain physical If-Match values
+    break Invalid structure
+        R-->>C: 422
     end
-    R->>R: Validate body, path and query
-    break Invalid input, extra or repeated query/header
-        R-->>C: 422 du_lieu_khong_hop_le
+    R->>S: approve
+    S->>T: Enter shared transaction
+    S->>P: lock_context
+    P->>DB: YCSX FOR UPDATE then issue/lines and completion lock
+    break Missing resource
+        S->>T: Roll back
+        S-->>C: 404
     end
-    R->>S: approve(id, actor, If-Match, request_id)
-    S->>T: __aenter__
-    S->>P: lock_context, lock request then order then issue/lines
-    P->>DB: FOR UPDATE context, missing resource returns 404
-    alt Issue already da_duyet
+    S->>S: Require one quoted SHA-256 validator even for replay
+    break Missing / malformed, weak, wildcard or multiple validators
+        S->>T: Roll back
+        S-->>C: 428 / 412
+    end
+    alt Already da_duyet
         S->>P: postings(id)
-        P->>DB: Read existing ledger IDs
-        Note over S,DB: If-Match not checked, no state/stock/ledger/audit writes
+        P->>DB: Read existing ledger rows
+        S->>S: Check every line has matching item, kind and negative quantity
+        alt Complete posting
+            R-->>C: 200 current resource, old ledger IDs, replay=true, current ETag
+        else Incomplete or inconsistent posting
+            S-->>C: 409, no repair
+        end
+        Note over S,DB: Old well-formed tag accepted, no stock/price/source/audit writes
     else First approval
-        S->>S: Require header, missing 428, malformed/weak/wildcard 412
-        S->>S: Compare ETag 412, require cho_duyet 409
-        S->>P: lock_parts(posting=true), approved_quantities
-        P->>DB: MatHang FOR UPDATE in ascending ID, sum approved source quantities
-        S->>S: Recheck source state, item active/type, remaining demand and BIGINT price bounds
-        break Invalid source/item or quantity exceeds remaining demand
-            S-->>C: 404 / 409 trang_thai_khong_hop_le, mat_hang_ngung_hoat_dong, phu_thuoc_khong_hop_le, vuot_nhu_cau
+        S->>S: Compare current ETag, require pending state and eligible source
+        break Stale validator / invalid workflow or frozen demand
+            S->>T: Roll back
+            S-->>C: 412 / 409
         end
-        S->>P: freeze_prices(record, locked catalog prices)
-        P->>DB: UPDATE line prices/totals then header total and da_duyet
-        S->>I: issue_stock(lines, kind, actor_id, posted_at)
-        I->>DB: Recheck locked stock equals ledger sum
-        break Insufficient stock or inconsistent ledger
-            I-->>S: khong_du_ton_kho with safe quantity details or conflict
-            S->>T: Propagate error
-            T->>DB: ROLLBACK state and prices too
-            T-->>C: 409
+        S->>P: postings(id), require no existing posting
+        P->>DB: Read ledger for issue
+        S->>I: lock_issue_stock(source, ordered item IDs)
+        I->>DB: MatHang FOR UPDATE then active GiuHang FOR UPDATE, ledger SUM
+        I-->>S: Detached stock, prices, all active reservations
+        S->>S: Validate holds, stock/ledger, source quantities, price and overflow
+        break Invalid holds / insufficient or inconsistent stock / money
+            S->>T: Roll back
+            S-->>C: 409
         end
-        I->>DB: INSERT negative source-unique ledger and UPDATE stock balance/time
+        S->>P: freeze_prices(record, prices, actor, timestamp)
+        P->>DB: UPDATE lines before parent becomes immutable
+        P->>DB: UPDATE parent da_duyet, total, processor/time, version +1
+        S->>I: issue_stock(validated lines and own reservations)
+        I->>DB: UPDATE stock and held together for each item
+        I->>DB: UPDATE own GiuHang to da_xuat with issue/end time
+        I->>DB: INSERT negative GiaoDichKho with so_luong_ton_sau and unique line FK
         opt Finished goods
-            S->>P: update_progress(source request, approved total, demand)
-            P->>DB: UPDATE request dang_thuc_hien or hoan_thanh and completed_at
+            S->>P: update_progress(source, timestamp)
+            P->>DB: UPDATE YCSX hoan_thanh, completed_at, updated_at, version +1
+            S->>AU: append source hoan_tat before/after
+            AU->>AR: append, session.add
         end
-        S->>A: append duyet with before/after snapshots
-        A->>AR: append
-        AR->>AR: session.add, deferred INSERT
+        S->>AU: append issue duyet before/after
+        AU->>AR: append, session.add
+        S->>T: Commit once
+        T->>DB: Flush audit and COMMIT
+        alt Success
+            R-->>C: 200 resource, ledger IDs, replay=false, ETag
+        else Failure at any write, audit or commit
+            T->>DB: ROLLBACK prices, state, stock, holds, ledger, progress and audit
+            R-->>C: 409 constraint / safe 500
+        end
     end
-    S->>T: __aexit__, session.commit flushes pending audit
-    T->>DB: COMMIT
-    break Failure in ledger/balance/progress/audit/flush/commit
-        T->>DB: ROLLBACK everything
-        T-->>C: 409 constraint or 500 safe error, no ticket
-    end
-    S-->>R: ActionRead resource, ledger IDs and replay flag, strong ETag
-    R-->>C: 200 + ETag
 ```
 
+LK không tự bắt đầu sản xuất. TP đóng yêu cầu chỉ khi duyệt thành công, thêm audit
+`yeu_cau_san_xuat/hoan_tat`. Replay không kiểm tra lại giá/tồn hiện tại hay ghi audit.
+NOTIFY mặt hàng do trigger gửi sau commit; không bảo đảm cache module khác cập nhật
+đồng bộ tức thì. Hai session thật, rollback từng bước và replay có test PostgreSQL.
+
+## POST /api/v1/phieu_xuat/{id}/tu_choi
+
+QLK, body `{ly_do: string}` không trắng. Chỉ `cho_duyet` → `tu_choi` khi nguồn đang
+thực hiện; lưu processor/time/reason, updated_at, phien_ban +1. Không đóng nguồn TP.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as QLK
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
+    participant S as PhieuXuatService
+    participant P as SqlAlchemyPhieuXuatRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemyAuditRepository
+    participant T as SqlAlchemyTransaction
+    participant DB as PostgreSQL
+    C->>R: POST /api/v1/phieu_xuat/{id}/tu_choi + JWT + If-Match + reason
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Current employee and role
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
+    end
+    R->>R: Validate ID, strip nonempty reason, no extra fields/query
+    break Missing or blank reason / invalid structure
+        R-->>C: 422
+    end
+    R->>S: reject_issue
+    S->>T: Enter transaction
+    S->>P: lock_context
+    P->>DB: YCSX then issue/lines and completion if present
+    break Missing issue
+        S->>T: Roll back
+        S-->>C: 404
+    end
+    S->>S: Validate one strong If-Match and compare under lock
+    break Missing / invalid / stale tag
+        S->>T: Roll back
+        S-->>C: 428 / 412
+    end
+    S->>S: Require cho_duyet and source dang_thuc_hien
+    break Invalid workflow
+        S->>T: Roll back
+        S-->>C: 409
+    end
+    S->>P: change_state tu_choi, reason, processor/time, version +1
+    P->>DB: UPDATE PhieuXuat
+    S->>AU: append tu_choi with reason and state/snapshots
+    AU->>AR: append
+    AR->>AR: session.add
+    S->>T: Commit
+    T->>DB: Flush audit and COMMIT, any failure ROLLBACK
+    R-->>C: 200 + resource ETag, or 409 / safe 500
+    Note over S,DB: Stock, reservations, ledger and source status unchanged
+```
+
+## Port nội bộ hủy yêu cầu — không phải endpoint
+
+`YeuCauSanXuatService → PhieuXuatService → SqlAlchemyPhieuXuatRepository`:
+
+- `co_phieu_da_ghi_so(yeu_cau_id)` gọi `lock_by_sources(yeu_cau_id)`; khóa mọi phiếu
+  của yêu cầu theo id bằng `FOR UPDATE`, có `da_duyet` thì chặn hủy.
+- `huy_phieu_chua_ghi_so(yeu_cau_id, ly_do, actor_id)` kiểm lại R2 trên các phiếu đã
+  khóa; Nháp xóa chi tiết rồi header và audit `xoa_nhap`; Chờ duyệt chuyển
+  `tu_choi`, ghi người/thời điểm/phiên bản, `ly_do_tu_choi = "Yêu cầu đã hủy"`,
+  audit `tu_choi`. Audit lưu lý do truyền vào và snapshot trước/sau. UC-28 truyền
+  lý do `Yêu cầu đã hủy`; lý do QLK nhập thuộc lịch sử yêu cầu. Giữ phiếu `tu_choi`.
+- `phieu_cua_yeu_cau(yeu_cau_id)` chỉ SELECT id, mã, loại, trạng thái theo id,
+  không khóa, không ghi; phục vụ GET xem trước và snapshot tác động khi hủy.
+- `tong_da_xuat_thanh_pham(yeu_cau_ids)` giữ nguyên.
+
+Đã bỏ `lenh_ids` khỏi hai hàm hủy/kiểm tra và `lock_by_sources`; không truy vấn
+bảng lệnh. Caller khóa yêu cầu trước, sở hữu transaction và trả giữ hàng; thứ tự
+khóa yêu cầu → phiếu → MatHang → GiuHang. Cổng dùng chung session, không commit
+riêng; lỗi lịch sử/ghi dữ liệu rollback cả phiếu, giữ hàng, yêu cầu và audit.
+Luồng endpoint hủy v4 được mô tả trong `san_xuat.md`. Kiểm thử ASGI/service và SQL
+không thay thế nghiệm thu E2E hay kiểm tranh chấp PostgreSQL thật.

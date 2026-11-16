@@ -7,12 +7,15 @@ from app.modules.auth.schema import TokenRead, TokenResponse
 from app.modules.nhan_vien.service import AuthIdentity, NhanVienRead, NhanVienService
 
 
+# UC-01 Đăng nhập — Main 5: cấp token theo vai trò (specs/use_cases/identity_access/UC-01.md)
+# UC-06 Mở khóa tài khoản — A3: token mang phiên bản đăng nhập hiện tại (specs/use_cases/identity_access/UC-06.md)
 def _issue_token(identity: AuthIdentity) -> TokenRead:
     return TokenRead(
         access_token=create_access_token(
             subject=identity.profile.id,
             roles=identity.roles,
             credential_version=identity.credential_version,
+            session_version=identity.session_version,
         ),
         expires_in=settings.access_token_expire_minutes * 60,
         nhan_vien=identity.profile,
@@ -23,19 +26,21 @@ class AuthService:
     def __init__(self, employees: NhanVienService):
         self.employees = employees
 
+    # UC-01 Đăng nhập — Main 3–5; A2–A4 (specs/use_cases/identity_access/UC-01.md)
     async def login(self, username: str, password: str) -> TokenRead:
         identity = await self.employees.authenticate_employee(username, password)
         await self.employees.record_login(identity.profile.id)
         return _issue_token(identity)
 
+    # UC-01 Đăng nhập — Main 3–5; A2–A4; R1, D1 (specs/use_cases/identity_access/UC-01.md)
     async def authenticate(self, identifier: str, password: str) -> TokenResponse:
-        identity = await self.employees.authenticate_employee(
-            identifier, password, allow_email=True
-        )
+        identity = await self.employees.authenticate_employee(identifier, password)
         await self.employees.record_login(identity.profile.id)
         result = _issue_token(identity)
         return TokenResponse(**result.model_dump(exclude={"nhan_vien"}))
 
+    # UC-02 Đăng xuất — R1, A1, A2: kiểm tra token và phiên hiện tại (specs/use_cases/identity_access/UC-02.md)
+    # UC-06 Mở khóa tài khoản — A3: kiểm tra pbdn mỗi request, thiếu claim coi là 0 (specs/use_cases/identity_access/UC-06.md)
     async def current_payload(self, token: str) -> dict:
         payload = decode_access_token(token)
         subject = payload.get("sub", "")
@@ -47,23 +52,18 @@ class AuthService:
         ):
             raise UnauthorizedException(message="Invalid token subject")
         identity = await self.employees.get_auth_identity(
-            int(subject), credential_version=payload.get("pwdv")
+            int(subject),
+            credential_version=payload.get("pwdv"),
+            session_version=payload.get("pbdn", 0),
         )
         payload["roles"] = identity.roles
         return payload
 
+    # UC-02 Đăng xuất — A2: kiểm tra lại tài khoản trước khi trả hồ sơ (specs/use_cases/identity_access/UC-02.md)
     async def get_current_user(self, payload: dict) -> NhanVienRead:
         identity = await self.employees.get_auth_identity(
-            int(payload["sub"]), credential_version=payload.get("pwdv")
+            int(payload["sub"]),
+            credential_version=payload.get("pwdv"),
+            session_version=payload.get("pbdn", 0),
         )
         return identity.profile
-
-    async def change_password(
-        self, payload: dict, current_password: str, new_password: str
-    ) -> None:
-        await self.employees.change_password(
-            int(payload["sub"]),
-            current_password,
-            new_password,
-            credential_version=payload.get("pwdv"),
-        )
