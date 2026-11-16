@@ -130,3 +130,69 @@ test("auditParams preserves the exclusion filter for ADM-01", () => {
     },
   );
 });
+
+// Mã thao tác tài khoản v4 do UC-05 – UC-08 ghi (khoa, mo_khoa, doi_vai_tro, doi_mat_khau).
+const employees = [{ id: 5, ma_nhan_vien: "NV-000005", ho_ten: "Lê Hoàng Nam" }];
+
+// UC-05 AC-5: lịch sử khóa tài khoản hiển thị tiếng Việt kèm lý do
+test("v4 lock entries are labelled and keep the optional reason", () => {
+  const entry = {
+    ...base,
+    thao_tac: "khoa",
+    trang_thai_truoc: "hoat_dong",
+    trang_thai_sau: "bi_khoa",
+    du_lieu_sau: { ma_nhan_vien: "NV-000005", ho_ten: "Lê Hoàng Nam", trang_thai: "bi_khoa" },
+  };
+  assert.equal(formatAuditAction(entry), "Khóa tài khoản");
+  assert.equal(formatAuditDetail(entry), "Khóa tài khoản NV-000005 (Lê Hoàng Nam).");
+  assert.equal(
+    formatAuditDetail({ ...entry, ly_do: "nghỉ việc" }),
+    "Khóa tài khoản NV-000005 (Lê Hoàng Nam) do nghỉ việc.",
+  );
+});
+
+// UC-06 AC-3: lịch sử mở khóa tài khoản hiển thị tiếng Việt
+test("v4 unlock entries are labelled", () => {
+  const entry = { ...base, thao_tac: "mo_khoa", du_lieu_sau: { ma_nhan_vien: "NV-000005" } };
+  assert.equal(formatAuditAction(entry), "Mở khóa tài khoản");
+  assert.equal(formatAuditDetail(entry), "Mở khóa tài khoản NV-000005.");
+});
+
+// UC-07 AC-9: lịch sử đổi vai trò hiển thị vai trò trước và sau
+test("v4 role changes show the previous and new role", () => {
+  const entry = {
+    ...base,
+    thao_tac: "doi_vai_tro",
+    du_lieu_truoc: { ma_nhan_vien: "NV-000005", ma_vai_tro: "quan_ly" },
+    du_lieu_sau: { ma_nhan_vien: "NV-000005", ma_vai_tro: "nhan_vien" },
+  };
+  assert.equal(formatAuditAction(entry), "Đổi vai trò");
+  assert.equal(
+    formatAuditDetail(entry),
+    `Đổi vai trò tài khoản NV-000005 từ "${ROLE_LABELS.quan_ly}" sang "${ROLE_LABELS.nhan_vien}".`,
+  );
+  assert.equal(
+    formatAuditDetail({ ...entry, du_lieu_truoc: null, ly_do: "điều chuyển" }),
+    `Đổi vai trò tài khoản NV-000005 sang "${ROLE_LABELS.nhan_vien}" do điều chuyển.`,
+  );
+});
+
+// UC-08 AC-7: lịch sử đổi mật khẩu không có mật khẩu, nhận diện tài khoản từ danh sách hiện tại
+test("v4 password changes are labelled without exposing secrets", () => {
+  const entry = { ...base, thao_tac: "doi_mat_khau", du_lieu_sau: { da_doi_mat_khau: true } };
+  assert.equal(formatAuditAction(entry), "Đổi mật khẩu");
+  assert.equal(
+    formatAuditDetail(entry, employees),
+    "Đổi mật khẩu tài khoản NV-000005 (Lê Hoàng Nam).",
+  );
+});
+
+// Không còn hiển thị mã snake_case thô cho các thao tác tài khoản v4
+test("no v4 account action falls back to the raw code", () => {
+  for (const code of ["khoa", "mo_khoa", "doi_vai_tro", "doi_mat_khau"]) {
+    const label = formatAuditAction({ ...base, thao_tac: code });
+    assert.ok(!label.includes(code), `${code} → ${label}`);
+    const other = formatAuditAction({ loai_doi_tuong: "mat_hang", thao_tac: code });
+    assert.ok(!other.includes(code), `${code} → ${other}`);
+  }
+});

@@ -48,8 +48,7 @@ async def list_mat_hang(
     service: Reader,
     _: ReadRole,
     q: str | None = Query(None),
-    loai_mat_hang: Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"]
-    | None = Query(None),
+    loai_mat_hang: Literal["linh_kien", "thanh_pham"] | None = Query(None),
     is_active: bool | None = Query(None),
     don_vi_tinh: str | None = Query(None),
     mau_sac: str | None = Query(None),
@@ -88,6 +87,7 @@ async def get_mat_hang_detail(
 async def create_mat_hang(
     payload: MatHangCreate, request: Request, response: Response, service: Writer, actor: WriteRole
 ):
+    """UC-10/16 — specs/use_cases/bom/UC-16.md: tạo thành phẩm cùng BOM v1."""
     record, etag = await service.create_mat_hang(payload, actor)
     response.headers["ETag"] = etag
     response.headers["Location"] = f"/api/v1/mat_hang/{record.id}"
@@ -104,6 +104,7 @@ async def patch_mat_hang(
     actor: WriteRole,
     if_match: str | None = Header(None, alias="If-Match"),
 ):
+    """UC-11/12 — trạng thái thành phẩm đi cùng BOM, cùng transaction và audit."""
     record, etag = await service.patch_mat_hang(id, payload, if_match, actor)
     response.headers["ETag"] = etag
     return MatHangSingleResponse(data=record, meta=SingleMeta(request_id=get_request_id(request)))
@@ -116,5 +117,6 @@ async def delete_mat_hang(
     actor: WriteRole,
     if_match: str | None = Header(None, alias="If-Match"),
 ):
+    """UC-12/19 — ngừng thành phẩm và công thức, không xóa cứng."""
     await service.delete_mat_hang(id, if_match, actor)
     return Response(status_code=204)

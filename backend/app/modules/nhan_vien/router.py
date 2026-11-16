@@ -14,7 +14,7 @@ from app.modules.nhan_vien.schemas import (
     DoiVaiTroInput,
     EmployeeSort,
     EmployeeStatus,
-    LyDoInput,
+    LyDoTuyChonInput,
     NhanVienCreate,
     NhanVienDetailResponse,
     NhanVienListQuery,
@@ -40,6 +40,7 @@ IfMatch = Annotated[
 ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong resource ETag"}
 
 
+# UC-03 Xem danh sách tài khoản — R3, A2: kiểm tra tiêu chí và phân trang (specs/use_cases/identity_access/UC-03.md)
 def get_list_query(
     request: Request,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -78,6 +79,7 @@ def get_list_query(
         ) from exc
 
 
+# UC-03 Xem danh sách tài khoản — Main 2–4; R1, A3, A4 (specs/use_cases/identity_access/UC-03.md)
 @router.get("", response_model=NhanVienListResponse)
 async def list_entries(
     actor: Annotated[dict, Depends(get_current_user_payload)],
@@ -88,6 +90,7 @@ async def list_entries(
     return await service.list_employees(params, actor, request_id)
 
 
+# UC-03 Xem danh sách tài khoản — R4: chi tiết theo vai trò và chính chủ (specs/use_cases/identity_access/UC-03.md)
 @router.get(
     "/{id}",
     response_model=NhanVienDetailResponse,
@@ -112,6 +115,7 @@ async def get_entry(
     return result
 
 
+# UC-04 Thêm tài khoản — Main 2, 4–6; A1–A4, A6, A7: tạo và trả 201 (specs/use_cases/identity_access/UC-04.md)
 @router.post(
     "",
     response_model=NhanVienDetailResponse,
@@ -160,6 +164,7 @@ async def patch_entry(
     return result
 
 
+# UC-05 Khóa tài khoản — Main 3–6; A1: nhận body lý do tùy chọn và trả 204 (specs/use_cases/identity_access/UC-05.md)
 @router.delete(
     "/{id}",
     status_code=204,
@@ -168,16 +173,19 @@ async def patch_entry(
 )
 async def delete_entry(
     id: EmployeeId,
-    params: LyDoInput,
     actor: Actor,
     service: Service,
     request_id: RequestId,
+    params: LyDoTuyChonInput | None = None,
     if_match: IfMatch = None,
 ) -> Response:
-    _, etag = await service.soft_delete_employee(id, actor, if_match, params.ly_do, request_id)
+    _, etag = await service.soft_delete_employee(
+        id, actor, if_match, params.ly_do if params else None, request_id
+    )
     return Response(status_code=204, headers={"ETag": etag})
 
 
+# UC-07 Đổi vai trò — Main 3–6; R2: nhận lý do tùy chọn, trả hồ sơ và ETag (specs/use_cases/identity_access/UC-07.md)
 @router.put(
     "/{id}/vai_tro",
     response_model=NhanVienDetailResponse,
@@ -193,11 +201,14 @@ async def change_role(
     response: Response,
     if_match: IfMatch = None,
 ) -> NhanVienDetailResponse:
-    result, etag = await service.change_role(id, params.vai_tro_id, actor, if_match, request_id)
+    result, etag = await service.change_role(
+        id, params.vai_tro_id, actor, if_match, request_id, reason=params.ly_do
+    )
     response.headers["ETag"] = etag
     return result
 
 
+# UC-06 Mở khóa tài khoản — Main 3–6; A1: nhận body lý do tùy chọn (specs/use_cases/identity_access/UC-06.md)
 @router.post(
     "/{id}/mo_khoa",
     response_model=NhanVienDetailResponse,
@@ -206,18 +217,21 @@ async def change_role(
 )
 async def unlock_entry(
     id: EmployeeId,
-    params: LyDoInput,
     actor: Actor,
     service: Service,
     request_id: RequestId,
     response: Response,
+    params: LyDoTuyChonInput | None = None,
     if_match: IfMatch = None,
 ) -> NhanVienDetailResponse:
-    result, etag = await service.unlock_employee(id, actor, if_match, params.ly_do, request_id)
+    result, etag = await service.unlock_employee(
+        id, actor, if_match, params.ly_do if params else None, request_id
+    )
     response.headers["ETag"] = etag
     return result
 
 
+# UC-08 Đổi mật khẩu tài khoản — Main 2–6; A1–A4, A6: nhận mật khẩu mới trong quản trị tài khoản (specs/use_cases/identity_access/UC-08.md)
 @router.post(
     "/{id}/dat_lai_mat_khau",
     response_model=NhanVienDetailResponse,

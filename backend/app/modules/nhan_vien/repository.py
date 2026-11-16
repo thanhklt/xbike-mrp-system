@@ -1,10 +1,10 @@
 """SQLAlchemy employee queries; ORM objects do not leave this adapter."""
 
-from sqlalchemy import false, func, or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import column, false, func, or_, select, table, update
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import DuplicateCodeException
+from app.core.errors import DuplicateUsernameException, InvalidWorkflowState
 from app.modules.nhan_vien.models import NhanVien, VaiTro
 from app.modules.nhan_vien.schemas import (
     MAX_EMPLOYEE_ID,
@@ -18,6 +18,7 @@ from app.modules.nhan_vien.schemas import (
 from app.shared.records import RecordPage
 
 
+# UC-03 Xem danh sách tài khoản — Main 4, R4: ánh xạ hồ sơ và vai trò từ ORM (specs/use_cases/identity_access/UC-03.md)
 def employee_record(user: NhanVien) -> EmployeeRecord:
     values = {
         name: getattr(user, name)
@@ -31,6 +32,7 @@ class SqlAlchemyNhanVienRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-03 Xem danh sách tài khoản — Main 4; R3, A1, A2: tìm, lọc, sort, phân trang (specs/use_cases/identity_access/UC-03.md)
     async def list_employees(self, params: NhanVienListQuery) -> RecordPage[EmployeeRecord]:
         query = select(NhanVien)
         if params.q:
@@ -62,6 +64,7 @@ class SqlAlchemyNhanVienRepository:
             employees = [employee_record(user) for user in records]
         return RecordPage(employees, total)
 
+    # UC-03 Xem danh sách tài khoản — R4: lấy hồ sơ chi tiết (specs/use_cases/identity_access/UC-03.md)
     async def get_by_id(self, employee_id: int) -> EmployeeRecord | None:
         if not 1 <= employee_id <= MAX_EMPLOYEE_ID:
             return None
@@ -79,6 +82,7 @@ class SqlAlchemyNhanVienRepository:
         )
         return employee_record(user) if user is not None else None
 
+    # UC-04 Thêm tài khoản — Main 4; A3: kiểm tra tên đăng nhập có sẵn (specs/use_cases/identity_access/UC-04.md)
     async def find_by_username(self, identifier: str) -> EmployeeCredentials | None:
         user = await self.session.scalar(
             select(NhanVien).where(NhanVien.ten_dang_nhap == identifier)
@@ -110,9 +114,13 @@ class SqlAlchemyNhanVienRepository:
         )
         return employee_credentials(user) if user is not None else None
 
+    # UC-08 Đổi mật khẩu tài khoản — Main 5: tăng phiên bản cùng UPDATE với hash (specs/use_cases/identity_access/UC-08.md)
     async def set_password_hash(self, employee_id: int, password_hash: str) -> None:
         await self.session.execute(
-            update(NhanVien).where(NhanVien.id == employee_id).values(mat_khau=password_hash)
+            update(NhanVien).where(NhanVien.id == employee_id).values(
+                mat_khau=password_hash,
+                phien_ban_dang_nhap=NhanVien.phien_ban_dang_nhap + 1,
+            )
         )
 
     async def get_for_update(self, employee_id: int) -> EmployeeRecord | None:
@@ -126,10 +134,10 @@ class SqlAlchemyNhanVienRepository:
         )
         return employee_record(user) if user is not None else None
 
+    # UC-04 Thêm tài khoản — Main 5, R6; A3: trigger cấp mã từ id, bắt hết dải/trùng tên (specs/use_cases/identity_access/UC-04.md)
     async def create(self, employee: NewEmployee) -> EmployeeRecord:
         user = NhanVien(
             ten_dang_nhap=employee.ten_dang_nhap,
-            ma_nhan_vien=employee.ma_nhan_vien,
             vai_tro_id=employee.vai_tro_id,
             mat_khau=employee.password_hash,
             trang_thai="hoat_dong",
@@ -144,7 +152,17 @@ class SqlAlchemyNhanVienRepository:
                 getattr(original, "sqlstate", None) == "23505"
                 or getattr(original, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE"
             ):
-                raise DuplicateCodeException() from exc
+                constraint = getattr(original, "constraint_name", None) or getattr(
+                    getattr(original, "__cause__", None), "constraint_name", None
+                )
+                diagnostic = getattr(original, "diag", None)
+                constraint = constraint or getattr(diagnostic, "constraint_name", None)
+                if "ten_dang_nhap" in str(constraint or original):
+                    raise DuplicateUsernameException() from exc
+            raise
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "P0001" and "NV-NNNNNN" in str(exc.orig):
+                raise InvalidWorkflowState(message="Đã hết mã nhân viên khả dụng") from exc
             raise
         # Read normalized database values (notably NUMERIC(5, 2)) so the ETag
         # returned by POST matches an immediate GET of the persisted resource.
@@ -167,11 +185,54 @@ class SqlAlchemyNhanVienRepository:
     async def update_profile(self, employee_id: int, changes: dict[str, object]) -> EmployeeRecord:
         return await self._update(employee_id, changes)
 
+    # UC-07 Đổi vai trò — Main 5; R5: đổi vai trò và kết thúc phiên trong cùng UPDATE (specs/use_cases/identity_access/UC-07.md)
     async def set_role(self, employee_id: int, role_id: int) -> EmployeeRecord:
-        return await self._update(employee_id, {"vai_tro_id": role_id})
+        return await self._update(
+            employee_id,
+            {
+                "vai_tro_id": role_id,
+                "phien_ban_dang_nhap": NhanVien.phien_ban_dang_nhap + 1,
+            },
+        )
 
+    # UC-05 Khóa tài khoản — Main 5: chỉ cập nhật trạng thái tài khoản (specs/use_cases/identity_access/UC-05.md)
+    # UC-06 Mở khóa tài khoản — A3: khóa tăng phiên bản bằng SQL, mở khóa giữ phiên bản (specs/use_cases/identity_access/UC-06.md)
     async def set_status(self, employee_id: int, status: str) -> EmployeeRecord:
-        return await self._update(employee_id, {"trang_thai": status})
+        changes: dict[str, object] = {"trang_thai": status}
+        if status == "bi_khoa":
+            changes["phien_ban_dang_nhap"] = NhanVien.phien_ban_dang_nhap + 1
+        return await self._update(employee_id, changes)
+
+    # UC-05 Khóa tài khoản — Main 4; A2: tuần tự hóa khóa QTV bằng dòng vai trò (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 4; A3: tuần tự hóa đổi vai trò bằng khóa QTV dùng chung (specs/use_cases/identity_access/UC-07.md)
+    async def lock_admin_role(self) -> None:
+        await self.session.scalar(
+            select(VaiTro).where(VaiTro.ma_vai_tro == "quan_tri_vien").with_for_update()
+        )
+
+    # UC-05 Khóa tài khoản — Main 4; AC-3: đếm QTV đang hoạt động dưới khóa vai trò (specs/use_cases/identity_access/UC-05.md)
+    # UC-07 Đổi vai trò — Main 4; R3: đếm QTV hoạt động trước khi hạ quyền (specs/use_cases/identity_access/UC-07.md)
+    async def count_active_admins(self) -> int:
+        return await self.session.scalar(
+            select(func.count())
+            .select_from(NhanVien)
+            .join(VaiTro, NhanVien.vai_tro_id == VaiTro.id)
+            .where(VaiTro.ma_vai_tro == "quan_tri_vien", NhanVien.trang_thai == "hoat_dong")
+        ) or 0
+
+    # UC-07 Đổi vai trò — Main 4; R4: đếm yêu cầu được giao chưa kết thúc theo trạng thái v4 (specs/use_cases/identity_access/UC-07.md)
+    async def count_unfinished_assigned_requests(self, employee_id: int) -> int:
+        requests = table(
+            "YeuCauSanXuat", column("nhan_vien_duoc_giao_id"), column("trang_thai")
+        )
+        return await self.session.scalar(
+            select(func.count()).select_from(requests).where(
+                requests.c.nhan_vien_duoc_giao_id == employee_id,
+                requests.c.trang_thai.in_(
+                    ("nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien")
+                ),
+            )
+        ) or 0
 
     async def get_role(self, role_id: int) -> VaiTroRead | None:
         if not 1 <= role_id <= MAX_EMPLOYEE_ID:
@@ -197,4 +258,5 @@ def employee_credentials(user: NhanVien) -> EmployeeCredentials:
         **values,
         roles=[profile.ma_vai_tro] if profile.ma_vai_tro else [],
         password_hash=user.mat_khau,
+        phien_ban_dang_nhap=user.phien_ban_dang_nhap,
     )

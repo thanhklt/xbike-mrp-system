@@ -13,8 +13,12 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
-ItemType = Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"]
+from app.modules.bom.schemas import BomFormula
+
+ItemType = Literal["linh_kien", "thanh_pham"]
 ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+# Same rule for create and patch: surrounding spaces stripped, blank rejected.
+Sku = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Money = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
 SnakeCode = Annotated[str, StringConstraints(pattern=r"^[a-z]+(_[a-z]+)*$")]
 ItemCode = Annotated[str, StringConstraints(pattern=r"^MH-[0-9]{6}$")]
@@ -45,31 +49,27 @@ class MatHangRead(BaseModel):
 class MatHangCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ma_mat_hang: ItemCode
-    sku: str = Field(min_length=1)
+    sku: Sku
     ten_mat_hang: ItemName
     loai_mat_hang: ItemType
     don_vi_tinh: SnakeCode
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
     don_gia: Money
-    is_active: bool = True
+    bom: BomFormula | None = None
 
-    @field_validator("ma_mat_hang")
-    @classmethod
-    def validate_ma(cls, value: str) -> str:
-        if value == "MH-000000":
-            raise ValueError("Mã mặt hàng không được kết thúc bằng 000000")
-        return value
+    @model_validator(mode="after")
+    def validate_formula(self) -> "MatHangCreate":
+        if (self.loai_mat_hang == "thanh_pham") != (self.bom is not None):
+            raise ValueError("Thành phẩm phải có công thức; linh kiện không có công thức")
+        return self
 
 
 class MatHangPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ma_mat_hang: ItemCode | None = None
-    sku: str | None = Field(default=None, min_length=1)
+    sku: Sku | None = None
     ten_mat_hang: ItemName | None = None
-    loai_mat_hang: ItemType | None = None
     don_vi_tinh: SnakeCode | None = None
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
@@ -93,13 +93,6 @@ class MatHangPatch(BaseModel):
                 if values[name] is None:
                     raise ValueError(f"{name} không được null")
         return values
-
-    @field_validator("ma_mat_hang")
-    @classmethod
-    def validate_ma(cls, value: str | None) -> str | None:
-        if value == "MH-000000":
-            raise ValueError("Mã mặt hàng không được kết thúc bằng 000000")
-        return value
 
 
 class SingleMeta(BaseModel):

@@ -1,6 +1,7 @@
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
 import { canAccessPath, homeFor } from "../features/auth/permissions.js";
+import { sessionGate } from "../features/auth/session.js";
 import { LoginPage } from "../features/auth/LoginPage.jsx";
 import { UsersPage } from "../features/auth/UsersPage.jsx";
 import { RolesPage } from "../features/auth/RolesPage.jsx";
@@ -11,9 +12,9 @@ import { SuppliersPage } from "../features/suppliers/SuppliersPage.jsx";
 import { BOMPage } from "../features/bom/BOMPage.jsx";
 import { ReceivingPage } from "../features/receiving/ReceivingPage.jsx";
 import { MaterialIssuingPage } from "../features/material-issuing/MaterialIssuingPage.jsx";
-import { ProductionPage } from "../features/production/ProductionPage.jsx";
 import { RequestsPage } from "../features/production/RequestsPage.jsx";
-import { CompletionsPage } from "../features/production/CompletionsPage.jsx";
+import { CompletionListPage } from "../features/production/CompletionListPage.jsx";
+import { ShortagePage } from "../features/production/ShortagePage.jsx";
 import { MyDocumentsPage } from "../features/production/MyDocumentsPage.jsx";
 import { AdjustmentsPage } from "../features/inventory-adjustments/AdjustmentsPage.jsx";
 import { TicketsPage } from "../features/adjustment-tickets/TicketsPage.jsx";
@@ -25,16 +26,18 @@ import { Card } from "../components/Card.jsx";
 import { Button } from "../components/Button.jsx";
 import { ErrorNotice } from "../components/QueryState.jsx";
 
+// UC-02 Đăng xuất — R1, A1, A2: chặn truy cập lại khi chưa đăng nhập (specs/use_cases/identity_access/UC-02.md)
 function Protected() {
   const { token, user, session, logout } = useAuth();
-  if (!token) return <Navigate to="/dang-nhap" replace />;
-  if (!user && session.isPending)
+  const gate = sessionGate({ token, user, isPending: session.isPending, isError: session.isError });
+  if (gate === "login") return <Navigate to="/dang-nhap" replace />;
+  if (gate === "checking")
     return (
       <div className="status-page" role="status">
         Đang kiểm tra phiên đăng nhập…
       </div>
     );
-  if (session.isError)
+  if (gate === "error")
     return (
       <div className="status-page">
         <Card title="Chưa xác minh được phiên đăng nhập">
@@ -50,7 +53,7 @@ function Protected() {
         </Card>
       </div>
     );
-  return user ? <Outlet /> : <Navigate to="/dang-nhap" replace />;
+  return <Outlet />;
 }
 function RoleGate() {
   const { user } = useAuth();
@@ -82,6 +85,7 @@ function StatusPage({ code }) {
     </div>
   );
 }
+// UC-02 Đăng xuất — R1, A1: áp dụng Protected cho các trang cần đăng nhập (specs/use_cases/identity_access/UC-02.md)
 export function AppRoutes() {
   return (
     <>
@@ -98,7 +102,7 @@ export function AppRoutes() {
               <Route path="/admin" element={<DashboardPage />} />
               <Route path="/admin/tai-khoan/:id?" element={<UsersPage />} />
               <Route path="/admin/vai-tro" element={<RolesPage />} />
-              <Route path="/admin/lich-su" element={<AuditPage />} />
+              <Route path="/admin/lich-su/:id?" element={<AuditPage />} />
             </Route>
             <Route element={<RoleGate />}>
               <Route path="/kho" element={<DashboardPage />} />
@@ -109,18 +113,19 @@ export function AppRoutes() {
               <Route path="/kho/phieu-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/duyet-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/yeu-cau/:id?" element={<RequestsPage />} />
-              <Route path="/kho/lenh-sx/:id?" element={<ProductionPage />} />
-              <Route path="/kho/duyet-hoan-thanh/:id?" element={<CompletionsPage />} />
+              <Route path="/kho/nhu-cau-bo-sung" element={<ShortagePage />} />
+              <Route path="/kho/chung-tu-hoan-thanh" element={<CompletionListPage />} />
+              <Route path="/kho/lenh-sx/*" element={<Navigate to="/kho/yeu-cau" replace />} />
               <Route path="/kho/dieu-chinh/:id?" element={<AdjustmentsPage />} />
               <Route path="/kho/ticket/:id?" element={<TicketsPage />} />
               <Route path="/kho/giao-dich" element={<MovementsPage />} />
               <Route path="/kho/thong-ke" element={<ReportsPage />} />
-              <Route path="/kho/lich-su" element={<AuditPage />} />
+              <Route path="/kho/lich-su/:id?" element={<AuditPage />} />
             </Route>
             <Route element={<RoleGate />}>
               <Route path="/nv" element={<DashboardPage />} />
               <Route path="/nv/yeu-cau/:id?" element={<RequestsPage />} />
-              <Route path="/nv/lenh-sx/:id?" element={<ProductionPage />} />
+              <Route path="/nv/lenh-sx/*" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route
                 path="/nv/xuat-nvl/:id?"
                 element={<MaterialIssuingPage issueType="xuat_vat_tu" />}
@@ -129,7 +134,6 @@ export function AppRoutes() {
                 path="/nv/xuat-tp/:id?"
                 element={<MaterialIssuingPage issueType="xuat_thanh_pham" />}
               />
-              <Route path="/nv/hoan-thanh/:id?" element={<CompletionsPage />} />
               <Route path="/nv/phieu" element={<MyDocumentsPage />} />
               <Route path="/nv/ton-kho/:id?" element={<MaterialsPage readOnly />} />
             </Route>

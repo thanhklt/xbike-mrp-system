@@ -495,12 +495,15 @@ function AdminDashboard() {
             </table>
           </div>
         </QueryState>
+        {/* UC-43 Xem lịch sử thao tác — Main 1: lối vào lịch sử cho Quản trị viên (specs/use_cases/audit/UC-43.md) */}
+        <div className="actions actions-end">
+          <Link to="/admin/lich-su">Xem tất cả →</Link>
+        </div>
       </section>
     </div>
   );
 }
 function WarehouseDashboard() {
-  const pending = useResource(API.completions, { page: 1, page_size: 5, trang_thai: "cho_duyet" });
   return (
     <>
       <PageHeader
@@ -525,59 +528,18 @@ function WarehouseDashboard() {
           href="/kho/yeu-cau"
         />
         <Metric
-          label="Lệnh đang thực hiện"
-          path={API.orders}
-          params={{ trang_thai: "dang_thuc_hien" }}
-          href="/kho/lenh-sx"
-        />
-        <Metric
-          label="Chờ bổ sung vật tư"
+          label="Yêu cầu đang thực hiện"
           path={API.requests}
-          params={{ trang_thai: "cho_bo_sung_vat_tu" }}
+          params={{ trang_thai: "dang_thuc_hien" }}
           href="/kho/yeu-cau"
         />
         <Metric
-          label="Hoàn thành chờ duyệt"
-          path={API.completions}
-          params={{ trang_thai: "cho_duyet" }}
-          href="/kho/duyet-hoan-thanh"
+          label="Chờ bổ sung linh kiện"
+          path={API.requests}
+          params={{ trang_thai: "cho_bo_sung_linh_kien" }}
+          href="/kho/yeu-cau"
         />
       </div>
-      <Card
-        title="Chứng từ hoàn thành cần duyệt"
-        action={<Link to="/kho/duyet-hoan-thanh">Xem tất cả →</Link>}
-      >
-        <QueryState query={pending}>
-          <DataTable
-            rows={pending.data?.data}
-            empty="Không có chứng từ hoàn thành chờ duyệt."
-            columns={[
-              { key: "ma_phieu", label: "Chứng từ" },
-              {
-                key: "lenh_san_xuat_id",
-                label: "Lệnh sản xuất",
-                render: (row) => `#${row.lenh_san_xuat_id}`,
-              },
-              { key: "so_luong_hoan_thanh", label: "Số lượng", numeric: true },
-              {
-                key: "finish_time",
-                label: "Hoàn thành lúc",
-                render: (row) => dateTime(row.finish_time),
-              },
-              {
-                key: "trang_thai",
-                label: "Trạng thái",
-                render: (row) => <Badge status={row.trang_thai} />,
-              },
-              {
-                key: "action",
-                label: "Thao tác",
-                render: (row) => <Link to={`/kho/duyet-hoan-thanh/${row.id}`}>Xem & duyệt →</Link>,
-              },
-            ]}
-          />
-        </QueryState>
-      </Card>
       <div className="dashboard-columns">
         <QuickStock />
         <RecentAudit />
@@ -586,57 +548,49 @@ function WarehouseDashboard() {
   );
 }
 function EmployeeDashboard() {
-  const orders = useResource(API.orders, { page: 1, page_size: 5, trang_thai: "da_gui" });
+  // Lọc "chưa bắt đầu" ở FE nên đọc đủ trang tối đa rồi mới cắt 5 dòng, tránh báo rỗng sai.
+  const requests = useResource(API.requests, { page: 1, page_size: 100, trang_thai: "dang_thuc_hien" });
   const items = useResource(API.catalog);
   return (
     <>
       <PageHeader
         title="Tổng quan"
-        subtitle="Yêu cầu phụ trách, lệnh của bạn và chứng từ cần theo dõi."
-        action={
-          <Link className="btn btn-primary" to="/nv/hoan-thanh/moi">
-            Tạo chứng từ hoàn thành SX
-          </Link>
-        }
+        subtitle="Yêu cầu sản xuất được giao và công việc cần theo dõi."
       />
       <div className="metrics">
-        <Metric label="Yêu cầu phụ trách" path={API.requests} href="/nv/yeu-cau" />
+        <Metric label="Yêu cầu được giao" path={API.requests} href="/nv/yeu-cau" />
         <Metric
-          label="Lệnh đã giao"
-          path={API.orders}
+          label="Yêu cầu đã giao"
+          path={API.requests}
           params={{ trang_thai: "da_gui" }}
-          href="/nv/lenh-sx"
+          href="/nv/yeu-cau"
         />
         <Metric
           label="Đang thực hiện"
-          path={API.orders}
+          path={API.requests}
           params={{ trang_thai: "dang_thuc_hien" }}
-          href="/nv/lenh-sx"
-        />
-        <Metric
-          label="Hoàn thành chờ duyệt"
-          path={API.completions}
-          params={{ trang_thai: "cho_duyet" }}
-          href="/nv/hoan-thanh"
+          href="/nv/yeu-cau"
         />
       </div>
-      <Card title="Lệnh chờ bắt đầu" action={<Link to="/nv/lenh-sx">Xem lệnh của tôi →</Link>}>
-        <QueryState query={orders}>
+      <Card title="Yêu cầu chờ bắt đầu sản xuất" action={<Link to="/nv/yeu-cau">Xem yêu cầu của tôi →</Link>}>
+        <QueryState query={requests}>
           <DataTable
-            rows={orders.data?.data}
-            empty="Không có lệnh chờ bắt đầu."
+            rows={requests.data?.data
+              ?.filter((row) => !row.started_at && row.so_luong_can_san_xuat > 0)
+              .slice(0, 5)}
+            empty="Không có yêu cầu chờ bắt đầu sản xuất."
             columns={[
               {
-                key: "ma_lenh_san_xuat",
-                label: "Mã lệnh",
-                render: (row) => <Link to={`/nv/lenh-sx/${row.id}`}>{row.ma_lenh_san_xuat}</Link>,
+                key: "ma_yeu_cau_san_xuat",
+                label: "Mã yêu cầu",
+                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>{row.ma_yeu_cau_san_xuat}</Link>,
               },
               {
                 key: "mat_hang_id",
-                label: "Sản phẩm",
+                label: "Thành phẩm",
                 render: (row) => itemName(items.data?.data, row.mat_hang_id),
               },
-              { key: "so_luong", label: "Số lượng", numeric: true },
+              { key: "so_luong_can_san_xuat", label: "Số cần sản xuất", numeric: true },
               {
                 key: "trang_thai",
                 label: "Trạng thái",
@@ -645,7 +599,7 @@ function EmployeeDashboard() {
               {
                 key: "action",
                 label: "Thao tác",
-                render: (row) => <Link to={`/nv/lenh-sx/${row.id}`}>Xem vật tư →</Link>,
+                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Mở →</Link>,
               },
             ]}
           />
@@ -656,12 +610,12 @@ function EmployeeDashboard() {
         <Card title="Theo dõi công việc">
           <div className="stack">
             <p className="muted">
-              Phiếu xuất do Quản lý kho lập và duyệt. Bạn được xem các phiếu liên quan và lập chứng
-              từ hoàn thành cho lệnh của mình.
+              Phiếu xuất do Quản lý kho lập và duyệt. Bạn được xem các phiếu liên quan đến yêu cầu
+              sản xuất được giao.
             </p>
             <Link to="/nv/xuat-nvl">Xem phiếu xuất vật tư →</Link>
             <Link to="/nv/xuat-tp">Xem phiếu xuất thành phẩm →</Link>
-            <Link to="/nv/phieu">Theo dõi chứng từ của tôi →</Link>
+            <Link to="/nv/phieu">Theo dõi phiếu xuất liên quan →</Link>
           </div>
         </Card>
       </div>

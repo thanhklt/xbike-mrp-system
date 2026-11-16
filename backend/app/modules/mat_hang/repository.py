@@ -4,8 +4,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import or_, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import ConflictException
 from app.modules.mat_hang.models import MatHang
 from app.modules.mat_hang.ports import ItemReferences
 from app.modules.mat_hang.schemas import MatHangCreate, MatHangRead
@@ -56,12 +58,10 @@ class SqlAlchemyMatHangRepository:
                         UNION ALL SELECT 1 FROM "ChiTietBom" WHERE mat_hang_id=:id) AS has_bom,
                 EXISTS (SELECT 1 FROM "ChiTietPhieuNhap" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietPhieuXuat" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietPhieuDieuChinhKho" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietLenhSanXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "GiaoDichKho" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "YeuCauSanXuat" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "LenhSanXuat" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietTicketLoiDieuChinh" WHERE mat_hang_id=:id) AS has_docs,
+                        UNION ALL SELECT 1 FROM "GiuHang" WHERE mat_hang_id=:id
+                        UNION ALL SELECT 1 FROM "NhuCauLinhKien" WHERE mat_hang_id=:id) AS has_docs,
                 EXISTS (SELECT 1 FROM "MatHang" WHERE id=:id AND so_luong_ton > 0) AS has_stock
         """),
                 {"id": item_id},
@@ -70,9 +70,15 @@ class SqlAlchemyMatHangRepository:
         return ItemReferences(row.has_bom, row.has_docs, row.has_stock)
 
     async def add(self, payload: MatHangCreate) -> MatHangRead:
-        record = MatHang(**payload.model_dump())
+        record = MatHang(**payload.model_dump(exclude={"bom"}))
         self.session.add(record)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except DBAPIError as error:
+            if getattr(error.orig, "sqlstate", None) == "P0001" and "MH-NNNNNN" in str(error.orig):
+                raise ConflictException(message="Item code range exhausted") from error
+            raise
+        await self.session.refresh(record)
         return MatHangRead.model_validate(record)
 
     async def update(self, item_id: int, changes: dict[str, Any]) -> MatHangRead:
@@ -93,12 +99,15 @@ class SqlAlchemyMatHangRepository:
         )
         return [MatHangRead.model_validate(record) for record in records]
 
-    async def lock_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:
+    async def lock_items(
+        self, item_ids: Iterable[int], *, exclusive: bool = False
+    ) -> list[MatHangRead]:
+        # Rows are locked in ascending id, the order stock and production paths use.
         records = await self.session.scalars(
             select(MatHang)
             .where(MatHang.id.in_(sorted(set(item_ids))))
             .order_by(MatHang.id)
-            .with_for_update(read=True)
+            .with_for_update(read=not exclusive)
             .execution_options(populate_existing=True)
         )
         return [MatHangRead.model_validate(record) for record in records]

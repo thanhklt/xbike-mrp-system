@@ -8,15 +8,11 @@ const tabs = [
   ["quan_ly", "/kho/phieu-nhap"],
   ["quan_ly", "/kho/phieu-xuat"],
   ["quan_ly", "/kho/yeu-cau"],
-  ["quan_ly", "/kho/lenh-sx"],
-  ["quan_ly", "/kho/duyet-hoan-thanh"],
   ["quan_ly", "/kho/dieu-chinh"],
   ["quan_ly", "/kho/ticket"],
-  ["nhan_vien", "/nv/lenh-sx"],
   ["nhan_vien", "/nv/yeu-cau"],
   ["nhan_vien", "/nv/xuat-nvl"],
   ["nhan_vien", "/nv/xuat-tp"],
-  ["nhan_vien", "/nv/hoan-thanh"],
   ["nhan_vien", "/nv/ton-kho"],
 ];
 
@@ -59,12 +55,12 @@ for (const [role, path] of tabs) {
 
 test("record modal supports keyboard navigation, Escape, and browser history", async ({ page }) => {
   await installApi(page, { role: "nhan_vien" });
-  await page.goto("/nv/lenh-sx");
-  const action = page.getByRole("link", { name: "Xem vật tư →" }).first();
+  await page.goto("/nv/yeu-cau");
+  const action = page.getByRole("link", { name: "Mở →" }).first();
   await action.click();
-  const dialog = page.getByRole("dialog", { name: "Chi tiết lệnh sản xuất" });
+  const dialog = page.getByRole("dialog", { name: "Chi tiết yêu cầu" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "Vật tư của lệnh" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: /YCSX-/ })).toBeVisible();
   for (let step = 0; step < 12; step += 1) {
     await page.keyboard.press("Tab");
     await expect
@@ -72,7 +68,7 @@ test("record modal supports keyboard navigation, Escape, and browser history", a
       .toBe(true);
   }
   await page.keyboard.press("Escape");
-  await expect(page).toHaveURL(/\/nv\/lenh-sx$/);
+  await expect(page).toHaveURL(/\/nv\/yeu-cau$/);
   await expect(dialog).toHaveCount(0);
   await expect(action).toBeFocused();
   await action.click();

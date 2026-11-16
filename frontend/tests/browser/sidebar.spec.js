@@ -4,7 +4,7 @@ import { installApi } from "./api-fixture.js";
 const areas = {
   quan_tri_vien: { home: "/admin", detail: "/admin/tai-khoan/1", parent: "/admin/tai-khoan" },
   quan_ly: { home: "/kho", detail: "/kho/phieu-nhap/1", parent: "/kho/phieu-nhap" },
-  nhan_vien: { home: "/nv", detail: "/nv/lenh-sx/1", parent: "/nv/lenh-sx" },
+  nhan_vien: { home: "/nv", detail: "/nv/yeu-cau/1", parent: "/nv/yeu-cau" },
 };
 
 for (const [role, area] of Object.entries(areas)) {

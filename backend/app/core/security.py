@@ -47,6 +47,7 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None,
     *,
     credential_version: str | None = None,
+    session_version: int | None = None,
 ) -> str:
     """Generates a signed JWT access token."""
     if expires_delta:
@@ -64,6 +65,8 @@ def create_access_token(
     }
     if credential_version is not None:
         to_encode["pwdv"] = credential_version
+    if session_version is not None:
+        to_encode["pbdn"] = session_version
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 

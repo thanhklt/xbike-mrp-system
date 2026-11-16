@@ -11,15 +11,14 @@ const menus = {
     "/kho/giao-dich",
     "/kho/bom",
     "/kho/yeu-cau",
-    "/kho/lenh-sx",
+    "/kho/nhu-cau-bo-sung",
     "/kho/phieu-xuat",
-    "/kho/duyet-hoan-thanh",
     "/kho/dieu-chinh",
     "/kho/ticket",
     "/kho/thong-ke",
     "/kho/lich-su",
   ],
-  nhan_vien: ["/nv", "/nv/lenh-sx", "/nv/hoan-thanh", "/nv/ton-kho"],
+  nhan_vien: ["/nv", "/nv/yeu-cau", "/nv/ton-kho"],
 };
 
 for (const [role, paths] of Object.entries(menus)) {
