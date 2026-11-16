@@ -9,7 +9,7 @@ import {
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { itemName, dateTime, number, formatDate } from "../../lib/format.js";
+import { itemName, formatDate } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -29,6 +29,9 @@ import {
   REQUEST_TYPES,
   REQUEST_TYPE_LABELS,
   initialRequestValues,
+  canEditRequest,
+  canCancelRequest,
+  requestDetailEntries,
   requestCreateBody,
   sendConfirmEntries,
 } from "./requestForm.js";
@@ -129,12 +132,13 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
   const record = snapshot?.data;
   const initial = initialRequestValues(record);
   const [values, setValues] = useState(initial);
+  const [editing, setEditing] = useState(false);
   const mutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
-  const editable = manager && (!record || record.trang_thai === "nhap");
-  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const editable = canEditRequest(record, manager);
+  const showForm = manager && (!record || (editable && editing));
   const field = (name) => ({
     value: values[name],
     onChange: (event) => {
@@ -142,6 +146,7 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
     },
   });
   // UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1, A2 (specs/use_cases/production/UC-23.md)
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 lưu đủ thông tin, về chế độ xem (specs/use_cases/production/UC-24.md)
   function submit(event) {
     event.preventDefault();
     save(
@@ -153,6 +158,7 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
         versioned: Boolean(record),
       },
       (result) => {
+        if (record) setEditing(false);
         navigate(`${base}/${result.data.id}`);
         if (!record) send(result.data, result.etag);
       },
@@ -175,6 +181,7 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
       },
     });
   }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A2 xác nhận xóa và về danh sách (specs/use_cases/production/UC-24.md)
   function cancel(remove = false) {
     confirm({
       title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu sản xuất",
@@ -193,7 +200,22 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
       },
     });
   }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 mở form điền sẵn (specs/use_cases/production/UC-24.md)
+  function edit() {
+    setValues(initialRequestValues(record));
+    setEditing(true);
+  }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 bỏ sửa, khôi phục giá trị và chế độ xem (specs/use_cases/production/UC-24.md)
+  function discardEdit() {
+    setValues(initialRequestValues(record));
+    setEditing(false);
+  }
   if (!record && !manager) return <Notice>Bạn chỉ có thể xem yêu cầu được giao.</Notice>;
+  const submitButton = (
+    <Button type="submit" disabled={busy}>
+      {record ? "Lưu nháp" : "Tạo"}
+    </Button>
+  );
   return (
     <div className="stack">
       {record && (
@@ -202,21 +224,11 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
             <h3>{record.ma_yeu_cau_san_xuat}</h3>
             <Badge status={record.trang_thai} />
           </div>
-          <InfoGrid
-            entries={[
-              [
-                "Đã xuất / yêu cầu",
-                `${number(record.so_luong_da_xuat)} / ${number(record.so_luong)}`,
-              ],
-              ["Còn phải xuất", number(record.so_luong_con_phai_xuat)],
-              ["Tạo lúc", dateTime(record.created_at)],
-              ["Hoàn thành lúc", dateTime(record.completed_at)],
-            ]}
-          />
+          <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
         </>
       )}
-      <ErrorNotice error={error || mutation.error} />
-      {editable ? (
+      <ErrorNotice error={(showForm && error) || mutation.error} />
+      {showForm && (
         <QueryState query={employees}>
           <form className="stack" onSubmit={submit}>
             <div className="form-grid">
@@ -251,49 +263,35 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
               label="Nhân viên được giao"
               {...field("nhan_vien_duoc_giao_id")}
             />
-            <Button type="submit" disabled={busy}>
-              {record ? "Lưu nháp" : "Tạo"}
-            </Button>
+            {record ? (
+              <div className="actions actions-end">
+                <Button type="button" variant="secondary" onClick={discardEdit} disabled={busy}>
+                  Bỏ sửa
+                </Button>
+                {submitButton}
+              </div>
+            ) : (
+              submitButton
+            )}
           </form>
         </QueryState>
-      ) : (
-        <InfoGrid
-          entries={[
-            ["Thành phẩm", itemName(items, record.mat_hang_id)],
-            [
-              "Người phụ trách",
-              record.nhan_vien_duoc_giao_id
-                ? `Nhân viên #${record.nhan_vien_duoc_giao_id}`
-                : "Chưa giao",
-            ],
-          ]}
-        />
       )}
-      {record && editable && (
-        <div className="actions">
-          <Button
-            reason={dirty ? "Lưu thay đổi trước khi gửi." : undefined}
-            disabled={mutation.isPending}
-            onClick={() => send(record, snapshot.etag)}
-          >
-            Gửi yêu cầu cho nhân viên
+      {editable && !editing && (
+        <div className="actions actions-end">
+          <Button variant="secondary" onClick={edit}>
+            Sửa
           </Button>
-          <Button
-            variant="secondary"
-            reason={dirty ? "Lưu hoặc tải lại bản nháp trước." : undefined}
-            onClick={() => cancel(true)}
-          >
+          <Button variant="secondary" onClick={() => cancel(true)}>
             Xóa nháp
+          </Button>
+          <Button disabled={mutation.isPending} onClick={() => send(record, snapshot.etag)}>
+            Gửi yêu cầu cho nhân viên
           </Button>
         </div>
       )}
-      {manager && record && !["hoan_thanh", "da_huy"].includes(record.trang_thai) && (
+      {canCancelRequest(record, manager) && (
         <div className="actions">
-          <Button
-            variant="secondary"
-            reason={dirty ? "Lưu hoặc tải lại trước khi hủy." : undefined}
-            onClick={() => cancel()}
-          >
+          <Button variant="secondary" onClick={() => cancel()}>
             Hủy yêu cầu…
           </Button>
           {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (

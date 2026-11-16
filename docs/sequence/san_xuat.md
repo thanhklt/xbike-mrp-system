@@ -2,7 +2,10 @@
 
 Phần tạo/gửi yêu cầu theo [UC-23](../../specs/use_cases/production/UC-23.md),
 plan `docs/plans/UC-23.md` và quyết định D1–D7 ngày 16/11/2026; bảng
-`"YeuCauSanXuat"` theo `infra/postgres/init.sql` v4. Các luồng lệnh, hủy và chứng từ
+`"YeuCauSanXuat"` theo `infra/postgres/init.sql` v4. Sửa/xóa Nháp theo
+[UC-24](../../specs/use_cases/production/UC-24.md), plan `docs/plans/UC-24.md`
+và quyết định D1–D4 ngày 16/11/2026; gửi lại dùng chung luồng gửi UC-23.
+Các luồng lệnh, hủy và chứng từ
 hoàn thành giữ triển khai hiện tại, chưa chuyển toàn bộ sang v4.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
 JWT được kiểm tra bằng tài khoản, vai trò và phiên bản đăng nhập/mật khẩu hiện hành.
@@ -156,6 +159,12 @@ giới hạn PoC 999999. `Location` trỏ GET chi tiết vừa tạo. Audit `tao
 
 ## PATCH /api/v1/yeu_cau_san_xuat/{id}
 
+Nguồn: UC-24 A1; R1–R3, R8–R10; D4. Body bắt buộc đủ 5 trường
+`loai_yeu_cau`, `mat_hang_id`, `so_luong`, `han_hoan_thanh`,
+`nhan_vien_duoc_giao_id`, không có mặc định, không nhận null hoặc trường lạ.
+Thiếu/null → 422 trước khi gọi service, bản ghi và lịch sử giữ nguyên.
+FE điền sẵn form khi bấm Sửa; Lưu nháp gọi PATCH ngay, không mở xác nhận.
+
 ```mermaid
 sequenceDiagram
     actor C as Client
@@ -167,10 +176,10 @@ sequenceDiagram
     participant M as MatHangAvailabilityService / repository
     participant L as AuditService / repository
     participant D as PostgreSQL
-    C->>R: PATCH YeuCauPatch + If-Match
+    C->>R: PATCH đủ 5 trường + If-Match
     R->>A: Xác thực + role Q (sai: 401/403)
     A->>D: Đọc danh tính hiện hành
-    R->>R: Không query; body không rỗng, null/extra hợp lệ (sai: 422)
+    R->>R: ID dương, không query; đủ 5 trường, không null/extra (sai: 422)
     R->>S: patch_entry
     S->>P: get_for_update(id)
     P->>D: SELECT yêu cầu FOR UPDATE
@@ -183,24 +192,32 @@ sequenceDiagram
     else Nháp
         S->>M: Kiểm tra thành phẩm hiện hành, lock=true
         M->>D: FOR SHARE, tồn tại/active/loại (404/409/422)
-        opt Người phụ trách sau PATCH khác null
-            S->>A: kiem_tra_nguoi_duoc_giao(lock=true)
-            A->>D: FOR SHARE, trạng thái/vai trò (404/409)
-        end
-        S->>P: update(chỉ field được gửi)
-        P->>D: UPDATE yêu cầu
-        S->>L: append sua (trước/sau)
+        S->>A: kiem_tra_nguoi_duoc_giao(lock=true)
+        A->>D: FOR SHARE, tồn tại/trạng thái/vai trò (404/409)
+        S->>P: update(đủ 5 trường)
+        P->>D: UPDATE yêu cầu, phien_ban tăng 1, updated_at
+        S->>X: tong_da_xuat_thanh_pham([id])
+        X->>D: SUM xuất thành phẩm da_duyet cho dữ liệu sau
+        S->>L: append sua, dữ liệu trước/sau, trạng thái nhap sang nhap
         L->>D: INSERT audit
         S->>D: COMMIT; mọi lỗi rollback toàn bộ
         S-->>C: 200 YeuCauRead + meta + ETag mới
     end
 ```
 
-Chỉ nhận `mat_hang_id`, `so_luong`, `nhan_vien_duoc_giao_id`, `loai_yeu_cau`,
-`han_hoan_thanh`. Hai trường v4 mới không nhận null; giữ nguyên luật PATCH khác
-để xử lý tiếp ở UC-24. Bỏ qua field giữ nguyên giá trị. `update` tăng phiên bản và updated_at.
+Số lượng phải là số nguyên dương INT32; ID phải là số nguyên dương; loại chỉ
+`dap_ung`/`cho_kho`; hạn kiểu date, không giới hạn ngày quá khứ. Thành phẩm ngừng
+→ 409 `mat_hang_ngung_hoat_dong`, linh kiện → 422 `du_lieu_khong_hop_le`,
+nhân viên khóa/sai vai trò → 409 `nguoi_duoc_giao_khong_hop_le`; không tồn tại → 404.
+Chỉ sửa Nháp, đổi được loại và cả 5 trường; sau gửi trả 409 `trang_thai_khong_hop_le`.
+Audit `sua` có người, đối tượng, snapshot trước/sau, trạng thái `nhap → nhap`.
+Lưu vẫn Nháp, không chốt BOM, không gửi, không đổi tồn hoặc phần đang giữ.
+Audit lỗi rollback cả cập nhật và lịch sử. Thành công trả ETag mới; FE về chế độ xem.
 
 ## DELETE /api/v1/yeu_cau_san_xuat/{id}
+
+Nguồn: UC-24 A2; R1, R4, R8–R10; D1. FE xác nhận Xóa nháp với `danger`,
+gửi DELETE bằng ETag đang xem; thành công điều hướng về danh sách.
 
 ```mermaid
 sequenceDiagram
@@ -225,22 +242,22 @@ sequenceDiagram
     alt Không nhap
         S-->>C: 409 trang_thai_khong_hop_le
     else Nháp
-        S->>P: has_dependencies(id)
-        P->>D: EXISTS LenhSanXuat hoặc PhieuXuat
-        alt Có phụ thuộc
-            S-->>C: 409 dang_duoc_tham_chieu
-        else Không phụ thuộc
-            S->>P: delete(id)
-            P->>D: DELETE YeuCauSanXuat
-            S->>L: append xoa_nhap (dữ liệu trước)
-            L->>D: INSERT audit
-            S->>D: COMMIT; lỗi rollback toàn bộ
-            R-->>C: 204, không body
-        end
+        S->>P: delete(id), không kiểm phụ thuộc
+        P->>D: DELETE YeuCauSanXuat, trigger chỉ cho xóa nhap
+        S->>L: append xoa_nhap, dữ liệu trước, trạng thái nhap sang null
+        L->>D: INSERT audit cùng session
+        S->>D: COMMIT; lỗi rollback toàn bộ
+        R-->>C: 204, không body
     end
 ```
 
-Xóa cứng yêu cầu nháp; không xóa nhân viên/mặt hàng, không cascade sang chứng từ khác.
+Xóa cứng yêu cầu Nháp, không cần hủy; không kiểm phụ thuộc vì theo bất biến v4,
+chứng từ/nhu cầu/giữ hàng chỉ phát sinh sau gửi. Trigger DB vẫn bảo vệ trạng thái;
+nếu dữ liệu sai bất biến gây lỗi FK thì lỗi hệ thống và rollback. Audit `xoa_nhap`
+có người, đối tượng, snapshot trước, `du_lieu_sau={}`, trạng thái `nhap → null`.
+Audit lỗi rollback: bản ghi Nháp và lịch sử cũ vẫn còn. Không đổi tồn/giữ,
+không xóa nhân viên/mặt hàng, không cascade sang chứng từ khác.
+FE ẩn Hủy với Nháp; BE hủy giữ nguyên cho UC-28.
 
 ## POST /api/v1/yeu_cau_san_xuat/{id}/gui
 

@@ -1,4 +1,4 @@
-import { employeeName, formatDate, itemName, number } from "../../lib/format.js";
+import { dateTime, employeeName, formatDate, itemName, number } from "../../lib/format.js";
 
 export const REQUEST_TYPES = [
   { value: "dap_ung", label: "Đáp ứng yêu cầu" },
@@ -55,4 +55,27 @@ export function sendConfirmEntries(values, items, employees) {
     ["Hạn hoàn thành", formatDate(values.han_hoan_thanh)],
     ["Nhân viên được giao", employeeName(employees, values.nhan_vien_duoc_giao_id)],
   ];
+}
+
+// UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — Main 2 thông tin chỉ đọc (specs/use_cases/production/UC-24.md)
+export function requestDetailEntries(record, items, employees) {
+  return [
+    ...sendConfirmEntries(record, items, employees),
+    ["Người lập", employeeName(employees, record.nhan_vien_id)],
+    ["Tạo lúc", dateTime(record.created_at)],
+    ["Gửi lúc", dateTime(record.gui_at)],
+    ["Đã xuất / yêu cầu", `${number(record.so_luong_da_xuat)} / ${number(record.so_luong)}`],
+    ["Còn phải xuất", number(record.so_luong_con_phai_xuat)],
+    ["Hoàn thành lúc", dateTime(record.completed_at)],
+  ];
+}
+
+// UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — R1, R8 quyền thao tác Nháp (specs/use_cases/production/UC-24.md)
+export function canEditRequest(record, manager) {
+  return Boolean(manager && record?.trang_thai === "nhap");
+}
+
+// UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — R4 Nháp chỉ xóa, không hủy (specs/use_cases/production/UC-24.md)
+export function canCancelRequest(record, manager) {
+  return Boolean(manager && record && !["nhap", "hoan_thanh", "da_huy"].includes(record.trang_thai));
 }

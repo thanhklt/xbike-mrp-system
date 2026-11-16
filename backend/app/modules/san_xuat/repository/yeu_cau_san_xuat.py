@@ -121,17 +121,6 @@ class SqlAlchemyYeuCauSanXuatRepository:
         await self.session.flush()
         return (await self._requests([record]))[0]
 
-    async def has_dependencies(self, request_id: int) -> bool:
-        return bool(
-            await self.session.scalar(
-                text(
-                    'SELECT EXISTS(SELECT 1 FROM "LenhSanXuat" WHERE yeu_cau_san_xuat_id = :id) '
-                    'OR EXISTS(SELECT 1 FROM "PhieuXuat" WHERE yeu_cau_san_xuat_id = :id)'
-                ),
-                {"id": request_id},
-            )
-        )
-
     async def delete(self, request_id: int) -> None:
         await self.session.execute(delete(YeuCauSanXuat).where(YeuCauSanXuat.id == request_id))
 

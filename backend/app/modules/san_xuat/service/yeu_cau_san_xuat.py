@@ -11,7 +11,6 @@ from app.core.errors import (
     PostedProductionDependency,
     PreconditionFailedException,
     PreconditionRequiredException,
-    ReferencedResource,
 )
 from app.core.transactions import Transaction
 from app.modules.audit.ports import AuditWriter
@@ -213,6 +212,7 @@ class YeuCauSanXuatService:
             )
         return self._detail(created, request_id)
 
+    # UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1; R2, R3, R9, R10 (specs/use_cases/production/UC-24.md)
     async def patch_entry(
         self,
         resource_id: int,
@@ -226,29 +226,37 @@ class YeuCauSanXuatService:
             before = await self._require_request(resource_id, actor, lock=True)
             _verify_if_match(if_match, before)
             _require_draft(before)
-            changes = payload.model_dump(exclude_unset=True)
-            await self._validate_product(changes.get("mat_hang_id", before.mat_hang_id))
-            assignee = changes.get("nhan_vien_duoc_giao_id", before.nhan_vien_duoc_giao_id)
-            if assignee is not None:
-                await self.employees.kiem_tra_nguoi_duoc_giao(assignee, lock=True)
+            changes = payload.model_dump()
+            await self._validate_product(payload.mat_hang_id)
+            await self.employees.kiem_tra_nguoi_duoc_giao(
+                payload.nhan_vien_duoc_giao_id, lock=True
+            )
             updated = (
                 await self._with_progress([await self.repository.update(resource_id, changes)])
             )[0]
-            await self._audit("yeu_cau_san_xuat", "sua", actor, before, updated)
+            await self._audit(
+                "yeu_cau_san_xuat", "sua", actor, before, updated,
+                trang_thai_truoc="nhap",
+                trang_thai_sau="nhap",
+            )
         return self._detail(updated, request_id)
 
+    # UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A2; R4, R9, R10 (specs/use_cases/production/UC-24.md)
     async def delete_entry(self, resource_id: int, actor: dict, if_match: str | None) -> None:
         _require_manager(actor)
         async with self.transaction:
             before = await self._require_request(resource_id, actor, lock=True)
             _verify_if_match(if_match, before)
             _require_draft(before)
-            if await self.repository.has_dependencies(resource_id):
-                raise ReferencedResource()
             await self.repository.delete(resource_id)
-            await self._audit("yeu_cau_san_xuat", "xoa_nhap", actor, before, None)
+            await self._audit(
+                "yeu_cau_san_xuat", "xoa_nhap", actor, before, None,
+                trang_thai_truoc="nhap",
+                trang_thai_sau=None,
+            )
 
     # UC-23 Lập và gửi yêu cầu sản xuất — Main 7–9; A3 (specs/use_cases/production/UC-23.md)
+    # UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — Main 5–7; A4, A5 (specs/use_cases/production/UC-24.md)
     async def gui(
         self, resource_id: int, actor: dict, if_match: str | None, request_id: str
     ) -> tuple[YeuCauDetailResponse, str]:

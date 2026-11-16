@@ -29,20 +29,11 @@ class YeuCauCreate(BaseModel):
 class YeuCauPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    loai_yeu_cau: LoaiYeuCau | None = None
-    han_hoan_thanh: date | None = None
-    mat_hang_id: int | None = Field(default=None, gt=0, strict=True)
-    so_luong: int | None = Field(default=None, gt=0, le=2**31 - 1, strict=True)
-    nhan_vien_duoc_giao_id: int | None = Field(default=None, gt=0, strict=True)
-
-    @model_validator(mode="after")
-    def validate_patch(self):
-        if not self.model_fields_set:
-            raise ValueError("Cần ít nhất một trường cập nhật")
-        for name in ("mat_hang_id", "so_luong", "loai_yeu_cau", "han_hoan_thanh"):
-            if name in self.model_fields_set and getattr(self, name) is None:
-                raise ValueError(f"{name} không nhận null")
-        return self
+    loai_yeu_cau: LoaiYeuCau
+    han_hoan_thanh: date
+    mat_hang_id: int = Field(gt=0, strict=True)
+    so_luong: int = Field(gt=0, le=2**31 - 1, strict=True)
+    nhan_vien_duoc_giao_id: int = Field(gt=0, strict=True)
 
 
 class GuiYeuCauInput(BaseModel):

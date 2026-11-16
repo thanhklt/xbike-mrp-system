@@ -132,6 +132,7 @@ async def create_entry(
     return result
 
 
+# UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 sửa Nháp (specs/use_cases/production/UC-24.md)
 @yeu_cau_sx_router.patch(
     "/{id}",
     response_model=YeuCauDetailResponse,
@@ -152,6 +153,7 @@ async def patch_entry(
     return result
 
 
+# UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A2 xóa Nháp (specs/use_cases/production/UC-24.md)
 @yeu_cau_sx_router.delete("/{id}", status_code=204, dependencies=[Depends(write_actor), Depends(reject_query)])
 async def delete_entry(
     id: ResourceId,
@@ -164,6 +166,7 @@ async def delete_entry(
 
 
 # UC-23 Lập và gửi yêu cầu sản xuất — Main 7–9; A3 (specs/use_cases/production/UC-23.md)
+# UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — Main 5–7; A4, A5 (specs/use_cases/production/UC-24.md)
 @yeu_cau_sx_router.post(
     "/{id}/gui",
     response_model=GuiYeuCauResponse,
