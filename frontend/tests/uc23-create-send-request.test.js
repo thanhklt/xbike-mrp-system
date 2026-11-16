@@ -234,7 +234,7 @@ test("request page removes planning and displays request type and deadline colum
   );
   assert.match(
     source,
-    /key: "loai_yeu_cau",\s*label: "Loại",\s*render: \(row\) => REQUEST_TYPE_LABELS\[row\.loai_yeu_cau\]/,
+    /key: "loai_yeu_cau",\s*label: "Loại yêu cầu",\s*render: \(row\) => REQUEST_TYPE_LABELS\[row\.loai_yeu_cau\]/,
   );
   assert.match(
     source,

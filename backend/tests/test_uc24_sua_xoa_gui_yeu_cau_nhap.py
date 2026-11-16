@@ -69,7 +69,7 @@ async def test_patch_quantity_keeps_draft_and_audits_old_new_values(api):
     before = YeuCauRead.model_validate(created.json()["data"])
     response = await patch(api, created, so_luong=15)
     assert response.status_code == 200, response.text
-    after = api.stored[1].model_copy(update={"so_luong_con_phai_xuat": 15})
+    after = api.stored[1]
     assert response.json()["data"] == after.model_dump(mode="json")
     assert after.trang_thai == "nhap" and after.so_luong == 15
     assert after.bom_id is None and after.gui_at is None
@@ -98,7 +98,7 @@ async def test_patch_request_type_through_service(api):
         1, YeuCauPatch(**{**PATCH_BODY, "loai_yeu_cau": "nhap_kho"}),
         MANAGER, created.headers["etag"], "uc24",
     )
-    assert detail.data == api.stored[1].model_copy(update={"so_luong_con_phai_xuat": 10})
+    assert detail.data == api.stored[1]
     assert detail.data.loai_yeu_cau == "nhap_kho" and detail.data.trang_thai == "nhap"
     assert etag == generate_yeu_cau_etag(detail.data)
     assert api.history[-1].du_lieu_truoc["loai_yeu_cau"] == "xuat_giao"

@@ -1,4 +1,5 @@
-import { dateTime, employeeName, formatDate, itemName, number } from "../../lib/format.js";
+import { dateFilters } from "../../components/filterFields.js";
+import { dateTime, employeeName, formatDate, itemName, number, STATUS_LABELS } from "../../lib/format.js";
 
 export const REQUEST_TYPES = [
   { value: "xuat_giao", label: "Sản xuất để xuất giao" },
@@ -7,6 +8,40 @@ export const REQUEST_TYPES = [
 export const REQUEST_TYPE_LABELS = Object.fromEntries(
   REQUEST_TYPES.map(({ value, label }) => [value, label]),
 );
+
+export const REQUEST_SORT_OPTIONS = [
+  { value: "", label: "Mặc định" },
+  { value: "han_hoan_thanh", label: "Hạn hoàn thành gần nhất" },
+  { value: "-han_hoan_thanh", label: "Hạn hoàn thành xa nhất" },
+  { value: "-created_at", label: "Mới nhất trước" },
+  { value: "created_at", label: "Cũ nhất trước" },
+];
+
+// UC-25 Xem danh sách yêu cầu sản xuất — Main 2–3; A1, A3 (specs/use_cases/production/UC-25.md)
+export function requestListFilters(manager) {
+  const statuses = [
+    "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy",
+  ].filter((status) => manager || status !== "nhap");
+  return [
+    {
+      name: "trang_thai",
+      label: "Trạng thái",
+      as: "select",
+      options: [
+        { value: "", label: "Tất cả" },
+        ...statuses.map((value) => ({ value, label: STATUS_LABELS[value] })),
+      ],
+    },
+    {
+      name: "loai_yeu_cau",
+      label: "Loại yêu cầu",
+      as: "select",
+      options: [{ value: "", label: "Tất cả" }, ...REQUEST_TYPES],
+    },
+    { name: "sort", label: "Sắp xếp", as: "select", options: REQUEST_SORT_OPTIONS },
+    ...dateFilters,
+  ];
+}
 
 // UC-23 Lập và gửi yêu cầu sản xuất — Main 1–3 (specs/use_cases/production/UC-23.md)
 export function initialRequestValues(record) {
@@ -64,8 +99,6 @@ export function requestDetailEntries(record, items, employees) {
     ["Người lập", employeeName(employees, record.nhan_vien_id)],
     ["Tạo lúc", dateTime(record.created_at)],
     ["Gửi lúc", dateTime(record.gui_at)],
-    ["Đã xuất / yêu cầu", `${number(record.so_luong_da_xuat)} / ${number(record.so_luong)}`],
-    ["Còn phải xuất", number(record.so_luong_con_phai_xuat)],
     ["Hoàn thành lúc", dateTime(record.completed_at)],
   ];
 }

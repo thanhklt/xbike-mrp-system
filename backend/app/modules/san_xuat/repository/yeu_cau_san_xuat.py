@@ -30,6 +30,7 @@ class SqlAlchemyYeuCauSanXuatRepository:
     async def _requests(self, records: list[YeuCauSanXuat]) -> list[YeuCauRead]:
         return [YeuCauRead.model_validate(record) for record in records]
 
+    # UC-25 Xem danh sách yêu cầu sản xuất — Main 2–3; A1, A3 (specs/use_cases/production/UC-25.md)
     async def list_entries(
         self, params: YeuCauListQuery, actor_id: int | None
     ) -> RecordPage[YeuCauRead]:
@@ -39,7 +40,7 @@ class SqlAlchemyYeuCauSanXuatRepository:
                 YeuCauSanXuat.nhan_vien_duoc_giao_id == actor_id,
                 YeuCauSanXuat.trang_thai != "nhap",
             )
-        for name in ("mat_hang_id", "trang_thai", "nhan_vien_duoc_giao_id"):
+        for name in ("mat_hang_id", "trang_thai", "nhan_vien_duoc_giao_id", "loai_yeu_cau"):
             value = getattr(params, name)
             if value is not None:
                 query = query.where(
@@ -66,9 +67,10 @@ class SqlAlchemyYeuCauSanXuatRepository:
             return RecordPage([], total)
         column = getattr(YeuCauSanXuat, params.sort.removeprefix("-"))
         ordering = column.desc() if params.sort.startswith("-") else column.asc()
+        id_ordering = YeuCauSanXuat.id.desc() if params.sort.startswith("-") else YeuCauSanXuat.id.asc()
         records = (
             await self.session.scalars(
-                query.order_by(ordering, YeuCauSanXuat.id).offset(offset).limit(params.page_size)
+                query.order_by(ordering, id_ordering).offset(offset).limit(params.page_size)
             )
         ).all()
         return RecordPage(await self._requests(list(records)), total)

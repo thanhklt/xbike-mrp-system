@@ -78,6 +78,7 @@ def reject_repeated_query(request: Request) -> None:
         )
 
 
+# UC-25 Xem danh sách yêu cầu sản xuất — Main 1–3; A1, A3 (specs/use_cases/production/UC-25.md)
 @yeu_cau_sx_router.get(
     "",
     response_model=YeuCauListResponse,
@@ -92,6 +93,7 @@ async def list_entries(
     return await service.list_entries(params, actor, request_id)
 
 
+# UC-25 Xem danh sách yêu cầu sản xuất — Main 4; A2 (specs/use_cases/production/UC-25.md)
 @yeu_cau_sx_router.get(
     "/{id}",
     response_model=YeuCauDetailResponse,

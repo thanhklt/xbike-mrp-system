@@ -31,8 +31,6 @@ const record = {
   nhan_vien_id: 10,
   created_at: "2026-11-16T07:00:00Z",
   gui_at: null,
-  so_luong_da_xuat: 0,
-  so_luong_con_phai_xuat: 15,
   completed_at: null,
 };
 const items = [{ id: 1, ten_mat_hang: "Mountain Pro", don_vi_tinh: "xe" }];
@@ -91,8 +89,6 @@ test("read only detail contains all approved information with employee names", (
     ["Người lập", "Quản lý kho"],
     ["Tạo lúc", dateTime(record.created_at)],
     ["Gửi lúc", "—"],
-    ["Đã xuất / yêu cầu", "0 / 15"],
-    ["Còn phải xuất", "15"],
     ["Hoàn thành lúc", "—"],
   ]);
   const sent = { ...record, trang_thai: "da_gui", gui_at: "2026-11-17T08:00:00Z" };

@@ -20,8 +20,6 @@ import { Button } from "../../components/Button.jsx";
 import {
   ItemSelect,
   EmployeeSelect,
-  statusFilter,
-  dateFilters,
 } from "../../components/ResourceFields.jsx";
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
@@ -32,16 +30,18 @@ import {
   canEditRequest,
   canCancelRequest,
   requestDetailEntries,
+  requestListFilters,
   requestCreateBody,
   sendConfirmEntries,
 } from "./requestForm.js";
 
+// UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
   const base = manager ? "/kho/yeu-cau" : "/nv/yeu-cau";
-  const collection = useCollection(API.requests, { sort: "-created_at" });
+  const collection = useCollection(API.requests, {});
   const detail = useDetail(API.requests, id);
   const catalog = useCatalog();
   const employees = useChoices(API.employees, {}, manager);
@@ -49,8 +49,10 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Yêu cầu sản xuất" : "Yêu cầu phụ trách"}
-        subtitle="Lập yêu cầu sản xuất và gửi cho nhân viên được giao."
+        title={manager ? "Yêu cầu sản xuất" : "Yêu cầu được giao"}
+        subtitle={manager
+          ? "Lập yêu cầu sản xuất và gửi cho nhân viên được giao."
+          : "Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi."}
         action={
           manager && (
             <Link className="btn btn-primary" to={`${base}/moi`}>
@@ -61,17 +63,7 @@ export function RequestsPage() {
       />
       <Collection
         collection={collection}
-        filters={[
-          statusFilter([
-            "nhap",
-            "da_gui",
-            "cho_bo_sung_linh_kien",
-            "dang_thuc_hien",
-            "hoan_thanh",
-            "da_huy",
-          ]),
-          ...dateFilters,
-        ]}
+        filters={requestListFilters(manager)}
         columns={[
           {
             key: "ma_yeu_cau_san_xuat",
@@ -85,7 +77,7 @@ export function RequestsPage() {
           },
           {
             key: "loai_yeu_cau",
-            label: "Loại",
+            label: "Loại yêu cầu",
             render: (row) => REQUEST_TYPE_LABELS[row.loai_yeu_cau],
           },
           {
@@ -93,8 +85,7 @@ export function RequestsPage() {
             label: "Hạn hoàn thành",
             render: (row) => formatDate(row.han_hoan_thanh),
           },
-          { key: "so_luong", label: "Nhu cầu", numeric: true },
-          { key: "so_luong_da_xuat", label: "Đã xuất", numeric: true },
+          { key: "so_luong", label: "Số lượng cần", numeric: true },
           {
             key: "trang_thai",
             label: "Trạng thái",

@@ -73,7 +73,6 @@ async def api():
     item_repo.reservations = reservations
     employee_repo = AsyncMock(spec=NhanVienRepository)
     issues = AsyncMock(spec=ProductionIssues)
-    issues.tong_da_xuat_thanh_pham.side_effect = lambda ids: dict.fromkeys(ids, 0)
 
     def read(id_):
         return pending.get(id_, stored.get(id_))
@@ -469,7 +468,7 @@ async def test_repository_employee_scope_excludes_drafts_before_paging():
 # UC-23 AC-1: Repository tăng phien_ban/updated_at mỗi update, không truy vấn lệnh (D1, D6)
 async def test_repository_updates_version_without_loading_orders(api):
     await create(api)
-    record = YeuCauSanXuat(**api.stored[1].model_dump(exclude={"so_luong_da_xuat", "so_luong_con_phai_xuat"}))
+    record = YeuCauSanXuat(**api.stored[1].model_dump())
     session = AsyncMock(spec=AsyncSession)
     session.get.return_value = record
     repo = SqlAlchemyYeuCauSanXuatRepository(session)

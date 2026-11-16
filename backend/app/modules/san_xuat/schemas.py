@@ -10,7 +10,8 @@ YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
 ]
 YeuCauSort = Literal[
-    "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat"
+    "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat",
+    "han_hoan_thanh", "-han_hoan_thanh",
 ]
 LoaiYeuCau = Literal["xuat_giao", "nhap_kho"]
 LenhStatus = Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
@@ -54,10 +55,11 @@ class YeuCauListQuery(BaseModel):
     q: str | None = None
     mat_hang_id: int | None = Field(default=None, gt=0)
     trang_thai: YeuCauStatus | None = None
+    loai_yeu_cau: LoaiYeuCau | None = None
     nhan_vien_duoc_giao_id: int | None = Field(default=None, gt=0)
     tu_ngay: date | None = None
     den_ngay: date | None = None
-    sort: YeuCauSort = "-created_at"
+    sort: YeuCauSort | None = None
 
     @model_validator(mode="after")
     def validate_dates(self):
@@ -80,8 +82,6 @@ class YeuCauRead(BaseModel):
     trang_thai: YeuCauStatus
     created_at: datetime
     completed_at: datetime | None
-    so_luong_da_xuat: int = 0
-    so_luong_con_phai_xuat: int = 0
     bom_id: int | None
     so_luong_dung_thanh_pham: int | None
     so_luong_can_san_xuat: int | None

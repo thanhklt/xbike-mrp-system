@@ -24,7 +24,6 @@ class AssigneeReader(Protocol):
 
 
 class ProductionIssues(Protocol):
-    async def tong_da_xuat_thanh_pham(self, yeu_cau_ids: list[int]) -> dict[int, int]: ...
     async def co_phieu_da_ghi_so(self, yeu_cau_id: int, lenh_ids: list[int]) -> bool: ...
     async def huy_phieu_chua_ghi_so(
         self, yeu_cau_id: int, lenh_ids: list[int], ly_do: str, actor_id: int

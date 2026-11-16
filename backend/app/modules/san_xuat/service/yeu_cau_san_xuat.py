@@ -98,20 +98,6 @@ class YeuCauSanXuatService:
         self.employees = employees
         self.issues = issues
 
-    async def _with_progress(self, records: list[YeuCauRead]) -> list[YeuCauRead]:
-        if not records:
-            return []
-        totals = await self.issues.tong_da_xuat_thanh_pham([record.id for record in records])
-        return [
-            record.model_copy(
-                update={
-                    "so_luong_da_xuat": totals.get(record.id, 0),
-                    "so_luong_con_phai_xuat": max(record.so_luong - totals.get(record.id, 0), 0),
-                }
-            )
-            for record in records
-        ]
-
     async def _require_request(
         self, request_id: int, actor: dict, *, lock: bool = False
     ) -> YeuCauRead:
@@ -125,7 +111,7 @@ class YeuCauSanXuatService:
         if record is None or ("quan_ly" not in actor.get("roles", []) and record.trang_thai == "nhap"):
             raise NotFoundException()
         _require_scope(record, actor)
-        return (await self._with_progress([record]))[0]
+        return record
 
     async def _audit(
         self,
@@ -161,15 +147,18 @@ class YeuCauSanXuatService:
         )
 
     # UC-23 Lập và gửi yêu cầu sản xuất — A2; D5 (specs/use_cases/production/UC-23.md)
+    # UC-25 Xem danh sách yêu cầu sản xuất — Main 2–3; A1, A3 (specs/use_cases/production/UC-25.md)
     async def list_entries(
         self, params: YeuCauListQuery, actor: dict, request_id: str
     ) -> YeuCauListResponse:
         if not {"quan_ly", "nhan_vien"}.intersection(actor.get("roles", [])):
             raise ForbiddenException()
         actor_id = None if "quan_ly" in actor["roles"] else int(actor["sub"])
+        if params.sort is None:
+            params = params.model_copy(update={"sort": "created_at" if actor_id is not None else "-created_at"})
         result = await self.repository.list_entries(params, actor_id)
         return YeuCauListResponse(
-            data=await self._with_progress(result.items),
+            data=result.items,
             meta=ListResponseMeta(
                 request_id=request_id,
                 page=params.page,
@@ -180,6 +169,7 @@ class YeuCauSanXuatService:
         )
 
     # UC-23 Lập và gửi yêu cầu sản xuất — A2; D5 (specs/use_cases/production/UC-23.md)
+    # UC-25 Xem danh sách yêu cầu sản xuất — Main 4; A2 (specs/use_cases/production/UC-25.md)
     async def get_entry(
         self, resource_id: int, actor: dict, request_id: str
     ) -> tuple[YeuCauDetailResponse, str]:
@@ -202,9 +192,7 @@ class YeuCauSanXuatService:
             await self.employees.kiem_tra_nguoi_duoc_giao(
                 payload.nhan_vien_duoc_giao_id, lock=True
             )
-            created = (
-                await self._with_progress([await self.repository.add(payload, int(actor["sub"]))])
-            )[0]
+            created = await self.repository.add(payload, int(actor["sub"]))
             await self._audit(
                 "yeu_cau_san_xuat", "tao", actor, None, created,
                 trang_thai_truoc=None,
@@ -231,9 +219,7 @@ class YeuCauSanXuatService:
             await self.employees.kiem_tra_nguoi_duoc_giao(
                 payload.nhan_vien_duoc_giao_id, lock=True
             )
-            updated = (
-                await self._with_progress([await self.repository.update(resource_id, changes)])
-            )[0]
+            updated = await self.repository.update(resource_id, changes)
             await self._audit(
                 "yeu_cau_san_xuat", "sua", actor, before, updated,
                 trang_thai_truoc="nhap",
@@ -284,7 +270,6 @@ class YeuCauSanXuatService:
                 resource_id,
                 {"trang_thai": "da_gui", "bom_id": bom_id, "gui_at": datetime.now(timezone.utc)},
             )
-            after = (await self._with_progress([after]))[0]
             await self._audit(
                 "yeu_cau_san_xuat", "gui", actor, before, after,
                 trang_thai_truoc="nhap",
@@ -329,10 +314,6 @@ class YeuCauSanXuatService:
             await self.issues.huy_phieu_chua_ghi_so(
                 resource_id, order_ids, reason, int(actor["sub"])
             )
-            after = (
-                await self._with_progress(
-                    [await self.repository.update(resource_id, {"trang_thai": "da_huy"})]
-                )
-            )[0]
+            after = await self.repository.update(resource_id, {"trang_thai": "da_huy"})
             await self._audit("yeu_cau_san_xuat", "huy", actor, before, after, reason=reason)
         return self._detail(after, request_id)

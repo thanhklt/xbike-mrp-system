@@ -5,6 +5,8 @@ plan `docs/plans/UC-23.md` và quyết định D1–D7 ngày 16/11/2026; bảng
 `"YeuCauSanXuat"` theo `infra/postgres/init.sql` v4. Sửa/xóa Nháp theo
 [UC-24](../../specs/use_cases/production/UC-24.md), plan `docs/plans/UC-24.md`
 và quyết định D1–D4 ngày 16/11/2026; gửi lại dùng chung luồng gửi UC-23.
+Danh sách theo [UC-25](../../specs/use_cases/production/UC-25.md),
+plan `docs/plans/UC-25.md` và quyết định D1–D6 ngày 16/11/2026.
 Các luồng lệnh, hủy và chứng từ
 hoàn thành giữ triển khai hiện tại, chưa chuyển toàn bộ sang v4.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
@@ -15,15 +17,18 @@ chi tiết Nháp trả 404, yêu cầu đã gửi ngoài phạm vi trả 403.
 Mọi lỗi dùng `{error: {code, message, details}, meta: {request_id}}`.
 Body không hỗ trợ trường lạ; ID path phải dương (422), ID vượt INT32 trả 404.
 GET chi tiết, POST tạo, PATCH, gửi và hủy trả strong ETag hash toàn bộ `YeuCauRead`,
-gồm cột v4/`phien_ban` và tiến độ xuất; không còn `lenh_san_xuat_ids`.
+gồm cột v4/`phien_ban`; không còn `lenh_san_xuat_ids` hoặc hai trường tiến độ xuất (D6).
 PATCH/DELETE/gửi/hủy so `If-Match` dưới khóa yêu cầu: thiếu/blank 428
 `thieu_if_match`; cũ/weak/`*` 412 `du_lieu_da_thay_doi`.
 Mỗi `update` tăng `phien_ban` một và ghi `updated_at`, kể cả gửi.
 Mọi ghi nghiệp vụ và audit dùng cùng session/transaction; lỗi rollback toàn bộ.
 Tạo/gửi không tính nhu cầu, không sinh lệnh, không giữ hàng hoặc thay đổi tồn/ledger.
-Cổng tiến độ `tong_da_xuat_thanh_pham` chỉ đọc tổng xuất đã duyệt, không đọc số dư tồn.
+Yêu cầu không đọc tổng xuất thành phẩm để tạo response/ETag hoặc audit (UC-25 D6).
+Cổng `ProductionIssues` chỉ giữ `co_phieu_da_ghi_so`, `huy_phieu_chua_ghi_so` cho luồng hủy.
 
 ## GET /api/v1/yeu_cau_san_xuat
+
+Nguồn: UC-25 Main 1–3; AC-1–AC-5, A1, A3, R5; D1–D3, D5–D6.
 
 ```mermaid
 sequenceDiagram
@@ -32,9 +37,8 @@ sequenceDiagram
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant D as PostgreSQL
-    C->>R: GET (page, page_size, q, filters, sort)
+    C->>R: GET (page, page_size, q, filters, loai_yeu_cau, sort tùy chọn)
     R->>A: JWT + danh tính hiện hành + role Q/N
     A->>D: Đọc nhân viên và vai trò
     alt Chưa xác thực / sai token / tài khoản bị khóa / ngoài role
@@ -45,20 +49,25 @@ sequenceDiagram
             R-->>C: 422 du_lieu_khong_hop_le
         else Hợp lệ
             R->>S: list_entries(params, actor, request_id)
+            S->>S: Thiếu sort, N dùng created_at, Q dùng -created_at
             S->>P: list_entries(params, N.id hoặc null với Q)
-            P->>D: COUNT + SELECT yêu cầu trong phạm vi và trang, N loại nhap
-            S->>X: tong_da_xuat_thanh_pham(ids)
-            X->>D: SUM dòng xuất thành phẩm da_duyet, GROUP BY yêu cầu
+            P->>D: COUNT theo phạm vi và bộ lọc, N loại nhap
+            P->>D: SELECT cùng bộ lọc, ORDER BY cột rồi id cùng chiều, OFFSET/LIMIT
             S-->>C: 200 data[] + meta phân trang
         end
     end
 ```
 
 Filter `q` tìm mã yêu cầu bằng ILIKE tham số hóa, escape ký tự wildcard. Bộ lọc
-`mat_hang_id`, `trang_thai`, `nhan_vien_duoc_giao_id`, `tu_ngay`, `den_ngay` kết hợp
+`mat_hang_id`, `trang_thai`, `nhan_vien_duoc_giao_id`, `loai_yeu_cau` (`xuat_giao`/`nhap_kho`),
+`tu_ngay`, `den_ngay` kết hợp
 với phạm vi N. Ngày địa phương Asia/Ho_Chi_Minh chuyển sang khoảng UTC nửa mở.
-Sort mặc định `-created_at`, whitelist `id`, `created_at`, `ma_yeu_cau_san_xuat`,
-luôn thêm ID tăng dần. Meta có `request_id`, `page`, `page_size`, `total`, `total_pages`.
+Không gửi `sort`: N dùng `created_at` (cũ nhất trước), Q dùng `-created_at` (mới nhất trước).
+Whitelist `id`, `created_at`, `ma_yeu_cau_san_xuat`, `han_hoan_thanh`, mỗi cột có chiều
+tăng hoặc dấu `-` cho giảm; luôn thêm `id` cùng chiều làm khóa phụ.
+Sai loại/sort trả 422. Bộ lọc người được giao không thay thế phạm vi N: lọc người khác
+trả danh sách rỗng. Q vẫn thấy yêu cầu giao cho nhân viên bị khóa, không JOIN/lọc trạng thái NV.
+Meta có `request_id`, `page`, `page_size`, `total`, `total_pages`.
 Projection Q/N cùng các field, khác phạm vi dòng. Không audit, không ETag danh sách.
 
 ## GET /api/v1/yeu_cau_san_xuat/{id}
@@ -70,7 +79,6 @@ sequenceDiagram
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant D as PostgreSQL
     C->>R: GET id
     R->>A: Xác thực + role Q/N
@@ -87,15 +95,13 @@ sequenceDiagram
         else N ngoài phạm vi
             S-->>C: 403 khong_co_quyen
         else Trong phạm vi
-            S->>X: tong_da_xuat_thanh_pham([id])
-            X->>D: SUM xuất thành phẩm da_duyet
-            S->>S: Tính còn phải xuất + ETag canonical
+            S->>S: Tạo ETag canonical từ YeuCauRead
             S-->>C: 200 YeuCauRead + meta + ETag
         end
     end
 ```
 
-Không audit. `so_luong_con_phai_xuat = max(so_luong - so_luong_da_xuat, 0)`.
+Không audit. Response và ETag dùng trực tiếp bản ghi yêu cầu, không truy vấn tiến độ xuất (D6).
 
 ## POST /api/v1/yeu_cau_san_xuat
 
@@ -111,7 +117,6 @@ sequenceDiagram
     participant S as YeuCauSanXuatService
     participant M as MatHangAvailabilityService / repository
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant L as AuditService / repository
     participant D as PostgreSQL
     C->>R: POST loại, thành phẩm, số lượng, hạn, nhân viên
@@ -138,8 +143,6 @@ sequenceDiagram
                     S->>P: add(payload, actor.id)
                     P->>D: nextval identity + tháng Asia/Ho_Chi_Minh
                     P->>D: INSERT Nháp đủ trường v4, phien_ban=1, bom_id/gui_at=null
-                    S->>X: tong_da_xuat_thanh_pham([id])
-                    X->>D: SUM xuất thành phẩm đã duyệt
                     S->>L: append tao, trạng thái null sang nhap
                     L->>D: INSERT audit cùng session
                     S->>D: COMMIT qua SqlAlchemyTransaction
@@ -172,7 +175,6 @@ sequenceDiagram
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant M as MatHangAvailabilityService / repository
     participant L as AuditService / repository
     participant D as PostgreSQL
@@ -184,8 +186,6 @@ sequenceDiagram
     S->>P: get_for_update(id)
     P->>D: SELECT yêu cầu FOR UPDATE
     Note over S,P: ID vượt INT32/không tồn tại: 404
-    S->>X: Đọc tổng xuất thành phẩm da_duyet cho ETag
-    X->>D: SELECT SUM dòng xuất
     S->>S: So If-Match (thiếu: 428, không khớp: 412)
     alt Không còn nhap
         S-->>C: 409 trang_thai_khong_hop_le, rollback
@@ -196,8 +196,6 @@ sequenceDiagram
         A->>D: FOR SHARE, tồn tại/trạng thái/vai trò (404/409)
         S->>P: update(đủ 5 trường)
         P->>D: UPDATE yêu cầu, phien_ban tăng 1, updated_at
-        S->>X: tong_da_xuat_thanh_pham([id])
-        X->>D: SUM xuất thành phẩm da_duyet cho dữ liệu sau
         S->>L: append sua, dữ liệu trước/sau, trạng thái nhap sang nhap
         L->>D: INSERT audit
         S->>D: COMMIT; mọi lỗi rollback toàn bộ
@@ -226,7 +224,6 @@ sequenceDiagram
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant L as AuditService / repository
     participant D as PostgreSQL
     C->>R: DELETE id + If-Match
@@ -236,8 +233,6 @@ sequenceDiagram
     R->>S: delete_entry
     S->>P: get_for_update(id)
     P->>D: FOR UPDATE yêu cầu (không có: 404)
-    S->>X: Tổng xuất thành phẩm để tạo ETag
-    X->>D: SUM các dòng da_duyet
     S->>S: If-Match (thiếu: 428, cũ/weak/*: 412)
     alt Không nhap
         S-->>C: 409 trang_thai_khong_hop_le
@@ -270,7 +265,6 @@ sequenceDiagram
     participant A as AuthService / NhanVienService
     participant S as YeuCauSanXuatService
     participant P as SqlAlchemyYeuCauSanXuatRepository
-    participant X as PhieuXuatService / repository
     participant M as MatHangAvailabilityService / repository
     participant L as AuditService / repository
     participant D as PostgreSQL
@@ -290,8 +284,6 @@ sequenceDiagram
             alt Không có / ID vượt INT32
                 S-->>C: 404 khong_tim_thay
             else Có yêu cầu
-                S->>X: tong_da_xuat_thanh_pham([id]) để tạo ETag
-                X->>D: SUM xuất thành phẩm đã duyệt
                 S->>S: So If-Match, kiểm tra phải Nháp
                 alt Thiếu/cũ ETag hoặc không còn Nháp
                     S-->>C: 428 / 412 / 409 trang_thai_khong_hop_le
@@ -313,8 +305,6 @@ sequenceDiagram
                             S->>P: update da_gui, bom_id, gui_at=now
                             P->>D: UPDATE yêu cầu, phien_ban + 1, updated_at=now
                             Note over P,D: Trigger kiểm BOM thuộc thành phẩm, ràng buộc v4
-                            S->>X: tong_da_xuat_thanh_pham([id]) cho response
-                            X->>D: SUM xuất thành phẩm đã duyệt
                             S->>L: append gui, trạng thái nhap sang da_gui
                             L->>D: INSERT audit cùng session
                             S->>D: COMMIT
@@ -356,8 +346,6 @@ sequenceDiagram
     R->>S: huy
     S->>P: get_for_update(id)
     P->>D: FOR UPDATE yêu cầu (không có/vượt INT32: 404)
-    S->>X: Đọc tiến độ để tạo ETag
-    X->>D: SUM xuất thành phẩm đã duyệt
     S->>S: If-Match (thiếu: 428, cũ/weak/*: 412)
     alt Yêu cầu hoan_thanh / da_huy
         S-->>C: 409 trang_thai_khong_hop_le
@@ -399,8 +387,10 @@ trước của chứng từ bị xóa được lưu audit. Service phiếu xuấ
 - Gỡ bốn endpoint `/production/work-orders`; frontend cũ chưa chuyển đổi, sẽ nhận 404.
 - UC-23 kiểm chứng bằng repository/port giả có trạng thái qua ASGI và service, không DB/Docker.
 - Chỉ ORM yêu cầu được đồng bộ v4; lệnh/chứng từ hoàn thành/hủy giữ code hiện tại (D1).
-- Cổng tiến độ xuất và các module cũ có thể còn phụ thuộc schema v3. Không coi UC-23 là
-  xác nhận toàn hệ thống chạy E2E trên PostgreSQL v4; không migration hoặc sửa database.
+- UC-25 kiểm chứng danh sách bằng repository/port giả qua ASGI và service, cùng câu SQL
+  repository thật được biên dịch PostgreSQL; không DB/Docker, không xác nhận E2E PostgreSQL.
+- Các module cũ có thể còn phụ thuộc schema v3; UC-25 D6 không chuyển đổi module phiếu xuất
+  hoặc repository lệnh. Không migration hoặc sửa database.
 
 ## Lệnh sản xuất — contract v3 §9, API-045–051
 
