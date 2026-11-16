@@ -145,6 +145,20 @@ async def duyet_chung_tu(
     return result
 
 
+# UC-32 Từ chối chứng từ hoàn thành sản xuất — Main 2–5; A1, A2 (specs/use_cases/production/UC-32.md)
+@chung_tu_hoan_thanh_router.post(
+    "/{id}/tu_choi", response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},
+)
+async def tu_choi_chung_tu(
+    id: ResourceId, payload: LyDoInput, actor: WriteActor, service: CompletionService,
+    request_id: RequestId, response: Response, if_match: IfMatch = None,
+) -> ChungTuDetailResponse:
+    result, etag = await service.tu_choi(id, payload.ly_do, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
 # UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 endpoint chỉ đọc cho QLK (specs/use_cases/production/UC-27.md)
 @nhu_cau_bo_sung_router.get(
     "", response_model=NhuCauBoSungResponse,

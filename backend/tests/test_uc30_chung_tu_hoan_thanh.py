@@ -561,5 +561,6 @@ def test_application_registers_only_uc30_completion_routes():
     assert {path: set(methods) for path, methods in paths.items() if path.startswith(URL)} == {
         URL: {"post"}, f"{URL}/{{id}}": {"get"}, f"{URL}/{{id}}/gui": {"post"},
         f"{URL}/{{id}}/duyet": {"post"},
+        f"{URL}/{{id}}/tu_choi": {"post"},
     }
     assert BY_REQUEST.replace("/1/", "/{id}/") in paths

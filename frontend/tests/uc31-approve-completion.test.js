@@ -120,9 +120,8 @@ test("approval button enforces manager document and request states", () => {
   assert.equal(canApproveCompletion(completion, row, true), true);
   const valid = section();
   const html = valid.render();
-  assert.deepEqual([...valid.state.buttons.keys()], ["Duyệt"]);
-  assert.match(html, /<div class="actions actions-end"><button>Duyệt<\/button><\/div>/);
-  assert.doesNotMatch(html, /Từ chối/);
+  assert.deepEqual([...valid.state.buttons.keys()], ["Từ chối", "Duyệt"]);
+  assert.match(html, /<div class="actions actions-end"><button data-variant="secondary">Từ chối<\/button><button>Duyệt<\/button><\/div>/);
   for (const [document, record, manager] of [
     [completion, row, false], [null, row, true], [completion, null, true],
     ...["nhap", "tu_choi", "da_duyet"].map((trang_thai) => [{ ...completion, trang_thai }, row, true]),

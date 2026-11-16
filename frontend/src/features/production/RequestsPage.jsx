@@ -479,6 +479,26 @@ function CompletionSection({ record, items, manager, userId }) {
     });
   }
 
+  // UC-32 Từ chối chứng từ hoàn thành sản xuất — Main 2–5; A1, A2 (specs/use_cases/production/UC-32.md)
+  function rejectCompletion() {
+    const etag = query.data.etag;
+    confirm({
+      title: "Từ chối chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      reason: true,
+      danger: true,
+      impact: "Tồn không đổi; nhân viên sẽ gửi lại chứng từ.",
+      onConfirm: async (ly_do) => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "tu_choi"].join("/"),
+          body: { ly_do },
+          etag,
+        });
+        notify("Đã từ chối chứng từ hoàn thành.");
+      },
+    });
+  }
+
   // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 2–3 mở biểu mẫu chỉ đọc (specs/use_cases/production/UC-30.md)
   function openCompletion() {
     setCreateError(null);
@@ -553,6 +573,7 @@ function CompletionSection({ record, items, manager, userId }) {
         )}
         {canApprove && (
           <div className="actions actions-end">
+            <Button variant="secondary" disabled={completionMutation.isPending} onClick={rejectCompletion}>Từ chối</Button>
             <Button disabled={completionMutation.isPending} onClick={approve}>Duyệt</Button>
           </div>
         )}

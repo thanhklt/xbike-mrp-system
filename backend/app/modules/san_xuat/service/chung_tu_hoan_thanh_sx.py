@@ -148,6 +148,37 @@ class ChungTuHoanThanhService:
             ))
         return self._detail(after, request_id)
 
+    # UC-32 Từ chối chứng từ hoàn thành sản xuất — Main 2–5; A1, A2 (specs/use_cases/production/UC-32.md)
+    async def tu_choi(
+        self, resource_id: int, ly_do: str, actor: dict, if_match: str | None, request_id: str,
+    ) -> tuple[ChungTuDetailResponse, str | None]:
+        if "quan_ly" not in actor.get("roles", []):
+            raise ForbiddenException()
+        async with self.transaction:
+            reference = await self._completion(resource_id)
+            await self._request(reference.yeu_cau_san_xuat_id, actor, lock=True)
+            before = await self.repository.get_for_update(resource_id)
+            if before is None:
+                raise NotFoundException()
+            if not if_match or not if_match.strip():
+                raise PreconditionRequiredException()
+            if if_match.strip() != generate_chung_tu_etag(before):
+                raise PreconditionFailedException(message="Chứng từ đã thay đổi")
+            if before.trang_thai != "cho_duyet":
+                raise InvalidWorkflowState(message="Chứng từ đã thay đổi")
+            after = await self.repository.update(resource_id, {
+                "trang_thai": "tu_choi", "ly_do_tu_choi": ly_do,
+                "nguoi_xu_ly_id": int(actor["sub"]), "xu_ly_at": datetime.now(timezone.utc),
+            })
+            await self.audit.append(CreationAudit(
+                nhan_vien_id=int(actor["sub"]), loai_doi_tuong="chung_tu_hoan_thanh_san_xuat",
+                doi_tuong_id=after.id, thao_tac="tu_choi", ly_do=ly_do,
+                trang_thai_truoc=before.trang_thai, trang_thai_sau=after.trang_thai,
+                du_lieu_truoc=before.model_dump(mode="json"),
+                du_lieu_sau=after.model_dump(mode="json"),
+            ))
+        return self._detail(after, request_id)
+
     # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 2–5; A1 một chứng từ (specs/use_cases/production/UC-30.md)
     async def tao(
         self, payload: ChungTuCreate, actor: dict, request_id: str,

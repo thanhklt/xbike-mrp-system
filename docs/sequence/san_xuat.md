@@ -1037,8 +1037,9 @@ Mỗi lần xác nhận đều ghi mới `finish_time`; xóa `nguoi_xu_ly_id`, `
 Audit có `nhan_vien_id`, loại `chung_tu_hoan_thanh_san_xuat`, trạng thái trước/sau
 và toàn bộ snapshot trước/sau. Không đổi yêu cầu, tồn, giữ hàng hoặc giao dịch kho.
 Lỗi POST hiển thị trong hộp xác nhận, lỗi lập có `ErrorNotice` riêng; `useWrite`
-tải lại dữ liệu sau thành công. Không có endpoint sửa Nháp, về Nháp, duyệt/từ chối
-hoặc danh sách chứng từ trong UC-30. Tất cả bốn endpoint dùng envelope lỗi hợp đồng.
+tải lại dữ liệu sau thành công. UC-30 không thêm endpoint sửa Nháp, về Nháp
+hoặc danh sách chứng từ; duyệt/từ chối được triển khai ở UC-31/UC-32 bên dưới.
+Tất cả bốn endpoint UC-30 dùng envelope lỗi hợp đồng.
 
 ## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/duyet
 
@@ -1140,17 +1141,104 @@ Xuất giao: tồn và giữ cùng tăng n, còn dùng được không đổi. N
 giữ thành phẩm cho xuất giao được đáp ứng, không sửa bootstrap/schema.
 
 FE dùng `actions actions-end`, nút chính Duyệt sau thông tin chứng từ chỉ khi
-QLK + `cho_duyet` + yêu cầu `dang_thuc_hien`; UC-32 sẽ thêm nút secondary Từ chối
-phía trước. Hộp xác nhận dùng đúng năm dòng, `REQUEST_TYPE_LABELS`, `number` và câu:
+QLK + `cho_duyet` + yêu cầu `dang_thuc_hien`; nút secondary Từ chối (UC-32) đứng
+phía trước. Hộp xác nhận Duyệt dùng đúng năm dòng, `REQUEST_TYPE_LABELS`, `number` và câu:
 “Tồn thành phẩm tăng N; N xe được giữ cho yêu cầu này.” / “Tồn thành phẩm tăng N;
 N xe còn dùng được; yêu cầu chuyển Hoàn thành.” `completionMutation` POST với ETag
 chứng từ chụp khi mở hộp; lỗi ở trong hộp, không lặp ở khối. `useWrite` tải lại
 các resource sau thành công, gồm chứng từ, chi tiết và danh sách yêu cầu.
 
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/tu_choi
+
+Nguồn: UC-32 Main 2–5, R1–R3, AC-1–AC-3, A1–A2; D1–D2 đã duyệt.
+Chỉ QLK; NV/Admin → 403, chưa xác thực → 401. Body `{ly_do}` dùng `LyDoInput`:
+strip khoảng trắng, bắt buộc không rỗng, không nhận trường dư hoặc query.
+`If-Match` bắt buộc là strong ETag của chứng từ. Response `200 {data, meta.request_id}`
+và header `ETag` mới; không phân trang hoặc khác biệt dữ liệu theo vai trò.
+
+```mermaid
+sequenceDiagram
+    actor Q as Quản lý kho
+    participant FE as Khối chứng từ và Confirmation
+    participant API as Router và dependencies
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant R as YeuCauSanXuatRepository
+    participant C as ChungTuHoanThanhRepository
+    participant A as AuditService
+    participant DB as PostgreSQL
+    Q->>FE: Bấm Từ chối
+    FE-->>Q: Mã chứng từ, lý do bắt buộc và cảnh báo tồn không đổi
+    alt Hủy, đóng hoặc Escape
+        FE-->>Q: Không POST, không đổi dữ liệu
+    else Xác nhận với lý do không rỗng sau trim
+        FE->>API: POST /api/v1/chung_tu_hoan_thanh_sx/{id}/tu_choi, ly_do, If-Match
+        API->>Auth: Xác thực và vai trò quan_ly
+        alt Chưa đăng nhập hoặc sai vai trò
+            Auth-->>Q: 401 hoặc 403
+        else Được phép
+            API->>API: Validate id, LyDoInput, reject_query
+            alt Thiếu/rỗng lý do hoặc input không hợp lệ
+                API-->>Q: 422, không ghi dữ liệu (A1)
+            else Hợp lệ
+                API->>S: tu_choi(id, ly_do, actor, If-Match, request_id)
+                S->>S: Kiểm quyền QLK cả khi gọi service trực tiếp
+                Note over S,DB: Một transaction dùng chung cập nhật chứng từ và audit
+                S->>C: get_by_id(id) tìm id yêu cầu, không khóa
+                C->>DB: SELECT ChungTuHoanThanhSx
+                S->>R: get_for_update(yeu_cau_san_xuat_id)
+                R->>DB: SELECT YeuCauSanXuat FOR UPDATE, refresh
+                S->>C: get_for_update(id)
+                C->>DB: SELECT ChungTuHoanThanhSx FOR UPDATE, refresh
+                alt Thiếu chứng từ/yêu cầu hoặc ID vượt INT32
+                    S-->>Q: 404 và rollback
+                else Thiếu hoặc rỗng If-Match
+                    S-->>Q: 428 thieu_if_match và rollback
+                else ETag cũ, weak hoặc wildcard
+                    S-->>Q: 412 du_lieu_da_thay_doi, Chứng từ đã thay đổi, rollback
+                else Chứng từ không cho_duyet
+                    S-->>Q: 409 trang_thai_khong_hop_le, Chứng từ đã thay đổi, rollback (A2)
+                else Chờ duyệt và đúng ETag
+                    S->>C: update tu_choi, ly_do_tu_choi, nguoi_xu_ly_id, xu_ly_at
+                    C->>DB: UPDATE chứng từ, updated_at, phien_ban + 1, flush
+                    Note over S,DB: Giữ nguyên finish_time và yêu cầu; không gọi inventory, không ghi tồn/giữ/sổ kho
+                    S->>A: append tu_choi, cho_duyet sang tu_choi, ly_do, QLK, snapshots
+                    A->>DB: INSERT LichSuThaoTac
+                    alt Ghi hoặc commit lỗi
+                        S->>DB: ROLLBACK cả chứng từ và audit
+                        S-->>Q: 409 ràng buộc hoặc 500 nội bộ; chứng từ vẫn cho_duyet
+                    else Thành công
+                        S->>DB: COMMIT
+                        S-->>API: Chứng từ và ETag mới
+                        API-->>FE: 200, ETag
+                        FE-->>Q: Đã từ chối chứng từ hoàn thành.
+                    end
+                end
+            end
+        end
+    end
+```
+
+Thứ tự khóa yêu cầu → chứng từ giống UC-31. Service không đòi yêu cầu còn
+`dang_thuc_hien`; chỉ trạng thái chứng từ quyết định được từ chối sau kiểm ETag.
+`update` hiện có tăng phiên bản, giữ `finish_time`; không cần hàm repository mới.
+Audit có đúng một bản ghi `tu_choi`, lý do đã strip, người xử lý và snapshots trước/sau.
+Lỗi audit rollback để chứng từ giữ `cho_duyet`.
+
+FE hiện nút `Button variant="secondary"` Từ chối trước Duyệt trong cùng
+`actions actions-end` và cùng điều kiện hiển thị của Duyệt (QLK, chứng từ Chờ duyệt,
+yêu cầu Đang thực hiện). Hộp có `reason: true`, `danger: true`, title
+“Từ chối chứng từ hoàn thành”, description là `ma_phieu`, impact
+“Tồn không đổi; nhân viên sẽ gửi lại chứng từ.”. ETag được chụp khi mở hộp;
+chỉ xác nhận mới POST `{ly_do}`. Lỗi ở trong hộp, không báo thành công; `useWrite`
+tải lại resource sau thành công. Nhân viên đọc thấy lý do, chỉ có Gửi lại theo UC-30:
+`tu_choi → cho_duyet`, xóa thông tin xử lý/lý do, ghi mới `finish_time` và audit `gui_lai`.
+Không có endpoint hoặc nút đưa về Nháp.
+
 ## Phạm vi và kiểm chứng
 
-- Không còn endpoint `/api/v1/lenh_san_xuat*`; trả 404. Chứng từ có bốn endpoint UC-30 và POST duyệt UC-31.
-- UC-32 – UC-33 chưa triển khai, không mô tả như chức năng đang có.
+- Không còn endpoint `/api/v1/lenh_san_xuat*`; trả 404. Chứng từ có bốn endpoint UC-30, POST duyệt UC-31 và POST từ chối UC-32.
+- UC-33 chưa triển khai, không mô tả như chức năng đang có.
 - UC-29 dùng service/ASGI với port giả có trạng thái, transaction commit/rollback thật qua
   session giả, và biên dịch SQL PostgreSQL. Không chạy DB/Docker hoặc Playwright.
 - ORM chứng từ được đối chiếu cột, kiểu, nullable/default, FK, UNIQUE, check và index với `init.sql`.
@@ -1162,4 +1250,8 @@ các resource sau thành công, gồm chứng từ, chi tiết và danh sách y�
   kiểm số dư, giữ, ledger, audit, thứ tự khóa và rollback. FE chạy khối và Confirmation
   thật với hook giả, kiểm đóng/hủy/Escape, pending, lỗi và POST/If-Match qua axios adapter.
   Không chạy PostgreSQL thật, DB/Docker/seed hoặc Playwright; không chứng minh tranh chấp thật.
+- UC-32 dùng service/ASGI với repository giả và transaction commit/rollback trên session giả;
+  kiểm lý do, quyền, ETag, lịch sử, rollback, tồn/giữ/sổ kho không đổi và gửi lại UC-30.
+  FE chạy khối và Confirmation thật với hook giả, kiểm lý do bắt buộc, đóng hộp,
+  thứ tự/quyền nút, lỗi và POST/If-Match qua axios adapter. Không chứng minh tranh chấp DB thật.
 - Mermaid được đối chiếu source; kết quả kiểm tra cú pháp/render được báo khi bàn giao.

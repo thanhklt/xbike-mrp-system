@@ -276,8 +276,8 @@ test("section visibility follows production start or existing completion and man
     assert.match(html, /Chứng từ hoàn thành sản xuất/);
     assert.match(html, /HTSX-202611-000012/);
     assert.ok(html.includes(`data-status="${trang_thai}"`));
-    // QLK không lập/gửi; từ UC-31 chỉ có thêm nút Duyệt khi chứng từ Chờ duyệt.
-    assert.deepEqual([...ui.state.buttons.keys()], trang_thai === "cho_duyet" ? ["Duyệt"] : []);
+    // UC-32 thêm Từ chối trước Duyệt khi chứng từ Chờ duyệt; QLK không lập/gửi.
+    assert.deepEqual([...ui.state.buttons.keys()], trang_thai === "cho_duyet" ? ["Từ chối", "Duyệt"] : []);
   }
 });
 
