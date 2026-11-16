@@ -19,10 +19,16 @@ from app.modules.mat_hang.ports import MatHangStockReader
 from app.modules.mat_hang.service import InactiveMatHang
 from app.modules.san_xuat.ports import (
     AssigneeReader,
+    HangKhaDung,
     ProductionIssues,
     YeuCauSanXuatRepository,
 )
 from app.modules.san_xuat.schemas import (
+    KiemTraData,
+    KiemTraKetQua,
+    KiemTraLine,
+    KiemTraPreviewResponse,
+    KiemTraResponse,
     LenhRead,
     ListResponseMeta,
     ResponseMeta,
@@ -66,6 +72,59 @@ def _require_draft(record: YeuCauRead) -> None:
         raise InvalidWorkflowState()
 
 
+def _require_check_actor(actor: dict) -> None:
+    roles = actor.get("roles", [])
+    if "nhan_vien" not in roles or "quan_ly" in roles:
+        raise ForbiddenException()
+
+
+def _require_check_state(record: YeuCauRead) -> None:
+    if record.trang_thai not in {"da_gui", "cho_bo_sung_linh_kien"}:
+        raise InvalidWorkflowState()
+
+
+# UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 3, 6; A1–A3, A7 tính theo còn dùng được (specs/use_cases/production/UC-26.md)
+def tinh_ket_qua_kiem_tra(
+    yeu_cau: YeuCauRead,
+    dinh_muc_hoac_nhu_cau: dict[int, int],
+    kha_dung: dict[int, HangKhaDung],
+) -> KiemTraKetQua:
+    lan_dau = yeu_cau.kiem_tra_lan_dau_at is None
+    if lan_dau:
+        dung = (
+            min(kha_dung[yeu_cau.mat_hang_id].so_luong_con_dung, yeu_cau.so_luong)
+            if yeu_cau.loai_yeu_cau == "xuat_giao" else 0
+        )
+        can_san_xuat = yeu_cau.so_luong - dung
+        quantities = (
+            {id_: n * can_san_xuat for id_, n in dinh_muc_hoac_nhu_cau.items()}
+            if can_san_xuat else {}
+        )
+    else:
+        dung = yeu_cau.so_luong_dung_thanh_pham
+        can_san_xuat = yeu_cau.so_luong_can_san_xuat
+        quantities = dinh_muc_hoac_nhu_cau
+    lines = [
+        KiemTraLine(
+            mat_hang_id=id_,
+            ma_mat_hang=kha_dung[id_].ma_mat_hang,
+            ten_mat_hang=kha_dung[id_].ten_mat_hang,
+            don_vi_tinh=kha_dung[id_].don_vi_tinh,
+            so_luong_can=n,
+            so_luong_con_dung=kha_dung[id_].so_luong_con_dung,
+            so_luong_thieu=max(0, n - kha_dung[id_].so_luong_con_dung),
+        )
+        for id_, n in sorted(quantities.items())
+    ]
+    du = all(line.so_luong_thieu == 0 for line in lines)
+    return KiemTraKetQua(
+        lan_dau=lan_dau, so_luong=yeu_cau.so_luong, so_luong_dung_thanh_pham=dung,
+        so_luong_can_san_xuat=can_san_xuat, du_linh_kien=du,
+        trang_thai_du_kien="dang_thuc_hien" if du else "cho_bo_sung_linh_kien",
+        linh_kien=lines, giu_thanh_pham=dung if lan_dau else 0,
+    )
+
+
 def _cancel_ordering(orders: list[LenhRead]) -> list[LenhRead]:
     parents = {order.id: order.lenh_san_xuat_cha_id for order in orders}
     depths = {}
@@ -97,6 +156,95 @@ class YeuCauSanXuatService:
         self.items = items
         self.employees = employees
         self.issues = issues
+
+    async def _check_result(self, record: YeuCauRead, *, lock: bool) -> KiemTraKetQua:
+        quantities = (
+            await self.repository.dinh_muc(record.bom_id)
+            if record.kiem_tra_lan_dau_at is None
+            else await self.repository.nhu_cau(record.id)
+        )
+        ids = sorted({record.mat_hang_id, *quantities})
+        available = await self.repository.kha_dung(ids, lock=lock)
+        if set(available) != set(ids) or not quantities:
+            raise InvalidWorkflowState(message="Không đủ dữ liệu công thức hoặc nhu cầu đã chốt")
+        return tinh_ket_qua_kiem_tra(record, quantities, available)
+
+    # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–4; A5 chỉ đọc, không khóa (specs/use_cases/production/UC-26.md)
+    async def xem_truoc_kiem_tra(
+        self, resource_id: int, actor: dict, request_id: str,
+    ) -> KiemTraPreviewResponse:
+        _require_check_actor(actor)
+        record = await self._require_request(resource_id, actor)
+        _require_check_state(record)
+        result = await self._check_result(record, lock=False)
+        return KiemTraPreviewResponse(data=result, meta=ResponseMeta(request_id=request_id))
+
+    # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 5–8; A1–A4, A6, A7 xác nhận và audit (specs/use_cases/production/UC-26.md)
+    async def kiem_tra(
+        self, resource_id: int, actor: dict, if_match: str | None, request_id: str,
+    ) -> tuple[KiemTraResponse, str]:
+        _require_check_actor(actor)
+        async with self.transaction:
+            before = await self._require_request(resource_id, actor, lock=True)
+            _verify_if_match(if_match, before)
+            _require_check_state(before)
+            result = await self._check_result(before, lock=True)
+            after = before
+            if result.lan_dau or result.du_linh_kien:
+                reservations = []
+                changes = {"trang_thai": result.trang_thai_du_kien}
+                if result.lan_dau:
+                    changes.update(
+                        so_luong_dung_thanh_pham=result.so_luong_dung_thanh_pham,
+                        so_luong_can_san_xuat=result.so_luong_can_san_xuat,
+                        kiem_tra_lan_dau_at=datetime.now(timezone.utc),
+                    )
+                    if result.linh_kien:
+                        await self.repository.ghi_nhu_cau(
+                            resource_id, {line.mat_hang_id: line.so_luong_can for line in result.linh_kien},
+                        )
+                    if result.giu_thanh_pham:
+                        reservations.append({
+                            "mat_hang_id": before.mat_hang_id,
+                            "loai_giu": "thanh_pham_co_san",
+                            "so_luong": result.giu_thanh_pham,
+                        })
+                if result.du_linh_kien:
+                    reservations.extend({
+                        "mat_hang_id": line.mat_hang_id,
+                        "loai_giu": "linh_kien",
+                        "so_luong": line.so_luong_can,
+                    } for line in result.linh_kien)
+                if reservations:
+                    await self.repository.giu_hang(resource_id, reservations)
+                after = await self.repository.update(resource_id, changes)
+                await self.audit.append(
+                    CreationAudit(
+                        nhan_vien_id=int(actor["sub"]),
+                        loai_doi_tuong="yeu_cau_san_xuat",
+                        doi_tuong_id=resource_id,
+                        thao_tac="kiem_tra",
+                        trang_thai_truoc=before.trang_thai,
+                        trang_thai_sau=after.trang_thai,
+                        du_lieu_truoc=before.model_dump(mode="json"),
+                        du_lieu_sau={
+                            "lan_dau": result.lan_dau,
+                            "so_luong_dung_thanh_pham": result.so_luong_dung_thanh_pham,
+                            "so_luong_can_san_xuat": result.so_luong_can_san_xuat,
+                            "giu_hang": reservations,
+                            "thieu": [
+                                line.model_dump() for line in result.linh_kien if line.so_luong_thieu
+                            ],
+                        },
+                    )
+                )
+        return (
+            KiemTraResponse(
+                data=KiemTraData(yeu_cau=after, ket_qua=result),
+                meta=ResponseMeta(request_id=request_id),
+            ),
+            generate_yeu_cau_etag(after),
+        )
 
     async def _require_request(
         self, request_id: int, actor: dict, *, lock: bool = False

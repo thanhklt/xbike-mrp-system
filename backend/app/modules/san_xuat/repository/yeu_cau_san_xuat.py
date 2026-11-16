@@ -3,15 +3,19 @@
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, false, func, select, text
+from sqlalchemy import delete, false, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.bom.models import Bom
+from app.modules.bom.models import Bom, ChiTietBom
+from app.modules.mat_hang.models import MatHang
 from app.modules.san_xuat.models import (
     ChungTuHoanThanhSx,
+    GiuHang,
     LenhSanXuat,
+    NhuCauLinhKien,
     YeuCauSanXuat,
 )
+from app.modules.san_xuat.ports import HangKhaDung
 from app.modules.san_xuat.schemas import (
     ChungTuRead,
     LenhRead,
@@ -26,6 +30,57 @@ from app.shared.records import RecordPage
 class SqlAlchemyYeuCauSanXuatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def dinh_muc(self, bom_id: int) -> dict[int, int]:
+        rows = await self.session.execute(
+            select(ChiTietBom.mat_hang_id, ChiTietBom.so_luong)
+            .where(ChiTietBom.bom_id == bom_id)
+            .order_by(ChiTietBom.mat_hang_id)
+        )
+        return dict(rows.all())
+
+    async def nhu_cau(self, yeu_cau_id: int) -> dict[int, int]:
+        rows = await self.session.execute(
+            select(NhuCauLinhKien.mat_hang_id, NhuCauLinhKien.so_luong_can)
+            .where(NhuCauLinhKien.yeu_cau_san_xuat_id == yeu_cau_id)
+            .order_by(NhuCauLinhKien.mat_hang_id)
+        )
+        return dict(rows.all())
+
+    # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 3, 6; A4 khóa trước khi đọc (specs/use_cases/production/UC-26.md)
+    async def kha_dung(self, mat_hang_ids: list[int], *, lock: bool) -> dict[int, HangKhaDung]:
+        query = select(
+            MatHang.id, MatHang.ma_mat_hang, MatHang.ten_mat_hang,
+            MatHang.don_vi_tinh, MatHang.so_luong_con_dung,
+        ).where(MatHang.id.in_(mat_hang_ids)).order_by(MatHang.id)
+        if lock:
+            query = query.with_for_update()
+        rows = await self.session.execute(query)
+        return {
+            row.id: HangKhaDung(
+                row.ma_mat_hang, row.ten_mat_hang, row.don_vi_tinh, row.so_luong_con_dung,
+            )
+            for row in rows
+        }
+
+    # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 6 chốt nhu cầu lần đầu (specs/use_cases/production/UC-26.md)
+    async def ghi_nhu_cau(self, yeu_cau_id: int, quantities: dict[int, int]) -> None:
+        self.session.add_all([
+            NhuCauLinhKien(yeu_cau_san_xuat_id=yeu_cau_id, mat_hang_id=item_id, so_luong_can=quantity)
+            for item_id, quantity in quantities.items()
+        ])
+        await self.session.flush()
+
+    # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 7; A1–A3 giữ hàng cùng transaction (specs/use_cases/production/UC-26.md)
+    async def giu_hang(self, yeu_cau_id: int, reservations: list[dict]) -> None:
+        for reservation in reservations:
+            self.session.add(GiuHang(yeu_cau_san_xuat_id=yeu_cau_id, **reservation))
+            await self.session.execute(
+                update(MatHang)
+                .where(MatHang.id == reservation["mat_hang_id"])
+                .values(so_luong_dang_giu=MatHang.so_luong_dang_giu + reservation["so_luong"])
+            )
+        await self.session.flush()
 
     async def _requests(self, records: list[YeuCauSanXuat]) -> list[YeuCauRead]:
         return [YeuCauRead.model_validate(record) for record in records]

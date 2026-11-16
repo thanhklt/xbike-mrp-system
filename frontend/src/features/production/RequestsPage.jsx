@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
+import { readResource } from "../../lib/api/client.js";
 import {
   useCatalog,
   useChoices,
@@ -17,6 +18,7 @@ import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Field } from "../../components/Field.jsx";
 import { Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
+import { DataTable } from "../../components/DataTable.jsx";
 import {
   ItemSelect,
   EmployeeSelect,
@@ -25,6 +27,11 @@ import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
 import {
   REQUEST_TYPES,
+  CHECK_COLUMNS,
+  canCheckRequest,
+  checkConfirmEntries,
+  checkLines,
+  checkImpact,
   REQUEST_TYPE_LABELS,
   initialRequestValues,
   canEditRequest,
@@ -38,6 +45,9 @@ import {
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
   const { id } = useParams();
+  // RecordPanel remounts the editor when ETag changes after confirmation.
+  const [checkResult, setCheckResult] = useState(null);
+  useEffect(() => setCheckResult(null), [id]);
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
   const base = manager ? "/kho/yeu-cau" : "/nv/yeu-cau";
@@ -112,6 +122,9 @@ export function RequestsPage() {
               employees={employees}
               manager={manager}
               base={base}
+              userId={user.id}
+              checkResult={checkResult}
+              onCheckResult={setCheckResult}
             />
           </QueryState>
         )}
@@ -119,12 +132,16 @@ export function RequestsPage() {
     </>
   );
 }
-function RequestEditor({ snapshot, items, employees, manager, base }) {
+function RequestEditor({ snapshot, items, employees, manager, base, userId, checkResult, onCheckResult }) {
   const record = snapshot?.data;
   const initial = initialRequestValues(record);
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState(false);
+  const [checkError, setCheckError] = useState(null);
+  const [checkPending, setCheckPending] = useState(false);
   const mutation = useWrite();
+  // Lỗi xác nhận kiểm tra chỉ hiện trong hộp xác nhận, không lặp lại ở chi tiết.
+  const checkMutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
@@ -136,6 +153,39 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
       setValues({ ...values, [name]: event.target.value });
     },
   });
+  // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–8; A5 xem trước rồi xác nhận (specs/use_cases/production/UC-26.md)
+  async function openCheck() {
+    setCheckError(null);
+    setCheckPending(true);
+    const etag = snapshot.etag;
+    try {
+      const { data: ketQua } = await readResource(`${API.requests}/${record.id}/kiem_tra`);
+      confirm({
+        title: ketQua.lan_dau ? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất",
+        description: record.ma_yeu_cau_san_xuat,
+        content: <>
+          <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
+          <DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} />
+        </>,
+        impact: checkImpact(ketQua),
+        onConfirm: async () => {
+          const result = await checkMutation.mutateAsync({
+            path: `${API.requests}/${record.id}/kiem_tra`,
+            body: {},
+            etag,
+          });
+          const actual = result.data.ket_qua;
+          onCheckResult(actual);
+          notify(actual.du_linh_kien ? "Yêu cầu Đang thực hiện."
+            : actual.lan_dau ? "Yêu cầu Chờ bổ sung linh kiện." : "Vẫn thiếu linh kiện.");
+        },
+      });
+    } catch (failure) {
+      setCheckError(failure);
+    } finally {
+      setCheckPending(false);
+    }
+  }
   // UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1, A2 (specs/use_cases/production/UC-23.md)
   // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 lưu đủ thông tin, về chế độ xem (specs/use_cases/production/UC-24.md)
   function submit(event) {
@@ -219,6 +269,21 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
         </>
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
+      <ErrorNotice error={checkError} />
+      {checkResult && !checkResult.du_linh_kien && (
+        <>
+          <Notice tone="warning">Yêu cầu Chờ bổ sung linh kiện.</Notice>
+          <h3>Linh kiện thiếu</h3>
+          <DataTable rows={checkLines(checkResult).filter((line) => line.so_luong_thieu > 0)} columns={CHECK_COLUMNS} />
+        </>
+      )}
+      {canCheckRequest(record, manager, userId) && (
+        <div className="actions actions-end">
+          <Button disabled={checkMutation.isPending || checkPending} onClick={openCheck}>
+            {record.trang_thai === "da_gui" ? "Kiểm tra" : "Kiểm tra lại"}
+          </Button>
+        </div>
+      )}
       {showForm && (
         <QueryState query={employees}>
           <form className="stack" onSubmit={submit}>

@@ -163,6 +163,46 @@ class YeuCauListResponse(BaseModel):
 GuiYeuCauResponse = YeuCauDetailResponse
 
 
+class KiemTraInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class KiemTraLine(BaseModel):
+    mat_hang_id: int
+    ma_mat_hang: str
+    ten_mat_hang: str
+    don_vi_tinh: str
+    so_luong_can: int
+    so_luong_con_dung: int
+    so_luong_thieu: int
+
+
+class KiemTraKetQua(BaseModel):
+    lan_dau: bool
+    so_luong: int
+    so_luong_dung_thanh_pham: int
+    so_luong_can_san_xuat: int
+    du_linh_kien: bool
+    trang_thai_du_kien: YeuCauStatus
+    linh_kien: list[KiemTraLine]
+    giu_thanh_pham: int
+
+
+class KiemTraPreviewResponse(BaseModel):
+    data: KiemTraKetQua
+    meta: ResponseMeta
+
+
+class KiemTraData(BaseModel):
+    yeu_cau: YeuCauRead
+    ket_qua: KiemTraKetQua
+
+
+class KiemTraResponse(BaseModel):
+    data: KiemTraData
+    meta: ResponseMeta
+
+
 class SanXuatError(BaseModel):
     code: str
     message: str

@@ -7,6 +7,8 @@ plan `docs/plans/UC-23.md` và quyết định D1–D7 ngày 16/11/2026; bảng
 và quyết định D1–D4 ngày 16/11/2026; gửi lại dùng chung luồng gửi UC-23.
 Danh sách theo [UC-25](../../specs/use_cases/production/UC-25.md),
 plan `docs/plans/UC-25.md` và quyết định D1–D6 ngày 16/11/2026.
+Kiểm tra và giữ hàng theo [UC-26](../../specs/use_cases/production/UC-26.md),
+plan `docs/plans/UC-26.md`, D1–D6 ngày 16/11/2026 và data model v4 §3.5.
 Các luồng lệnh, hủy và chứng từ
 hoàn thành giữ triển khai hiện tại, chưa chuyển toàn bộ sang v4.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
@@ -326,6 +328,181 @@ cũng gửi theo cùng luồng; các số lượng kiểm tra lần đầu còn 
 cấu trúc với chi tiết yêu cầu. Audit `gui` lưu trước/sau, người, thời điểm và đối tượng.
 Hộp xác nhận hiển thị đủ loại, thành phẩm, số lượng, đơn vị, hạn, nhân viên và tác động
 chưa đổi tồn; lỗi BE truyền ra `ErrorNotice`, đóng hộp ở lại chi tiết Nháp (A3).
+
+## GET /api/v1/yeu_cau_san_xuat/{id}/kiem_tra
+
+Nguồn: UC-26 Main 2–4; A1–A5, A7; D1, D2. Chỉ nhân viên được giao;
+QLK trả 403, kể cả có thêm role NV. Không dùng token xem trước.
+Response `{data: KiemTraKetQua, meta: {request_id}}` gồm `lan_dau`, `so_luong`,
+`so_luong_dung_thanh_pham`, `so_luong_can_san_xuat`, `du_linh_kien`,
+`trang_thai_du_kien`, `giu_thanh_pham` (lượng thành phẩm sẽ giữ thêm), `linh_kien[]`.
+Mỗi dòng có `mat_hang_id`, mã, tên, ĐVT, cần, còn dùng được, thiếu.
+Không khóa, không ghi, không tăng phiên bản, không audit; không cam kết tồn khi xác nhận.
+
+```mermaid
+sequenceDiagram
+    actor C as Nhân viên
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as YeuCauSanXuatService
+    participant P as SqlAlchemyYeuCauSanXuatRepository
+    participant D as PostgreSQL
+    C->>R: GET /yeu_cau_san_xuat/{id}/kiem_tra
+    R->>A: JWT, tài khoản, role NV hiện hành
+    A->>D: Đọc nhân viên và vai trò
+    alt Chưa xác thực hoặc ngoài role
+        R-->>C: 401 / 403
+    else Hợp lệ
+        R->>R: ID dương, không có query
+        alt ID/query sai
+            R-->>C: 422
+        else Hợp lệ
+            R->>S: xem_truoc_kiem_tra(id, actor, request_id)
+            S->>S: Từ chối QLK, kể cả có thêm role NV (403)
+            S->>P: get_by_id(id)
+            P->>D: SELECT YeuCauSanXuat, không khóa
+            alt Không tồn tại, ID vượt INT32 hoặc Nháp
+                S-->>C: 404
+            else Yêu cầu của nhân viên khác
+                S-->>C: 403
+            else Không phải Đã gửi / Chờ bổ sung linh kiện
+                S-->>C: 409
+            else Đúng phạm vi và trạng thái
+                alt Kiểm tra lần đầu
+                    S->>P: dinh_muc(yeu_cau.bom_id)
+                    P->>D: SELECT ChiTietBom theo bom_id đã chốt
+                else Kiểm tra lại
+                    S->>P: nhu_cau(id)
+                    P->>D: SELECT NhuCauLinhKien đã chốt
+                end
+                S->>P: kha_dung(ids tăng dần, lock=false)
+                P->>D: SELECT MatHang.so_luong_con_dung và mã, tên, ĐVT
+                alt Thiếu dữ liệu công thức, nhu cầu hoặc mặt hàng
+                    S-->>C: 409
+                else Đủ dữ liệu
+                    S->>S: tinh_ket_qua_kiem_tra theo R1–R8
+                    S-->>C: 200 kết quả xem trước, không ghi dữ liệu
+                end
+            end
+        end
+    end
+```
+
+Lần đầu xuất giao: dùng `min(còn dùng được, số yêu cầu)`, nhu cầu theo số còn cần sản xuất.
+Nhập kho luôn dùng 0 thành phẩm, sản xuất toàn bộ số yêu cầu. Kiểm tra lại dùng số chốt,
+không tính lại định mức hoặc số thành phẩm dùng; `giu_thanh_pham = 0` vì đã giữ ở lần đầu.
+Đóng hộp xác nhận không gọi POST; không có gì thay đổi (AC-8).
+
+## POST /api/v1/yeu_cau_san_xuat/{id}/kiem_tra
+
+Nguồn: UC-26 Main 5–8; R1–R12; AC-1–AC-9, A1–A7; D1–D6.
+Body bắt buộc `{}`, trường lạ bị 422. Chỉ NV được giao, QLK bị 403.
+`If-Match` lấy từ chi tiết đã xem; kiểm dưới khóa yêu cầu trước khi tính lại.
+Response `{data: {yeu_cau, ket_qua}, meta: {request_id}}` kèm ETag của `yeu_cau`.
+GET xem trước không phải điều kiện bắt buộc để gọi POST. Kết quả POST là kết quả thực tế.
+
+```mermaid
+sequenceDiagram
+    actor C as Nhân viên
+    participant R as Router
+    participant A as AuthService / NhanVienService
+    participant S as YeuCauSanXuatService
+    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemyYeuCauSanXuatRepository
+    participant H as AuditWriter
+    participant D as PostgreSQL
+    C->>R: POST /yeu_cau_san_xuat/{id}/kiem_tra, {}, If-Match
+    R->>A: JWT, tài khoản và role NV hiện hành
+    A->>D: Đọc nhân viên và vai trò
+    alt Chưa xác thực hoặc ngoài role
+        R-->>C: 401 / 403
+    else Hợp lệ
+        R->>R: ID dương, body rỗng, không có query
+        alt Input sai hoặc trường lạ
+            R-->>C: 422
+        else Hợp lệ
+            R->>S: kiem_tra(id, actor, If-Match, request_id)
+            S->>S: Từ chối QLK, kể cả có thêm role NV (403)
+            S->>T: Vào transaction dùng chung session
+            S->>P: get_for_update(id)
+            P->>D: SELECT YeuCauSanXuat FOR UPDATE
+            alt Không tồn tại, ID vượt INT32 hoặc Nháp
+                T->>D: ROLLBACK
+                S-->>C: 404
+            else NV khác
+                T->>D: ROLLBACK
+                S-->>C: 403
+            else Thiếu hoặc blank If-Match
+                T->>D: ROLLBACK
+                S-->>C: 428 thieu_if_match
+            else ETag cũ, weak hoặc wildcard
+                T->>D: ROLLBACK
+                S-->>C: 412 du_lieu_da_thay_doi
+            else Trạng thái không cho kiểm tra
+                T->>D: ROLLBACK
+                S-->>C: 409
+            else Có quyền và đúng ETag, trạng thái
+                alt Lần đầu
+                    S->>P: dinh_muc(bom_id đã chốt)
+                    P->>D: SELECT ChiTietBom trực tiếp, không đọc BOM hiện hành
+                else Kiểm tra lại
+                    S->>P: nhu_cau(id)
+                    P->>D: SELECT NhuCauLinhKien đã chốt
+                end
+                S->>P: kha_dung(thành phẩm và linh kiện, lock=true)
+                P->>D: SELECT MatHang ORDER BY id FOR UPDATE
+                Note over P,D: Đọc so_luong_con_dung sau khi lấy khóa, không tính trùng
+                alt Thiếu dữ liệu công thức, nhu cầu hoặc mặt hàng
+                    T->>D: ROLLBACK
+                    S-->>C: 409
+                else Đủ dữ liệu
+                    S->>S: Tính lại kết quả với tồn còn dùng được dưới khóa
+                    alt Kiểm tra lại vẫn thiếu (D3)
+                        Note over S,D: Không UPDATE, không giữ thêm, không ghi audit
+                    else Lần đầu hoặc kiểm tra lại đủ
+                        opt Lần đầu, số cần sản xuất lớn hơn 0
+                            S->>P: ghi_nhu_cau(id, nhu cầu theo công thức chốt)
+                            P->>D: INSERT NhuCauLinhKien
+                        end
+                        opt Lần đầu có thành phẩm dùng và loại xuất giao
+                            S->>S: Thêm giữ thanh_pham_co_san vào danh sách ghi
+                        end
+                        alt Đủ toàn bộ linh kiện
+                            S->>S: Thêm toàn bộ giữ linh_kien, trạng thái dang_thuc_hien
+                        else Thiếu bất kỳ linh kiện
+                            S->>S: Không giữ linh kiện nào, trạng thái cho_bo_sung_linh_kien
+                        end
+                        opt Có hàng cần giữ
+                            S->>P: giu_hang(id, danh sách giữ)
+                            P->>D: INSERT GiuHang, UPDATE MatHang.so_luong_dang_giu cộng lượng giữ
+                        end
+                        S->>P: update(id, trạng thái và số chốt nếu lần đầu)
+                        P->>D: UPDATE YeuCauSanXuat, phien_ban + 1, updated_at
+                        S->>H: append kiem_tra, trạng thái trước/sau, du_lieu_sau D4
+                        H->>D: INSERT LichSuThaoTac cùng transaction
+                    end
+                    alt Ghi nghiệp vụ, audit hoặc commit lỗi
+                        T->>D: ROLLBACK toàn bộ
+                        R-->>C: 409 ràng buộc / 500 lỗi khác
+                    else Thành công
+                        T->>D: COMMIT và nhả khóa
+                        S-->>C: 200 yêu cầu mới, kết quả thật, ETag
+                    end
+                end
+            end
+        end
+    end
+```
+
+Đủ thành phẩm: số cần sản xuất = 0, không có `NhuCauLinhKien`, chỉ giữ thành phẩm.
+Thiếu linh kiện: vẫn chốt nhu cầu và giữ phần thành phẩm dùng từ kho ở lần đầu;
+không giữ bất kỳ linh kiện nào, kể cả loại đủ. Nhập kho không giữ thành phẩm.
+Audit D4 gồm `lan_dau`, hai số lượng chốt, `giu_hang` (mặt hàng, loại, lượng giữ thêm),
+`thieu` (mã, tên, ĐVT, cần, còn dùng được, thiếu); lần đầu thiếu lưu đúng ảnh chụp đó.
+Kiểm tra lại vẫn thiếu trả cùng yêu cầu/ETag, không lịch sử mới.
+Tồn thực tế và ledger không đổi; `so_luong_dang_giu` tăng cùng transaction với `GiuHang`.
+Kết quả thiếu chỉ ở state FE sau xác nhận đến khi rời yêu cầu; ba dòng chi tiết D5 đọc từ yêu cầu.
+Kiểm thử AC-4 dùng repository giả tuần tự hóa và SQL biên dịch; chưa chạy tranh chấp PostgreSQL thật.
 
 ## POST /api/v1/yeu_cau_san_xuat/{id}/huy
 

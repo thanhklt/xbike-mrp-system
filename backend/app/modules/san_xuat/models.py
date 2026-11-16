@@ -105,6 +105,62 @@ class YeuCauSanXuat(Base):
     phien_ban: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
 
 
+class NhuCauLinhKien(Base):
+    __tablename__ = "NhuCauLinhKien"
+    __table_args__ = (
+        CheckConstraint("so_luong_can > 0", name="ck_nhu_cau_linh_kien_so_luong"),
+        Index("uq_nhu_cau_linh_kien", "yeu_cau_san_xuat_id", "mat_hang_id", unique=True),
+    )
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    yeu_cau_san_xuat_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("YeuCauSanXuat.id", deferrable=True, initially="IMMEDIATE"), nullable=False
+    )
+    mat_hang_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
+    )
+    so_luong_can: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class GiuHang(Base):
+    __tablename__ = "GiuHang"
+    __table_args__ = (
+        CheckConstraint(
+            "loai_giu IN ('thanh_pham_co_san', 'linh_kien', 'thanh_pham_san_xuat')",
+            name="ck_giu_hang_loai",
+        ),
+        CheckConstraint("trang_thai IN ('dang_giu', 'da_xuat', 'da_tra')", name="ck_giu_hang_trang_thai"),
+        CheckConstraint("so_luong > 0", name="ck_giu_hang_so_luong"),
+        CheckConstraint("(trang_thai = 'dang_giu') = (ket_thuc_at IS NULL)", name="ck_giu_hang_ket_thuc"),
+        CheckConstraint("(trang_thai = 'da_xuat') = (phieu_xuat_id IS NOT NULL)", name="ck_giu_hang_da_xuat"),
+        CheckConstraint(
+            "(loai_giu = 'thanh_pham_san_xuat') = (chung_tu_hoan_thanh_sx_id IS NOT NULL)",
+            name="ck_giu_hang_nguon_sx",
+        ),
+        Index("uq_giu_hang", "yeu_cau_san_xuat_id", "mat_hang_id", "loai_giu", unique=True),
+        Index("ix_giu_hang_dang_giu", "mat_hang_id", postgresql_where=text("trang_thai = 'dang_giu'")),
+    )
+    id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
+    yeu_cau_san_xuat_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("YeuCauSanXuat.id", deferrable=True, initially="IMMEDIATE"), nullable=False
+    )
+    mat_hang_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
+    )
+    loai_giu: Mapped[str] = mapped_column(String, nullable=False)
+    so_luong: Mapped[int] = mapped_column(Integer, nullable=False)
+    trang_thai: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'dang_giu'"))
+    chung_tu_hoan_thanh_sx_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ChungTuHoanThanhSx.id", deferrable=True, initially="IMMEDIATE"), nullable=True
+    )
+    phieu_xuat_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("PhieuXuat.id", deferrable=True, initially="IMMEDIATE"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    ket_thuc_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class LenhSanXuat(Base):
     __tablename__ = "LenhSanXuat"
     __table_args__ = (

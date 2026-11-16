@@ -22,6 +22,9 @@ from app.modules.san_xuat.schemas import (
     HoanThanhPatch,
     HoanThanhQuery,
     HoanThanhResponse,
+    KiemTraInput,
+    KiemTraPreviewResponse,
+    KiemTraResponse,
     LenhEmptyInput,
     LenhErrorResponse,
     LenhListResponse,
@@ -53,6 +56,7 @@ ResourceId = Annotated[int, Path(gt=0)]
 IfMatch = Annotated[
     str | None, Header(alias="If-Match", description="Strong ETag; thiếu 428, cũ/weak/* 412")
 ]
+CheckActor = Annotated[dict, Depends(require_roles(["nhan_vien"]))]
 ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong ETag của yêu cầu"}
 yeu_cau_sx_router = APIRouter(
     prefix="/yeu_cau_san_xuat",
@@ -185,6 +189,32 @@ async def gui(
     if_match: IfMatch = None,
 ) -> GuiYeuCauResponse:
     result, etag = await service.gui(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+# UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–4; A5 xem trước chỉ đọc (specs/use_cases/production/UC-26.md)
+@yeu_cau_sx_router.get(
+    "/{id}/kiem_tra", response_model=KiemTraPreviewResponse,
+    dependencies=[Depends(reject_query)],
+)
+async def xem_truoc_kiem_tra(
+    id: ResourceId, actor: CheckActor, service: Service, request_id: RequestId,
+) -> KiemTraPreviewResponse:
+    return await service.xem_truoc_kiem_tra(id, actor, request_id)
+
+
+# UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 5–8; A6 xác nhận với If-Match (specs/use_cases/production/UC-26.md)
+@yeu_cau_sx_router.post(
+    "/{id}/kiem_tra", response_model=KiemTraResponse,
+    dependencies=[Depends(reject_query)],
+    responses={200: {"headers": {"ETag": ETAG_HEADER}}},
+)
+async def kiem_tra(
+    id: ResourceId, payload: KiemTraInput, actor: CheckActor, service: Service,
+    request_id: RequestId, response: Response, if_match: IfMatch = None,
+) -> KiemTraResponse:
+    result, etag = await service.kiem_tra(id, actor, if_match, request_id)
     response.headers["ETag"] = etag
     return result
 

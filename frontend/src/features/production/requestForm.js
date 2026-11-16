@@ -99,6 +99,12 @@ export function requestDetailEntries(record, items, employees) {
     ["Người lập", employeeName(employees, record.nhan_vien_id)],
     ["Tạo lúc", dateTime(record.created_at)],
     ["Gửi lúc", dateTime(record.gui_at)],
+    ...(record.kiem_tra_lan_dau_at ? [
+      ...(record.loai_yeu_cau === "xuat_giao"
+        ? [["Thành phẩm dùng từ kho", number(record.so_luong_dung_thanh_pham)]] : []),
+      ["Số cần sản xuất", number(record.so_luong_can_san_xuat)],
+      ["Kiểm tra lần đầu lúc", dateTime(record.kiem_tra_lan_dau_at)],
+    ] : []),
     ["Hoàn thành lúc", dateTime(record.completed_at)],
   ];
 }
@@ -111,4 +117,45 @@ export function canEditRequest(record, manager) {
 // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — R4 Nháp chỉ xóa, không hủy (specs/use_cases/production/UC-24.md)
 export function canCancelRequest(record, manager) {
   return Boolean(manager && record && !["nhap", "hoan_thanh", "da_huy"].includes(record.trang_thai));
+}
+
+export function canCheckRequest(record, manager, userId) {
+  return Boolean(!manager && record && record.nhan_vien_duoc_giao_id === Number(userId)
+    && ["da_gui", "cho_bo_sung_linh_kien"].includes(record.trang_thai));
+}
+
+// UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4; A7 thông tin xác nhận (specs/use_cases/production/UC-26.md)
+export function checkConfirmEntries(ketQua, loai) {
+  return [
+    ...(loai === "xuat_giao"
+      ? [["Thành phẩm dùng từ kho", number(ketQua.so_luong_dung_thanh_pham)]] : []),
+    ["Số cần sản xuất", number(ketQua.so_luong_can_san_xuat)],
+    ["Linh kiện", ketQua.du_linh_kien ? "Đủ" : "Thiếu"],
+  ];
+}
+
+export const CHECK_COLUMNS = [
+  { key: "ma_mat_hang", label: "Mã" },
+  { key: "ten_mat_hang", label: "Tên" },
+  { key: "don_vi_tinh", label: "Đơn vị tính" },
+  { key: "so_luong_can", label: "Cần", numeric: true },
+  { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
+  { key: "so_luong_thieu", label: "Thiếu", numeric: true },
+];
+
+// UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4, 8; A2 báo thiếu R10 (specs/use_cases/production/UC-26.md)
+export function checkLines(ketQua) {
+  return ketQua.linh_kien.map((line) => ({ ...line, id: line.mat_hang_id }));
+}
+
+// UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4; A1–A3 tác động giữ hàng (specs/use_cases/production/UC-26.md)
+export function checkImpact(ketQua) {
+  if (!ketQua.lan_dau && !ketQua.du_linh_kien) return "Không có gì thay đổi.";
+  const product = ketQua.giu_thanh_pham > 0
+    ? `${number(ketQua.giu_thanh_pham)} thành phẩm` : "";
+  if (ketQua.du_linh_kien) {
+    const parts = ketQua.linh_kien.length ? "toàn bộ linh kiện" : "";
+    return `Giữ ${[product, parts].filter(Boolean).join(" và ")}; chưa trừ tồn.`;
+  }
+  return `${product ? `Giữ ${product}, không` : "Không"} giữ linh kiện nào; yêu cầu chuyển Chờ bổ sung linh kiện; chưa trừ tồn.`;
 }
