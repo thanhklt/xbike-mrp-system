@@ -144,15 +144,16 @@ class MatHangService:
             result = await self.boms.item_detail(record.id)
         return result
 
-    async def _locked_item(self, item_id: int, if_match: str | None) -> MatHangRead:
+    async def _locked_item(
+        self, item_id: int, if_match: str | None, *, reuse: bool = False
+    ) -> MatHangRead:
         await self.boms.lock_catalog()
         if not 0 < item_id <= 2**31 - 1:
             raise NotFoundException()
-        record = await self.repository.get_for_update(item_id)
-        if record is None:
+        locked = await self.boms.lock_item(item_id, reuse=reuse)
+        if locked is None:
             raise NotFoundException()
-        await self.boms.lock_item_versions(item_id)
-        _, tag = await self.boms.item_detail(item_id)
+        record, tag = locked
         verify_if_match(if_match, tag)
         return record
 
@@ -162,7 +163,7 @@ class MatHangService:
         """UC-11/12 dependent scope: state writes use the same BOM lifecycle rules."""
         require_manager(actor)
         async with self.mutation.scope() as changes:
-            before = await self._locked_item(item_id, if_match)
+            before = await self._locked_item(item_id, if_match, reuse=payload.is_active is True)
             update = payload.model_dump(exclude_unset=True)
             if "don_vi_tinh" in update and update["don_vi_tinh"] != before.don_vi_tinh:
                 refs = await self.repository.get_references(item_id)
@@ -173,13 +174,15 @@ class MatHangService:
             active = update.pop("is_active", None)
             if active is False and before.loai_mat_hang == "linh_kien":
                 raise InvalidInputException(message="Components cannot be stopped")
+            previous = before
             if active is not None and active != before.is_active:
                 if active:
                     await self.boms.reuse_last_for_item_in_transaction(item_id, actor)
                 else:
                     await self.boms.stop_for_item_in_transaction(item_id, actor)
+                if update:
+                    previous, _ = await self.boms.item_detail(item_id)
             if update:
-                previous, _ = await self.boms.item_detail(item_id)
                 record = await self.repository.update(item_id, update)
                 await self._audit("sua", record, actor, previous)
             result = await self.boms.item_detail(item_id)
@@ -193,7 +196,7 @@ class MatHangService:
             before = await self._locked_item(item_id, if_match)
             if before.loai_mat_hang != "thanh_pham":
                 raise InvalidInputException(message="Components cannot be stopped")
-            if before.is_active:
-                await self.boms.stop_for_item_in_transaction(item_id, actor)
+            # Also stops a version left active under an already-stopped item (UC-12 R3).
+            await self.boms.stop_for_item_in_transaction(item_id, actor)
             after, _ = await self.boms.item_detail(item_id)
             changes.append(after)

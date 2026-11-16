@@ -116,3 +116,29 @@ async def test_bom_ac04_mutation_scope_commits_before_cache_publish(monkeypatch)
     assert cache.snapshot().by_id[item.id] == item
     with pytest.raises(RuntimeError, match="Caller must own"):
         mutation.require_active()
+
+
+async def test_bom_ac04_nested_scope_rejected_across_instances():
+    """A second MatHangMutation must not open its own transaction inside another scope."""
+    from app.modules.mat_hang.cache import MatHangCache
+    from app.modules.mat_hang.mutation import MatHangMutation
+
+    class Transaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    cache = MatHangCache()
+    cache.replace([])
+    outer, other = MatHangMutation(Transaction(), cache), MatHangMutation(Transaction(), cache)
+    async with outer.scope():
+        outer.require_active()
+        with pytest.raises(RuntimeError, match="Caller must own"):
+            other.require_active()
+        with pytest.raises(RuntimeError, match="Nested catalog mutation"):
+            async with other.scope():
+                pass
+    async with other.scope():
+        other.require_active()

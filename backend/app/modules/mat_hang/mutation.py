@@ -9,25 +9,28 @@ from app.core.transactions import Transaction
 from app.modules.mat_hang.cache import MatHangCache
 from app.modules.mat_hang.schemas import MatHangRead
 
+# Module level: nesting is detected across every instance in the task, and
+# require_active() still checks that this instance owns the open scope.
+_ACTIVE: ContextVar["MatHangMutation | None"] = ContextVar("catalog_mutation", default=None)
+
 
 class MatHangMutation:
     def __init__(self, transaction: Transaction, cache: MatHangCache):
         self.transaction = transaction
         self.cache = cache
-        self._active: ContextVar[bool] = ContextVar("catalog_mutation", default=False)
 
     def require_active(self) -> None:
-        if not self._active.get():
+        if _ACTIVE.get() is not self:
             raise RuntimeError("Caller must own the catalog mutation transaction")
 
     @asynccontextmanager
     async def scope(self) -> AsyncIterator[list[MatHangRead]]:
-        if self._active.get():
+        if _ACTIVE.get() is not None:
             raise RuntimeError("Nested catalog mutation would commit the caller's transaction")
         async with self.cache.lock:
             self.cache.snapshot()
             prepared = None
-            token = self._active.set(True)
+            token = _ACTIVE.set(self)
             try:
                 try:
                     async with self.transaction:
@@ -42,4 +45,4 @@ class MatHangMutation:
                     raise
                 self.cache.publish(prepared)
             finally:
-                self._active.reset(token)
+                _ACTIVE.reset(token)

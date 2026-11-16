@@ -272,9 +272,10 @@ sequenceDiagram
         S->>BS: lock_catalog
         BS->>B: advisory lock
         B->>DB: pg_advisory_xact_lock
-        S->>I: get_for_update(id)
-        I->>DB: SELECT FOR UPDATE
-        S->>BS: lock_item_versions + item_detail
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         BS->>B: khóa versions / context
         B->>DB: đọc snapshot
         S->>S: so If-Match (428/412)
@@ -284,7 +285,7 @@ sequenceDiagram
             S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
             BS->>B: ngừng / dùng version gần kích hoạt nhất
             B->>DB: UPDATE Bom, không sửa định mức
-            BS->>I: trạng thái thành phẩm đi cùng
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
             I->>DB: UPDATE MatHang
             BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
             S->>I: update thuộc tính mô tả nếu có, kiểm tra tham chiếu ĐVT
@@ -355,19 +356,20 @@ sequenceDiagram
         S->>BS: lock_catalog
         BS->>B: advisory lock
         B->>DB: pg_advisory_xact_lock
-        S->>I: get_for_update(id)
-        I->>DB: SELECT FOR UPDATE
-        S->>BS: lock_item_versions + item_detail
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         BS->>B: khóa versions / context
         B->>DB: đọc snapshot
         S->>S: so If-Match (428/412)
         alt không thỏa quyền / dữ liệu / trạng thái
             S-->>R: 403 / 404 / 409 / 422
         else điều kiện hợp lệ
-            S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
+            S->>BS: stop_for_item_in_transaction (luôn gọi; bỏ qua nếu đã ngừng và khớp công thức)
             BS->>B: ngừng / dùng version gần kích hoạt nhất
             B->>DB: UPDATE Bom, không sửa định mức
-            BS->>I: trạng thái thành phẩm đi cùng
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
             I->>DB: UPDATE MatHang
             BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
             AU->>AR: append

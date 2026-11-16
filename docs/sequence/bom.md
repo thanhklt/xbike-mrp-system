@@ -204,10 +204,10 @@ sequenceDiagram
         S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
@@ -284,10 +284,10 @@ sequenceDiagram
         S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
@@ -364,10 +364,10 @@ sequenceDiagram
         S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
