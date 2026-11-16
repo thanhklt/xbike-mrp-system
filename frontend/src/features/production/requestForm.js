@@ -106,6 +106,8 @@ export function requestDetailEntries(record, items, employees) {
       ["Số cần sản xuất", number(record.so_luong_can_san_xuat)],
       ["Kiểm tra lần đầu lúc", dateTime(record.kiem_tra_lan_dau_at)],
     ] : []),
+    // UC-29 Bắt đầu sản xuất — Main 5 hiển thị thời điểm đã ghi (specs/use_cases/production/UC-29.md)
+    ...(record.started_at ? [["Bắt đầu sản xuất lúc", dateTime(record.started_at)]] : []),
     ["Hoàn thành lúc", dateTime(record.completed_at)],
     ...(record.trang_thai === "da_huy" ? [
       ["Hủy lúc", dateTime(record.huy_at)],
@@ -128,6 +130,13 @@ export function canCancelRequest(record, manager) {
 export function canCheckRequest(record, manager, userId) {
   return Boolean(!manager && record && record.nhan_vien_duoc_giao_id === Number(userId)
     && ["da_gui", "cho_bo_sung_linh_kien"].includes(record.trang_thai));
+}
+
+// UC-29 Bắt đầu sản xuất — Main 1–2; D5 chỉ NV được giao và chưa bắt đầu (specs/use_cases/production/UC-29.md)
+export function canStartProduction(record, manager, userId) {
+  return Boolean(!manager && record && record.nhan_vien_duoc_giao_id === Number(userId)
+    && record.trang_thai === "dang_thuc_hien" && record.so_luong_can_san_xuat > 0
+    && !record.started_at);
 }
 
 export const CANCEL_HOLD_COLUMNS = [

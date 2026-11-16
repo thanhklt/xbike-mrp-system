@@ -1,10 +1,9 @@
-"""Production requests (UC-23 v4), orders and completion representations."""
+"""Production requests (v4)."""
 
-from datetime import date, datetime, timezone
-from typing import Annotated, Literal, Self
+from datetime import date, datetime
+from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
-from pydantic.json_schema import SkipJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
@@ -14,7 +13,6 @@ YeuCauSort = Literal[
     "han_hoan_thanh", "-han_hoan_thanh",
 ]
 LoaiYeuCau = Literal["xuat_giao", "nhap_kho"]
-LenhStatus = Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
 
 
 class YeuCauCreate(BaseModel):
@@ -118,50 +116,6 @@ class YeuCauRead(BaseModel):
     nguoi_huy_id: int | None
     ly_do_huy: str | None
     phien_ban: int
-
-
-class NhuCauDuKien(BaseModel):
-    mat_hang_id: int
-    so_luong_can: int
-
-
-class NhuCauRead(NhuCauDuKien):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-
-
-class LenhRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    ma_lenh_san_xuat: str
-    yeu_cau_san_xuat_id: int
-    lenh_san_xuat_cha_id: int | None
-    mat_hang_id: int
-    bom_id: int
-    so_luong: int
-    nhan_vien_id: int | None
-    trang_thai: LenhStatus
-    created_at: datetime
-    started_at: datetime | None
-    completed_at: datetime | None
-    nhu_cau_truc_tiep: list[NhuCauRead] = Field(default_factory=list)
-    so_luong_da_hoan_thanh: int = 0
-    so_luong_con_phai_hoan_thanh: int = 0
-    lenh_con_ids: list[int] = Field(default_factory=list)
-
-
-class ChungTuRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    ma_phieu: str
-    lenh_san_xuat_id: int
-    so_luong_hoan_thanh: int
-    nhan_vien_id: int
-    trang_thai: str
-    finish_time: datetime | None
-    created_at: datetime
 
 
 class ResponseMeta(BaseModel):
@@ -279,199 +233,4 @@ class SanXuatError(BaseModel):
 
 class SanXuatErrorResponse(BaseModel):
     error: SanXuatError
-    meta: ResponseMeta
-
-
-HoanThanhStatus = Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
-HoanThanhSort = Literal["id", "-id", "finish_time", "-finish_time", "ma_phieu", "-ma_phieu"]
-HoanThanhId = Annotated[int, Field(gt=0, le=2**31 - 1, strict=True)]
-
-
-class HoanThanhCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    lenh_san_xuat_id: HoanThanhId
-    so_luong_hoan_thanh: HoanThanhId
-    finish_time: AwareDatetime
-
-    @field_validator("finish_time", mode="before")
-    @classmethod
-    def iso_datetime(cls, value):
-        if not isinstance(value, (str, datetime)):
-            raise ValueError("finish_time phải là ISO datetime có múi giờ")
-        return value
-
-    @field_validator("finish_time")
-    @classmethod
-    def normalize_utc(cls, value: datetime) -> datetime:
-        return value.astimezone(timezone.utc)
-
-
-class HoanThanhPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    so_luong_hoan_thanh: HoanThanhId | SkipJsonSchema[None] = None
-    finish_time: AwareDatetime | SkipJsonSchema[None] = None
-
-    @field_validator("finish_time", mode="before")
-    @classmethod
-    def iso_datetime(cls, value):
-        return HoanThanhCreate.iso_datetime(value)
-
-    @model_validator(mode="after")
-    def check_fields(self) -> Self:
-        if not self.model_fields_set:
-            raise ValueError("Cần ít nhất một trường cập nhật")
-        if any(getattr(self, name) is None for name in self.model_fields_set):
-            raise ValueError("Các trường cập nhật không nhận null")
-        if self.finish_time is not None:
-            self.finish_time = self.finish_time.astimezone(timezone.utc)
-        return self
-
-
-class HoanThanhQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    q: str | None = None
-    lenh_san_xuat_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    mat_hang_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    nhan_vien_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    trang_thai: HoanThanhStatus | None = None
-    tu_ngay: date | None = None
-    den_ngay: date | None = None
-    sort: HoanThanhSort = "-id"
-
-    @model_validator(mode="after")
-    def check_dates(self) -> Self:
-        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
-            raise ValueError("Khoảng ngày không hợp lệ")
-        if self.den_ngay == date.max:
-            raise ValueError("den_ngay phải nhỏ hơn 9999-12-31")
-        return self
-
-
-class HoanThanhRead(ChungTuRead):
-    trang_thai: HoanThanhStatus
-    mat_hang_id: int
-
-    @field_validator("finish_time", "created_at")
-    @classmethod
-    def normalize_read_time(cls, value: datetime | None) -> datetime | None:
-        return value.astimezone(timezone.utc) if value is not None else None
-
-
-class HoanThanhResponse(BaseModel):
-    data: HoanThanhRead
-    meta: ResponseMeta
-
-
-class HoanThanhListResponse(BaseModel):
-    data: list[HoanThanhRead]
-    meta: ListResponseMeta
-
-
-class HoanThanhActionRead(HoanThanhRead):
-    giao_dich_kho_ids: list[int]
-    da_ghi_so_truoc_do: bool
-
-
-class HoanThanhActionResponse(BaseModel):
-    data: HoanThanhActionRead
-    meta: ResponseMeta
-
-
-class HoanThanhEmptyInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-# --- Lệnh sản xuất (contract v3 §9) ---
-
-class LenhPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    nhan_vien_id: int | None = Field(..., gt=0, le=2**31 - 1, strict=True)
-
-
-class LenhEmptyInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class LenhQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    q: str | None = None
-    yeu_cau_san_xuat_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    lenh_san_xuat_cha_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    nhan_vien_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    mat_hang_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
-    trang_thai: LenhStatus | None = None
-    tu_ngay: date | None = None
-    den_ngay: date | None = None
-    sort: Literal[
-        "id", "-id", "created_at", "-created_at", "ma_lenh_san_xuat", "-ma_lenh_san_xuat"
-    ] = "-created_at"
-
-    @field_validator("tu_ngay", "den_ngay", mode="before")
-    @classmethod
-    def exact_date(cls, value: object) -> date | None:
-        if value is None:
-            return None
-        if type(value) is date:
-            return value
-        if isinstance(value, str):
-            parsed = date.fromisoformat(value)
-            if parsed.isoformat() == value:
-                return parsed
-        raise ValueError("Ngày phải có dạng YYYY-MM-DD")
-
-    @model_validator(mode="after")
-    def date_range(self) -> Self:
-        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
-            raise ValueError("tu_ngay phải nhỏ hơn hoặc bằng den_ngay")
-        if self.den_ngay == date.max:
-            raise ValueError("den_ngay vượt giới hạn hỗ trợ")
-        return self
-
-
-class VatTuLenhLine(BaseModel):
-    mat_hang_id: int
-    so_luong_can: int
-    so_luong_da_cap: int
-    so_luong_con_phai_cap: int
-    ton_hien_tai: int
-
-
-class VatTuLenhRead(BaseModel):
-    lenh_san_xuat_id: int
-    du_dieu_kien_bat_dau: bool
-    chi_tiet: list[VatTuLenhLine]
-
-
-class LenhResponse(BaseModel):
-    data: LenhRead
-    meta: ResponseMeta
-
-
-class LenhListResponse(BaseModel):
-    data: list[LenhRead]
-    meta: ListResponseMeta
-
-
-class VatTuLenhResponse(BaseModel):
-    data: VatTuLenhRead
-    meta: ResponseMeta
-
-
-class LenhError(BaseModel):
-    code: str
-    message: str
-    details: list[dict[str, object]]
-
-
-class LenhErrorResponse(BaseModel):
-    error: LenhError
     meta: ResponseMeta

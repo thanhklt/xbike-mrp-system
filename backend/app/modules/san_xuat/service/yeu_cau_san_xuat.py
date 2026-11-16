@@ -193,6 +193,33 @@ class YeuCauSanXuatService:
         self.employees = employees
         self.issues = issues
 
+    # UC-29 Bắt đầu sản xuất — Main 3–5; A1, A2 ghi thời điểm và lịch sử nguyên tử (specs/use_cases/production/UC-29.md)
+    async def bat_dau(
+        self, resource_id: int, actor: dict, if_match: str | None, request_id: str,
+    ) -> tuple[YeuCauDetailResponse, str]:
+        _require_check_actor(actor)
+        async with self.transaction:
+            before = await self._require_request(resource_id, actor, lock=True)
+            _verify_if_match(if_match, before)
+            if before.started_at is not None:
+                return self._detail(before, request_id)
+            if before.trang_thai != "dang_thuc_hien" or (before.so_luong_can_san_xuat or 0) <= 0:
+                raise InvalidWorkflowState()
+            issues = await self.issues.phieu_cua_yeu_cau(resource_id)
+            if not any(
+                row["loai_phieu"] == "xuat_linh_kien" and row["trang_thai"] == "da_duyet"
+                for row in issues
+            ):
+                raise InvalidWorkflowState(message="Phiếu xuất linh kiện chưa được duyệt")
+            after = await self.repository.update(
+                resource_id, {"started_at": datetime.now(timezone.utc)},
+            )
+            await self._audit(
+                "yeu_cau_san_xuat", "bat_dau", actor, before, after,
+                trang_thai_truoc="dang_thuc_hien", trang_thai_sau="dang_thuc_hien",
+            )
+        return self._detail(after, request_id)
+
     # UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 chỉ QLK, chỉ đọc không khóa (specs/use_cases/production/UC-27.md)
     async def xem_nhu_cau_bo_sung(self, actor: dict, request_id: str) -> NhuCauBoSungResponse:
         _require_manager(actor)

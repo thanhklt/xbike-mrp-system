@@ -57,10 +57,8 @@ class SqlAlchemyMatHangRepository:
                 EXISTS (SELECT 1 FROM "ChiTietPhieuNhap" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietPhieuXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietPhieuDieuChinhKho" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietLenhSanXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "GiaoDichKho" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "YeuCauSanXuat" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "LenhSanXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietTicketLoiDieuChinh" WHERE mat_hang_id=:id) AS has_docs,
                 EXISTS (SELECT 1 FROM "MatHang" WHERE id=:id AND so_luong_ton > 0) AS has_stock
         """),

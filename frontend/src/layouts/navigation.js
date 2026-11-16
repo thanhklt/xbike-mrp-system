@@ -28,9 +28,7 @@ const navigation = {
         ["/kho/bom", "BOM"],
         ["/kho/yeu-cau", "Yêu cầu sản xuất"],
         ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"],
-        ["/kho/lenh-sx", "Lệnh sản xuất"],
         ["/kho/phieu-xuat", "Phiếu xuất kho"],
-        ["/kho/duyet-hoan-thanh", "Duyệt chứng từ hoàn thành SX"],
       ],
     },
     {
@@ -48,8 +46,7 @@ const navigation = {
     {
       title: "Sản xuất",
       items: [
-        ["/nv/lenh-sx", "Việc được giao"],
-        ["/nv/hoan-thanh", "Chứng từ hoàn thành SX"],
+        ["/nv/yeu-cau", "Việc được giao"],
       ],
     },
     {

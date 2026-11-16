@@ -32,6 +32,7 @@ import {
   CANCEL_ISSUE_COLUMNS,
   cancelConfirmEntries,
   canCheckRequest,
+  canStartProduction,
   checkConfirmEntries,
   checkLines,
   checkImpact,
@@ -141,6 +142,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [checkError, setCheckError] = useState(null);
+  const [startError, setStartError] = useState(null);
   const [checkPending, setCheckPending] = useState(false);
   const [cancelError, setCancelError] = useState(null);
   const [cancelPending, setCancelPending] = useState(false);
@@ -148,6 +150,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   // Lỗi xác nhận kiểm tra chỉ hiện trong hộp xác nhận, không lặp lại ở chi tiết.
   const checkMutation = useWrite();
   const cancelMutation = useWrite();
+  const startMutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
@@ -159,6 +162,20 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       setValues({ ...values, [name]: event.target.value });
     },
   });
+  // UC-29 Bắt đầu sản xuất — Main 2–5; A1 ghi ngay với ETag và báo lỗi riêng (specs/use_cases/production/UC-29.md)
+  async function start() {
+    setStartError(null);
+    try {
+      await startMutation.mutateAsync({
+        path: `${API.requests}/${record.id}/bat_dau`,
+        body: {},
+        etag: snapshot.etag,
+      });
+      notify("Đã ghi nhận bắt đầu sản xuất.");
+    } catch (failure) {
+      setStartError(failure);
+    }
+  }
   // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–8; A5 xem trước rồi xác nhận (specs/use_cases/production/UC-26.md)
   async function openCheck() {
     setCheckError(null);
@@ -318,6 +335,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
       <ErrorNotice error={checkError} />
+      <ErrorNotice error={startError} />
       <ErrorNotice error={cancelError} />
       {checkResult && !checkResult.du_linh_kien && (
         <>
@@ -331,6 +349,11 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
           <Button disabled={checkMutation.isPending || checkPending} onClick={openCheck}>
             {record.trang_thai === "da_gui" ? "Kiểm tra" : "Kiểm tra lại"}
           </Button>
+        </div>
+      )}
+      {canStartProduction(record, manager, userId) && (
+        <div className="actions actions-end">
+          <Button disabled={startMutation.isPending} onClick={start}>Bắt đầu sản xuất</Button>
         </div>
       )}
       {showForm && (

@@ -218,38 +218,19 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     trang_thai: "nhap",
     created_at: now,
     completed_at: null,
-    so_luong_da_xuat: 0,
-    so_luong_con_phai_xuat: 20,
-    lenh_san_xuat_ids: [1],
-  };
-  const order = {
-    id: 1,
-    ma_lenh_san_xuat: "LSX-202611-000001",
-    yeu_cau_san_xuat_id: 1,
-    lenh_san_xuat_cha_id: null,
-    mat_hang_id: 4,
-    bom_id: 1,
-    so_luong: 8,
-    nhan_vien_id: 3,
-    trang_thai: "da_gui",
-    created_at: now,
+    loai_yeu_cau: "xuat_giao",
+    han_hoan_thanh: "2026-12-01",
+    bom_id: null,
+    so_luong_dung_thanh_pham: null,
+    so_luong_can_san_xuat: null,
+    updated_at: now,
+    gui_at: null,
+    kiem_tra_lan_dau_at: null,
     started_at: null,
-    completed_at: null,
-    nhu_cau_truc_tiep: [{ id: 1, mat_hang_id: 1, so_luong_can: 8 }],
-    so_luong_da_hoan_thanh: 0,
-    so_luong_con_phai_hoan_thanh: 8,
-    lenh_con_ids: [],
-  };
-  const completion = {
-    id: 1,
-    ma_phieu: "HTSX-202611-000001",
-    lenh_san_xuat_id: 1,
-    mat_hang_id: 4,
-    so_luong_hoan_thanh: 2,
-    nhan_vien_id: 3,
-    trang_thai: "nhap",
-    finish_time: now,
-    created_at: now,
+    huy_at: null,
+    nguoi_huy_id: null,
+    ly_do_huy: null,
+    phien_ban: 1,
   };
   const receipt = {
     id: 1,
@@ -330,9 +311,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           id: 1,
           ma_phieu_xuat: "PX-202611-000001",
           nhan_vien_id: 2,
-          loai_phieu: "xuat_vat_tu",
-          lenh_san_xuat_id: 1,
-          yeu_cau_san_xuat_id: null,
+          loai_phieu: "xuat_linh_kien",
+          yeu_cau_san_xuat_id: 2,
           tong_tien: null,
           trang_thai: "cho_duyet",
           created_at: now,
@@ -343,7 +323,6 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           ma_phieu_xuat: "PX-202611-000002",
           nhan_vien_id: 2,
           loai_phieu: "xuat_thanh_pham",
-          lenh_san_xuat_id: null,
           yeu_cau_san_xuat_id: 2,
           tong_tien: null,
           trang_thai: "nhap",
@@ -353,21 +332,11 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ],
       yeu_cau_san_xuat: [
         request,
-        { ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "da_gui" },
-      ],
-      lenh_san_xuat: [
-        order,
         {
-          ...order,
-          id: 2,
-          ma_lenh_san_xuat: "LSX-202611-000002",
-          trang_thai: "dang_thuc_hien",
-          started_at: now,
+          ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "dang_thuc_hien",
+          bom_id: 1, so_luong_dung_thanh_pham: 12, so_luong_can_san_xuat: 8,
+          gui_at: now, kiem_tra_lan_dau_at: now,
         },
-      ],
-      chung_tu_hoan_thanh_sx: [
-        completion,
-        { ...completion, id: 2, ma_phieu: "HTSX-202611-000002", trang_thai: "cho_duyet" },
       ],
       phieu_dieu_chinh_kho: [
         {
@@ -479,6 +448,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       return respond({ data: items, meta: { total: items.length } });
     if (path === "luu_luong_truy_cap")
       return respond(trafficSeries(call.params.khoang_thoi_gian || "hom_nay"));
+    if (path === "nhu_cau_bo_sung_linh_kien")
+      return respond({ data: { yeu_cau: [], tong_hop: [] }, meta: {} });
     const [resource, rawId, action] = path.split("/");
     const records = state.resources[resource];
     if (!records) {
@@ -508,63 +479,14 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         },
         meta: {},
       });
-    if (action === "vat_tu")
-      return respond(
-        {
-          data: {
-            lenh_san_xuat_id: id,
-            du_dieu_kien_bat_dau: true,
-            chi_tiet: [
-              {
-                mat_hang_id: 1,
-                so_luong_can: 8,
-                so_luong_da_cap: 8,
-                so_luong_con_phai_cap: 0,
-                ton_hien_tai: 120,
-              },
-            ],
-          },
-          meta: {},
-        },
-        200,
-        { etag: version() },
-      );
-    if (action === "ke_hoach")
-      return respond({ data: { yeu_cau_san_xuat_id: id, lenh: [order] }, meta: {} });
-    if (action === "tinh_ke_hoach")
-      return respond({
-        data: {
-          yeu_cau_san_xuat_id: id,
-          tinh_luc: now,
-          ke_hoach_token: "plan-test-token",
-          so_luong_yeu_cau: 20,
-          ton_thanh_pham: 18,
-          so_luong_can_san_xuat: 2,
-          du_dieu_kien_gui: true,
-          thieu_vat_tu: false,
-          lenh_du_kien: [
-            { ma_tam: "L1", ma_cha_tam: null, mat_hang_id: 4, bom_id: 1, so_luong: 2 },
-          ],
-          vat_tu: [
-            {
-              mat_hang_id: 1,
-              ma_mat_hang: "MH-000001",
-              ten_mat_hang: "Khung xe",
-              don_vi_tinh: "cai",
-              so_luong_can_tu_kho: 2,
-              so_luong_hien_co: 120,
-              so_luong_thieu: 0,
-            },
-          ],
-        },
-        meta: {},
-      });
     if (method === "GET" && rawId)
       return record
         ? respond({ data: record, meta: {} }, 200, { etag: version() })
         : respond({ error: { message: "Không tìm thấy" } }, 404);
     if (method === "GET") {
       let matching = records.filter((entry) =>
+        !(resource === "yeu_cau_san_xuat" && role === "nhan_vien" &&
+          (entry.trang_thai === "nhap" || entry.nhan_vien_duoc_giao_id !== user.id)) &&
         Object.entries(call.params).every(([key, value]) =>
           key === "bo_thao_tac"
             ? entry.thao_tac !== value
@@ -618,7 +540,23 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       if (id === user.id) state.accessToken = "browser-test-token-renewed";
       return respond({ data: record, meta: {} }, 200, { etag: version() });
     }
+    if (resource === "yeu_cau_san_xuat" && action === "bat_dau") {
+      if (role !== "nhan_vien" || record.nhan_vien_duoc_giao_id !== user.id)
+        return respond({ error: { message: "Không có quyền" }, meta: {} }, 403);
+      if (record.started_at)
+        return respond({ data: record, meta: {} }, 200, { etag: version() });
+      if (record.trang_thai !== "dang_thuc_hien" || record.so_luong_can_san_xuat <= 0)
+        return respond({ error: { message: "Trạng thái không hợp lệ" }, meta: {} }, 409);
+      if (!state.resources.phieu_xuat.some((issue) =>
+        issue.yeu_cau_san_xuat_id === id && issue.loai_phieu === "xuat_linh_kien" && issue.trang_thai === "da_duyet"))
+        return respond({ error: { message: "Phiếu xuất linh kiện chưa được duyệt" }, meta: {} }, 409);
+    }
     state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
+    if (resource === "yeu_cau_san_xuat" && action === "bat_dau") {
+      record.started_at = now;
+      record.phien_ban += 1;
+      record.updated_at = now;
+    }
     if (method === "PATCH" || method === "PUT") {
       Object.assign(record, body);
       if (resource === "nhan_vien" && action === "vai_tro" && body.vai_tro_id !== undefined) {
@@ -655,17 +593,13 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     };
     if (action && transitions[action])
       record.trang_thai =
-        action === "gui" && ["lenh_san_xuat", "yeu_cau_san_xuat"].includes(resource)
+        action === "gui" && resource === "yeu_cau_san_xuat"
           ? "da_gui"
           : transitions[action];
     if (action === "nhan_xu_ly") record.nguoi_xu_ly_id = user.id;
     if (action === "giai_quyet") Object.assign(record, body);
     if (resource === "bom") record.is_active = method !== "DELETE";
-    const result =
-      action === "gui" && resource === "yeu_cau_san_xuat"
-        ? { yeu_cau: record, ke_hoach: { lenh: [order] } }
-        : record;
-    return respond({ data: result, meta: {} }, 200, { etag: version() });
+    return respond({ data: record, meta: {} }, 200, { etag: version() });
   });
   return state;
 }

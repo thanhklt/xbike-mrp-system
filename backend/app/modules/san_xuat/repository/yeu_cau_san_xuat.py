@@ -9,17 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.bom.models import Bom, ChiTietBom
 from app.modules.mat_hang.models import MatHang
 from app.modules.san_xuat.models import (
-    ChungTuHoanThanhSx,
     GiuHang,
-    LenhSanXuat,
     NhuCauLinhKien,
     YeuCauSanXuat,
 )
 from app.modules.san_xuat.ports import HangKhaDung
 from app.modules.san_xuat.schemas import (
     HangTraLine,
-    LenhRead,
-    NhuCauRead,
     YeuCauCreate,
     YeuCauListQuery,
     YeuCauRead,
@@ -256,47 +252,3 @@ class SqlAlchemyYeuCauSanXuatRepository:
             .with_for_update(read=True)
         )
         return result.scalar_one()
-
-    async def so_luong_da_hoan_thanh(self, lenh_ids: list[int]) -> dict[int, int]:
-        rows = await self.session.execute(
-            select(
-                ChungTuHoanThanhSx.lenh_san_xuat_id,
-                func.sum(ChungTuHoanThanhSx.so_luong_hoan_thanh),
-            )
-            .where(
-                ChungTuHoanThanhSx.lenh_san_xuat_id.in_(lenh_ids),
-                ChungTuHoanThanhSx.trang_thai == "da_duyet",
-            )
-            .group_by(ChungTuHoanThanhSx.lenh_san_xuat_id)
-        )
-        return {order_id: int(quantity) for order_id, quantity in rows}
-
-    async def lenh_cua_yeu_cau(self, request_id: int, *, lock: bool) -> list[LenhRead]:
-        query = (
-            select(LenhSanXuat)
-            .where(LenhSanXuat.yeu_cau_san_xuat_id == request_id)
-            .order_by(LenhSanXuat.id)
-        )
-        if lock:
-            query = query.with_for_update()
-        orders = (await self.session.scalars(query.execution_options(populate_existing=True))).all()
-        totals = await self.so_luong_da_hoan_thanh([order.id for order in orders])
-        children: dict[int, list[int]] = {}
-        for order in orders:
-            if order.lenh_san_xuat_cha_id is not None:
-                children.setdefault(order.lenh_san_xuat_cha_id, []).append(order.id)
-        return [
-            LenhRead.model_validate(order).model_copy(
-                update={
-                    "nhu_cau_truc_tiep": [
-                        NhuCauRead.model_validate(line) for line in order.chi_tiet
-                    ],
-                    "so_luong_da_hoan_thanh": totals.get(order.id, 0),
-                    "so_luong_con_phai_hoan_thanh": max(
-                        order.so_luong - totals.get(order.id, 0), 0
-                    ),
-                    "lenh_con_ids": children.get(order.id, []),
-                }
-            )
-            for order in orders
-        ]

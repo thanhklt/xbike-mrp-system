@@ -2,18 +2,17 @@
 
 from collections.abc import Iterable
 
-from sqlalchemy import column, exists, func, select, table, text, update
+from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.bom.models import Bom, ChiTietBom
 from app.modules.bom.ports import ActiveBom
 from app.modules.bom.schemas import BomListQuery, BomRead, ChiTietBomInput, ChiTietBomRead
 from app.modules.mat_hang.models import MatHang
+from app.modules.san_xuat.models import YeuCauSanXuat
 from app.shared.records import RecordPage
 
-# Production still owns legacy ORM mappings; read only the agreed SQL table here.
-_lenh_san_xuat = table("LenhSanXuat", column("bom_id"))
-_used = exists().where(_lenh_san_xuat.c.bom_id == Bom.id)
+_used = exists().where(YeuCauSanXuat.bom_id == Bom.id)
 
 
 def _to_read(bom: Bom, used: bool) -> BomRead:

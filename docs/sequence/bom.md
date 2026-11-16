@@ -45,7 +45,7 @@ sequenceDiagram
         S->>B: list_bom(params)
         B->>P: COUNT có filter
         opt Offset nhỏ hơn total
-            B->>P: SELECT Bom + EXISTS LenhSanXuat, ORDER BY, LIMIT/OFFSET
+            B->>P: SELECT Bom + EXISTS YeuCauSanXuat, ORDER BY, LIMIT/OFFSET
             B->>P: SELECT ChiTietBom theo các BOM (selectin)
         end
         B-->>S: RecordPage BomRead với chi_tiet và da_duoc_su_dung
@@ -56,7 +56,7 @@ sequenceDiagram
 
 ## GET /api/v1/bom/{id}
 
-`id` phải dương; lớn hơn INT32 hoặc không tồn tại trả 404. Không nhận query. `da_duoc_su_dung` được tính bằng EXISTS trên bảng SQL `"LenhSanXuat"`, không dùng ORM production cũ. BOM inactive và mặt hàng bị khóa vẫn đọc được lịch sử.
+`id` phải dương; lớn hơn INT32 hoặc không tồn tại trả 404. Không nhận query. `da_duoc_su_dung` được tính bằng `EXISTS YeuCauSanXuat.bom_id = Bom.id`, không lọc trạng thái yêu cầu (UC-29 D6b). BOM inactive và mặt hàng bị khóa vẫn đọc được lịch sử.
 
 ```mermaid
 sequenceDiagram
@@ -92,7 +92,7 @@ sequenceDiagram
             S-->>C: 404 khong_tim_thay
         else Trong miền INT32
             S->>B: get_by_id(id)
-            B->>P: SELECT Bom + EXISTS LenhSanXuat, SELECT ChiTietBom
+            B->>P: SELECT Bom + EXISTS YeuCauSanXuat, SELECT ChiTietBom
             alt Không tồn tại
                 S-->>C: 404 khong_tim_thay
             else Tìm thấy
@@ -138,7 +138,7 @@ sequenceDiagram
         S-->>C: 404 khong_tim_thay
     else Trong miền INT32
         S->>B: get_by_id(id)
-        B->>P: SELECT Bom + EXISTS LenhSanXuat, SELECT ChiTietBom
+        B->>P: SELECT Bom + EXISTS YeuCauSanXuat, SELECT ChiTietBom
         alt Không có BOM gốc
             S-->>C: 404 khong_tim_thay
         else Có BOM gốc
@@ -251,7 +251,7 @@ sequenceDiagram
 
 ## DELETE /api/v1/bom/{id}
 
-Xóa mềm cho cả BOM đã được lệnh sử dụng; không xóa Bom/ChiTietBom hoặc quan hệ của lệnh. BOM đã inactive trả 204 và không thêm audit. Không yêu cầu If-Match; không kiểm tra trạng thái mặt hàng hoặc BOM cha.
+Xóa mềm cho cả BOM đã được yêu cầu sử dụng; không xóa Bom/ChiTietBom hoặc quan hệ của yêu cầu. BOM đã inactive trả 204 và không thêm audit. Không yêu cầu If-Match; không kiểm tra trạng thái mặt hàng hoặc BOM cha.
 
 ```mermaid
 sequenceDiagram
@@ -288,7 +288,7 @@ sequenceDiagram
     S->>B: lock_bom_graph()
     B->>P: pg_advisory_xact_lock(20261020, 2)
     S->>B: get_by_id(id), bỏ SELECT nếu id vượt INT32
-    B->>P: SELECT Bom + EXISTS LenhSanXuat, SELECT ChiTietBom
+    B->>P: SELECT Bom + EXISTS YeuCauSanXuat, SELECT ChiTietBom
     alt Không có BOM hoặc id vượt INT32
         S->>T: Thoát với NotFoundException
         T->>P: ROLLBACK
@@ -352,7 +352,7 @@ sequenceDiagram
     S->>B: lock_bom_graph()
     B->>P: pg_advisory_xact_lock(20261020, 2)
     S->>B: get_by_id(id), bỏ SELECT nếu id vượt INT32
-    B->>P: SELECT Bom + EXISTS LenhSanXuat, SELECT ChiTietBom
+    B->>P: SELECT Bom + EXISTS YeuCauSanXuat, SELECT ChiTietBom
     alt Không tồn tại hoặc id vượt INT32
         S->>T: Thoát với NotFoundException
         T->>P: ROLLBACK
