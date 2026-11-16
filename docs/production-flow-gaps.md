@@ -6,7 +6,7 @@ Ngày rà soát: **10/11/2026**. Code tham chiếu: commit `2ef564cb78ac5819b1e5
 
 ## 1. Mục tiêu, thuật ngữ và nguồn đối chiếu
 
-Mục tiêu là đánh giá và hoàn thiện luồng từ yêu cầu xuất thành phẩm, sản xuất bù phần thiếu, sản xuất bán thành phẩm nhiều cấp, bổ sung vật tư, đến xuất đủ thành phẩm cho yêu cầu ban đầu.
+Mục tiêu là đánh giá và hoàn thiện luồng từ yêu cầu xuất thành phẩm, sản xuất bù phần thiếu, sản xuất bán thành phẩm nhiều cấp, bổ sung linh kiện, đến xuất đủ thành phẩm cho yêu cầu ban đầu.
 
 | Thuật ngữ | Nghĩa trong tài liệu |
 | --- | --- |
@@ -70,12 +70,12 @@ Các đường dẫn module trong bảng tính từ `backend/app/modules/`. Các
 
 ### 4.1 Hiện trạng và nguyên nhân
 
-- `YeuCauSanXuatService.gui()` chuyển YCSX sang `cho_bo_sung_vat_tu` nếu kế hoạch thiếu vật tư, đồng thời giữ cây LSX đã sinh.
+- `YeuCauSanXuatService.gui()` chuyển YCSX sang `cho_bo_sung_linh_kien` nếu kế hoạch thiếu vật tư, đồng thời giữ cây LSX đã sinh.
 - `PhieuNhapService.complete_receipt()` hoàn tất phiếu, gọi `inventory.receive_receipt()` và ghi audit; chưa gọi xử lý đánh giá lại YCSX đang chờ.
 - Trong source và các trigger của `init.sql` chưa tìm thấy cơ chế khác thực hiện chuyển trạng thái này sau nhập kho.
 - `SqlAlchemyLenhSanXuatRepository.start_request()` chỉ đổi YCSX từ `da_gui`; bắt đầu LSX khi YCSX đang chờ không giúp thoát chờ.
 - Với `xuat_thanh_pham`, `PhieuXuatService._source_state()` chỉ chấp nhận nguồn `da_gui` hoặc `dang_thuc_hien`; yêu cầu còn chờ bị từ chối với lỗi trạng thái HTTP 409.
-- Frontend `RequestsPage.jsx` cũng ẩn liên kết tạo phiếu xuất TP khi YCSX còn `cho_bo_sung_vat_tu`.
+- Frontend `RequestsPage.jsx` cũng ẩn liên kết tạo phiếu xuất TP khi YCSX còn `cho_bo_sung_linh_kien`.
 
 **Hậu quả:** có thể nhập đủ NVL, cấp vật tư và sản xuất xong, nhưng vẫn không lập/gửi/duyệt xuất TP để kết thúc yêu cầu.
 
@@ -90,7 +90,7 @@ Thực hiện trên database test riêng. Fixture tối giản sau là dữ li�
 
 1. Q tạo YCSX 5 TP-A, gán N hợp lệ; gọi `tinh_ke_hoach`, nhận nhu cầu 10 NVL-A và thiếu 10.
 2. GET lại ETag khi cần, gửi YCSX với `ke_hoach_token` còn hạn và `If-Match` hợp lệ.
-3. Kiểm tra YCSX ở `cho_bo_sung_vat_tu`, có LSX 5 TP-A với nhu cầu cố định 10 NVL-A.
+3. Kiểm tra YCSX ở `cho_bo_sung_linh_kien`, có LSX 5 TP-A với nhu cầu cố định 10 NVL-A.
 4. Q tạo phiếu nhập 10 NVL-A, có nhà cung cấp, ngày nhập và đơn giá hợp lệ; hoàn tất phiếu.
 5. Đọc lại YCSX: hiện vẫn chờ. Kỳ vọng theo contract: trở về `da_gui` vì chưa có lệnh bắt đầu.
 6. Để chứng minh ảnh hưởng cuối luồng: gán/gửi LSX, Q lập/gửi/duyệt xuất 10 NVL-A; N bắt đầu, lập/gửi HTSX 5 TP-A; Q duyệt HTSX.
@@ -100,7 +100,7 @@ Mọi URL trong tài liệu có prefix `/api/v1`; ví dụ `POST /api/v1/phieu_n
 
 ### 4.3 Hành vi cần triển khai theo contract hiện có
 
-- [ ] Khi hoàn tất một phiếu nhập mới thành công, đánh giá lại **mọi** YCSX đang `cho_bo_sung_vat_tu` trong cùng transaction nhập kho.
+- [ ] Khi hoàn tất một phiếu nhập mới thành công, đánh giá lại **mọi** YCSX đang `cho_bo_sung_linh_kien` trong cùng transaction nhập kho.
 - [ ] Đọc nhu cầu đã chụp của các LSX chưa hoàn thành/chưa hủy; không gọi tính lại kế hoạch theo BOM hiện hành, không tạo thêm cây lệnh.
 - [ ] Tính lượng đã cấp từ tổng phiếu `xuat_vat_tu` của đúng LSX ở `da_duyet`; bỏ qua phiếu nháp, chờ duyệt, từ chối. Lượng còn cấp của mỗi dòng là `max(so_luong_can - so_luong_da_cap, 0)`.
 - [ ] Cộng gộp lượng còn cần theo mặt hàng trong cùng YCSX trước khi so tồn, tránh dùng một số tồn hai lần cho nhiều lệnh. Xử lý BTP sẽ sản xuất trong cây lệnh theo quyết định D-05 ở mục 5; không tự suy diễn phần đó.
@@ -110,7 +110,7 @@ Mọi URL trong tài liệu có prefix `/api/v1`; ví dụ `POST /api/v1/phieu_n
 - [ ] Không giữ chỗ/trừ kho khi đánh giá lại. Nhiều YCSX có thể cùng được đánh giá đủ dựa trên cùng tồn; duyệt xuất vẫn phải khóa và kiểm tra tồn thực tế.
 - [ ] Giữ nguyên quyền, ETag và cơ chế gọi lại phiếu đã hoàn tất; không cộng kho/ledger/audit lần hai hoặc dùng retry để che lỗi thiếu kiểm tra của lần ghi sổ đầu.
 - [ ] Nếu đánh giá lại hoặc ghi audit lỗi, rollback toàn bộ phiếu nhập, số dư, ledger và trạng thái YCSX trong transaction đó.
-- [ ] Không sửa điều kiện cho phép xuất TP để bỏ qua `cho_bo_sung_vat_tu`; phải sửa chỗ chuyển trạng thái còn thiếu. Không thêm endpoint kiểm tra thủ công vì contract hiện quy định tự động.
+- [ ] Không sửa điều kiện cho phép xuất TP để bỏ qua `cho_bo_sung_linh_kien`; phải sửa chỗ chuyển trạng thái còn thiếu. Không thêm endpoint kiểm tra thủ công vì contract hiện quy định tự động.
 
 ### 4.4 Hướng đặt code và các file cần xem
 

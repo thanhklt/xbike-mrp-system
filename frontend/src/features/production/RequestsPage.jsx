@@ -56,7 +56,7 @@ export function RequestsPage() {
           statusFilter([
             "nhap",
             "da_gui",
-            "cho_bo_sung_vat_tu",
+            "cho_bo_sung_linh_kien",
             "dang_thuc_hien",
             "hoan_thanh",
             "da_huy",
@@ -320,8 +320,8 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
           />
           {preview.thieu_vat_tu && (
             <Notice tone="warning">
-              Kế hoạch có vật tư thiếu. Gửi yêu cầu sẽ chuyển sang chờ bổ sung vật tư theo kết quả
-              backend; chưa giữ chỗ hoặc thay đổi kho.
+              Kế hoạch có linh kiện thiếu. Gửi yêu cầu sẽ chuyển sang chờ bổ sung linh kiện theo kết
+              quả backend; chưa giữ chỗ hoặc thay đổi kho.
             </Notice>
           )}
           <h3>Vật tư dự kiến</h3>
@@ -359,7 +359,7 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
           >
             Hủy yêu cầu…
           </Button>
-          {!["nhap", "cho_bo_sung_vat_tu"].includes(record.trang_thai) && (
+          {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (
             <Link
               className="btn btn-secondary"
               to={`/kho/phieu-xuat/moi?loai_phieu=xuat_thanh_pham&yeu_cau_san_xuat_id=${record.id}`}

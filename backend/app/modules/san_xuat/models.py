@@ -12,7 +12,7 @@ class YeuCauSanXuat(Base):
     __tablename__ = "YeuCauSanXuat"
     __table_args__ = (
         CheckConstraint(
-            "trang_thai IN ('nhap', 'da_gui', 'cho_bo_sung_vat_tu', 'dang_thuc_hien', 'hoan_thanh', 'da_huy')",
+            "trang_thai IN ('nhap', 'da_gui', 'cho_bo_sung_linh_kien', 'dang_thuc_hien', 'hoan_thanh', 'da_huy')",
             name="ck_yeu_cau_san_xuat_trang_thai",
         ),
         CheckConstraint("so_luong > 0", name="ck_yeu_cau_san_xuat_so_luong"),

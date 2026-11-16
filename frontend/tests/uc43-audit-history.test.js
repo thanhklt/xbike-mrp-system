@@ -18,7 +18,7 @@ import {
 } from "../src/features/dashboard/auditFormat.js";
 import { auditParams } from "../src/lib/api/contract.js";
 import { canAccessPath } from "../src/features/auth/permissions.js";
-import { dateTime } from "../src/lib/format.js";
+import { dateTime, STATUS_LABELS } from "../src/lib/format.js";
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const page = source("../src/features/reports/AuditPage.jsx");
@@ -37,7 +37,7 @@ const record = {
   doi_tuong_id: 9,
   thao_tac: "kiem_tra",
   trang_thai_truoc: "da_gui",
-  trang_thai_sau: "cho_bo_sung_vat_tu",
+  trang_thai_sau: "cho_bo_sung_linh_kien",
   ly_do: "Thiếu khung",
   du_lieu_truoc: null,
   du_lieu_sau: {
@@ -474,7 +474,7 @@ test("detail entries keep the approved order, labels, actor and original states"
     ["Đối tượng", "yêu cầu sản xuất #9"],
     ["Thao tác", "Kiểm tra"],
     ["Trạng thái trước", "da_gui", "status"],
-    ["Trạng thái sau", "cho_bo_sung_vat_tu", "status"],
+    ["Trạng thái sau", "cho_bo_sung_linh_kien", "status"],
     ["Lý do", "Thiếu khung"],
   ]);
   // Badge chọn theo kiểu "status", không theo chữ nhãn hiển thị.
@@ -534,4 +534,19 @@ test("shortage table uses snapshot codes and numeric quantities before both JSON
       page.indexOf('["Dữ liệu sau", record.du_lieu_sau]'),
   );
   assert.doesNotMatch(page, /useCatalog|API\.catalog|API\.materials/);
+});
+
+// UC-43 R3, R4: Trạng thái v4 "Chờ bổ sung linh kiện" hiện nhãn, không hiện mã thô
+test("v4 status cho_bo_sung_linh_kien has a label and the old vat_tu code is gone", () => {
+  assert.equal(STATUS_LABELS.cho_bo_sung_linh_kien, "Chờ bổ sung linh kiện");
+  assert.equal(Object.hasOwn(STATUS_LABELS, "cho_bo_sung_vat_tu"), false);
+  const badge = source("../src/components/Badge.jsx");
+  assert.match(badge, /\["cho_duyet", "cho_bo_sung_linh_kien", "cho_xu_ly", "dang_xu_ly"\]/);
+  for (const path of [
+    "../src/components/Badge.jsx",
+    "../src/features/production/RequestsPage.jsx",
+    "../src/features/dashboard/DashboardPage.jsx",
+  ]) {
+    assert.doesNotMatch(source(path), /cho_bo_sung_vat_tu|bổ sung vật tư/, path);
+  }
 });

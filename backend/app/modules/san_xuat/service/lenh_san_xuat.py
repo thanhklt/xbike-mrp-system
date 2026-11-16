@@ -87,7 +87,7 @@ class LenhSanXuatService:
 
     @staticmethod
     def _source(context: LenhContext) -> None:
-        if context.request_state not in {"da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien"}:
+        if context.request_state not in {"da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien"}:
             raise InvalidWorkflowState(message="Yêu cầu nguồn chưa gửi hoặc đã đóng")
 
     @staticmethod
@@ -144,7 +144,7 @@ class LenhSanXuatService:
         context = await self._context(order_id, actor, lock=False)
         ready = (
             context.document.trang_thai == "da_gui"
-            and context.request_state in {"da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien"}
+            and context.request_state in {"da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien"}
             and all(line.so_luong_da_cap >= line.so_luong_can for line in context.materials)
         )
         return VatTuLenhResponse(

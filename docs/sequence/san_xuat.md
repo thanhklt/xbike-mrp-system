@@ -303,7 +303,7 @@ sequenceDiagram
         P->>D: Cấp ID/mã LSX; INSERT lệnh nhap và nhu cầu trực tiếp
         Note over P,D: nhan_vien_id null; đủ TP thì không INSERT lệnh
         S->>P: update trạng thái yêu cầu
-        P->>D: cho_bo_sung_vat_tu nếu thiếu, ngược lại da_gui
+        P->>D: cho_bo_sung_linh_kien nếu thiếu, ngược lại da_gui
         S->>L: append gui cho yêu cầu + tao từng lệnh
         L->>D: INSERT audit cùng transaction
         S->>D: COMMIT; lỗi ghi/audit rollback toàn bộ
@@ -423,7 +423,7 @@ Q đọc toàn bộ, N chỉ đọc/bắt đầu lệnh có `nhan_vien_id` của
 
 GET chi tiết và vật tư cùng trả strong ETag từ lệnh (BOM/nhu cầu/tiến độ/ID con), trạng thái yêu cầu và snapshot vật tư đã cấp/tồn hiện tại. Khi một phần snapshot đổi, tải lại để lấy ETag mới. PATCH/actions bắt buộc If-Match: thiếu/blank 428, cũ/weak/wildcard/list 412. So sánh dưới khóa `yêu cầu → lệnh`, cùng thứ tự phiếu xuất và hoàn thành sản xuất. GET dùng khóa chia sẻ, không thay đổi trạng thái.
 
-`du_dieu_kien_bat_dau` chỉ true khi lệnh da_gui, nguồn cho phép và đã cấp đủ, không dựa vào tồn hiện tại. Lệnh bắt đầu chuyển yêu cầu da_gui sang dang_thuc_hien, nhưng giữ cho_bo_sung_vat_tu. Hủy chỉ đổi trạng thái lệnh và ghi lý do trong audit, không tự xóa hoặc đổi chứng từ nháp/chờ duyệt liên quan. Phân công không thay đổi là no-op, không audit trùng.
+`du_dieu_kien_bat_dau` chỉ true khi lệnh da_gui, nguồn cho phép và đã cấp đủ, không dựa vào tồn hiện tại. Lệnh bắt đầu chuyển yêu cầu da_gui sang dang_thuc_hien, nhưng giữ cho_bo_sung_linh_kien. Hủy chỉ đổi trạng thái lệnh và ghi lý do trong audit, không tự xóa hoặc đổi chứng từ nháp/chờ duyệt liên quan. Phân công không thay đổi là no-op, không audit trùng.
 
 | Endpoint | Ảnh PNG |
 |---|---|

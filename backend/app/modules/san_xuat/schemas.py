@@ -7,7 +7,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 from pydantic.json_schema import SkipJsonSchema
 
 YeuCauStatus = Literal[
-    "nhap", "da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien", "hoan_thanh", "da_huy"
+    "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
 ]
 YeuCauSort = Literal[
     "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat"

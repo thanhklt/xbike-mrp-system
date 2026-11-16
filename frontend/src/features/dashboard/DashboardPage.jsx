@@ -535,9 +535,9 @@ function WarehouseDashboard() {
           href="/kho/lenh-sx"
         />
         <Metric
-          label="Chờ bổ sung vật tư"
+          label="Chờ bổ sung linh kiện"
           path={API.requests}
-          params={{ trang_thai: "cho_bo_sung_vat_tu" }}
+          params={{ trang_thai: "cho_bo_sung_linh_kien" }}
           href="/kho/yeu-cau"
         />
         <Metric

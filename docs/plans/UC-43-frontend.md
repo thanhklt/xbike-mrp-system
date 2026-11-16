@@ -183,11 +183,11 @@ Thực thi 15/11/2026 trên nhánh `audit` tách từ `identity_access` @ `7fd30
 - `auditShortageRows` trả `null` khi bản ghi không lưu danh sách thiếu (mảng, kể cả rỗng, khi có) và gắn sẵn `id`; trang chỉ gọi một lần.
 - Agent kiểm tra ui-consistency (đọc code, đối chiếu TicketsPage, QueryState, App.css) báo và đã sửa: thông báo lỗi bộ lọc dính sát bảng → thêm `.filters + .notice { margin-bottom: 20px }`; bỏ ngoặc kép cong (dự án không dùng); câu chữ theo mẫu "Không thể tải…". Chưa làm: 7 trang khác dùng `dateFilters` chưa truyền `validate` (ngoài phạm vi UC-43).
 - Không sửa: nhãn thao tác lệch Tổng quan với bản ghi v3 `sua` (dev quyết định bỏ qua, backend hiện ghi mã riêng `doi_mat_khau`/`mo_khoa`).
-- `node --test tests/uc43-audit-history.test.js` 20 pass; `npm test` 159 pass; eslint sạch trên file đã sửa; `npm run build` thành công trên máy local.
+- `node --test tests/uc43-audit-history.test.js` 20 pass; `npm test` 159 pass; eslint sạch trên file đã sửa; `npm run build` thành công khi `Sidebar.jsx` dùng ảnh sẵn có (thay đổi sidebar chưa commit, ngoài PR); bản đã commit vẫn lỗi vì import `doc/ui-spec-admin/tong_quan.png` không có trong git, có từ trước.
 
 **Giới hạn còn lại:**
 - Chưa render trình duyệt, nên chưa kiểm tra bằng mắt kích thước, cuộn và độ tương phản thật.
-- Nhãn trạng thái v4 (vd. `cho_bo_sung_linh_kien`) chưa có trong `STATUS_LABELS` dùng chung, `Badge` sẽ hiện mã thô.
+- ~~Nhãn trạng thái v4 `cho_bo_sung_linh_kien` chưa có trong `STATUS_LABELS`~~ — đã sửa 16/11/2026: frontend đổi mã `cho_bo_sung_vat_tu` → `cho_bo_sung_linh_kien` (nhãn "Chờ bổ sung linh kiện", màu `Badge` amber, bộ lọc và điều kiện ở `RequestsPage`, ô số liệu trên Dashboard QLK). `seed.sql`/`init.sql` đã dùng mã mới từ trước. Theo yêu cầu dev, đổi luôn ở backend `san_xuat` (schema `YeuCauStatus`, CHECK của ORM, service gửi yêu cầu và lệnh sản xuất), có test `backend/tests/test_ycsx_trang_thai_v4.py` đối chiếu schema/ORM/`init.sql`; và ở `docs/sequence/san_xuat.md`, `docs/production-flow-gaps.md`. Giữ nguyên `docs/plans/UC-07.md` (ghi lại hiện trạng lúc làm UC-07) và quy tắc đổi tên trong `data_model_v4.md`.
 - Trên Dashboard QTV, cột tương ứng tên "Hành động", còn ở màn Lịch sử tên "Thao tác" (có từ trước).
 - Link "Xem tất cả" nằm ở cuối card chứ không ở tiêu đề card như hai dashboard kia, vì `admin-card-title` không có chỗ cho nút hành động.
 - Browser test `workflows.spec.js` mang tên cũ trái Q02, chưa sửa và chưa chạy.

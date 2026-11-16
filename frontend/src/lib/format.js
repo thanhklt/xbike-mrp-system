@@ -18,7 +18,7 @@ export const STATUS_LABELS = {
   da_duyet: "Đã duyệt",
   tu_choi: "Từ chối",
   da_huy: "Đã hủy",
-  cho_bo_sung_vat_tu: "Chờ bổ sung vật tư",
+  cho_bo_sung_linh_kien: "Chờ bổ sung linh kiện",
   da_xac_nhan: "Đã xác nhận",
   loi: "Lỗi",
   cho_xu_ly: "Chờ xử lý",
