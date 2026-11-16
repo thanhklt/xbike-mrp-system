@@ -7,6 +7,8 @@ import { transformWithEsbuild } from "vite";
 import {
   canCreateCompletion, canSendCompletion, completionEntries,
   completionConfirmEntries, completionSendLabel,
+  // UC-31 thêm nút Duyệt vào cùng khối; khung dựng lại component cần các hàm này.
+  canApproveCompletion, approveConfirmEntries, approveImpact,
 } from "../src/features/production/completionForm.js";
 import { API } from "../src/lib/api/endpoints.js";
 import { dateTime, itemName, number } from "../src/lib/format.js";
@@ -34,6 +36,7 @@ function section({ completion = null, record = row, manager = false, userId = 20
   const ports = {
     React, API, number, canCreateCompletion, canSendCompletion,
     completionEntries, completionConfirmEntries, completionSendLabel,
+    canApproveCompletion, approveConfirmEntries, approveImpact,
     useState: () => {
       const index = slot++;
       return [state.slots[index], (value) => { state.slots[index] = value; }];
@@ -273,7 +276,8 @@ test("section visibility follows production start or existing completion and man
     assert.match(html, /Chứng từ hoàn thành sản xuất/);
     assert.match(html, /HTSX-202611-000012/);
     assert.ok(html.includes(`data-status="${trang_thai}"`));
-    assert.deepEqual([...ui.state.buttons.keys()], []);
+    // QLK không lập/gửi; từ UC-31 chỉ có thêm nút Duyệt khi chứng từ Chờ duyệt.
+    assert.deepEqual([...ui.state.buttons.keys()], trang_thai === "cho_duyet" ? ["Duyệt"] : []);
   }
 });
 

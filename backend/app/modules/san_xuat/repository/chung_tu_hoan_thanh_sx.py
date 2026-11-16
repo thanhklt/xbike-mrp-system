@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import ConflictException, InvalidWorkflowState
 from app.modules.san_xuat.models import ChungTuHoanThanhSx
 from app.modules.san_xuat.schemas import ChungTuRead
 
@@ -12,6 +13,45 @@ from app.modules.san_xuat.schemas import ChungTuRead
 class SqlAlchemyChungTuHoanThanhRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def lock_product(self, item_id: int) -> None:
+        item = await self.session.scalar(
+            text('SELECT id FROM "MatHang" WHERE id=:id FOR UPDATE'), {"id": item_id},
+        )
+        if item is None:
+            raise ConflictException(message="Thành phẩm không còn tồn tại")
+
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 chốt duyệt trước khi ghi sổ (specs/use_cases/production/UC-31.md)
+    async def approve(
+        self, resource_id: int, version: int, actor_id: int, at: datetime,
+    ) -> ChungTuRead:
+        record = await self.session.scalar(
+            update(ChungTuHoanThanhSx).where(
+                ChungTuHoanThanhSx.id == resource_id,
+                ChungTuHoanThanhSx.trang_thai == "cho_duyet",
+                ChungTuHoanThanhSx.phien_ban == version,
+            ).values(
+                trang_thai="da_duyet", nguoi_xu_ly_id=actor_id, xu_ly_at=at,
+                phien_ban=ChungTuHoanThanhSx.phien_ban + 1, updated_at=at,
+            ).returning(ChungTuHoanThanhSx).execution_options(populate_existing=True)
+        )
+        if record is None:
+            raise InvalidWorkflowState(message="Chứng từ đã thay đổi")
+        await self.session.flush()
+        return ChungTuRead.model_validate(record)
+
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 giữ thành phẩm cho yêu cầu xuất giao (specs/use_cases/production/UC-31.md)
+    async def hold_production(
+        self, request_id: int, item_id: int, quantity: int, completion_id: int, at: datetime,
+    ) -> None:
+        await self.session.execute(
+            text('''INSERT INTO "GiuHang" (yeu_cau_san_xuat_id,mat_hang_id,loai_giu,
+                so_luong,trang_thai,chung_tu_hoan_thanh_sx_id,created_at)
+                VALUES (:request,:item,'thanh_pham_san_xuat',:quantity,'dang_giu',:source,:at)'''),
+            {"request": request_id, "item": item_id, "quantity": quantity,
+             "source": completion_id, "at": at},
+        )
+        await self.session.flush()
 
     async def next_code(self) -> tuple[int, str]:
         row = (await self.session.execute(

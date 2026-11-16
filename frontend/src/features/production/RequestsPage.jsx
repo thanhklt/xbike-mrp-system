@@ -47,6 +47,9 @@ import {
   sendConfirmEntries,
 } from "./requestForm.js";
 import {
+  canApproveCompletion,
+  approveConfirmEntries,
+  approveImpact,
   canCreateCompletion,
   canSendCompletion,
   completionEntries,
@@ -455,6 +458,26 @@ function CompletionSection({ record, items, manager, userId }) {
   const { confirm, notify } = useFeedback();
   const canCreate = canCreateCompletion(record, completion, manager, userId);
   const canSend = canSendCompletion(record, completion, manager, userId);
+  const canApprove = canApproveCompletion(completion, record, manager);
+
+  // UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 2–6; A1 xác nhận mới POST với ETag chứng từ đã xem (specs/use_cases/production/UC-31.md)
+  function approve() {
+    const etag = query.data.etag;
+    confirm({
+      title: "Duyệt chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      content: <InfoGrid entries={approveConfirmEntries(completion, record, items)} />,
+      impact: approveImpact(completion, record),
+      onConfirm: async () => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "duyet"].join("/"),
+          body: {},
+          etag,
+        });
+        notify("Đã duyệt chứng từ hoàn thành.");
+      },
+    });
+  }
 
   // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 2–3 mở biểu mẫu chỉ đọc (specs/use_cases/production/UC-30.md)
   function openCompletion() {
@@ -526,6 +549,11 @@ function CompletionSection({ record, items, manager, userId }) {
         {canSend && (
           <div className="actions actions-end">
             <Button disabled={completionMutation.isPending} onClick={sendCompletion}>{completionSendLabel(completion)}</Button>
+          </div>
+        )}
+        {canApprove && (
+          <div className="actions actions-end">
+            <Button disabled={completionMutation.isPending} onClick={approve}>Duyệt</Button>
           </div>
         )}
       </QueryState>

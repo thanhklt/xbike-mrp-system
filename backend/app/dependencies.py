@@ -181,6 +181,7 @@ def get_chung_tu_hoan_thanh_service(
     return ChungTuHoanThanhService(
         SqlAlchemyChungTuHoanThanhRepository(db), SqlAlchemyYeuCauSanXuatRepository(db),
         AuditService(SqlAlchemyAuditRepository(db)), SqlAlchemyTransaction(db),
+        inventory=SqlAlchemyInventoryRepository(db),
     )
 
 

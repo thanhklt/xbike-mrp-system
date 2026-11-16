@@ -131,6 +131,20 @@ async def chung_tu_cua_yeu_cau(
     return result
 
 
+# UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 4–6; D1 chỉ QLK, body rỗng và ETag chứng từ (specs/use_cases/production/UC-31.md)
+@chung_tu_hoan_thanh_router.post(
+    "/{id}/duyet", response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},
+)
+async def duyet_chung_tu(
+    id: ResourceId, payload: GuiChungTuInput, actor: WriteActor, service: CompletionService,
+    request_id: RequestId, response: Response, if_match: IfMatch = None,
+) -> ChungTuDetailResponse:
+    result, etag = await service.duyet(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
 # UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 endpoint chỉ đọc cho QLK (specs/use_cases/production/UC-27.md)
 @nhu_cau_bo_sung_router.get(
     "", response_model=NhuCauBoSungResponse,

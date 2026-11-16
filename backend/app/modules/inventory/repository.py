@@ -26,6 +26,28 @@ class SqlAlchemyInventoryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 cộng thành phẩm và ghi sổ sau duyệt (specs/use_cases/production/UC-31.md)
+    async def receive_production(
+        self, item_id: int, quantity: int, completion_id: int, actor_id: int,
+        posted_at: datetime, *, hold: bool,
+    ) -> tuple[int, int]:
+        stock_after = await self.session.scalar(
+            text('''UPDATE "MatHang" SET so_luong_ton=so_luong_ton+:quantity,
+                so_luong_dang_giu=so_luong_dang_giu+:held,
+                ton_kho_updated_at=:at WHERE id=:id RETURNING so_luong_ton'''),
+            {"id": item_id, "quantity": quantity, "held": quantity if hold else 0, "at": posted_at},
+        )
+        movement_id = await self.session.scalar(
+            text('''INSERT INTO "GiaoDichKho" (mat_hang_id,loai_giao_dich,
+                so_luong_bien_dong,so_luong_ton_sau,chung_tu_hoan_thanh_sx_id,
+                nhan_vien_id,posted_at) VALUES (:item,'nhap_san_pham_san_xuat',
+                :quantity,:stock,:source,:actor,:time) RETURNING id'''),
+            {"item": item_id, "quantity": quantity, "stock": stock_after,
+             "source": completion_id, "actor": actor_id, "time": posted_at},
+        )
+        await self.session.flush()
+        return movement_id, stock_after
+
     async def lock_issue_stock(
         self, request_id: int, item_ids: list[int]
     ) -> list[IssueStockContext]:

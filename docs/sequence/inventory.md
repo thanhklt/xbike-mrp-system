@@ -1,7 +1,8 @@
 # Sequence inventory — phạm vi phiếu xuất v4 và giới hạn legacy
 
 Đối chiếu `inventory/{router,service,repository,ports,models}.py`, `dependencies.py`,
-`core/persistence.py` và [phiếu xuất](phieu_xuat.md). Chỉ đường ghi xuất đã nâng v4.
+`core/persistence.py`, [phiếu xuất](phieu_xuat.md) và [sản xuất](san_xuat.md).
+Đường ghi xuất và nhập thành phẩm sản xuất UC-31 đã nâng v4.
 Các endpoint đọc còn dùng ORM `StockLevel`/`StockMovement` của bảng legacy lowercase
 `ton_kho`/`giao_dich_kho`, không tồn tại trong bootstrap v4; trên DB v4 chúng có thể
 trả 500. Không mô tả chúng như API tồn v4 đã nghiệm thu. Luồng nhập/điều chỉnh tồn
@@ -116,3 +117,43 @@ nguồn/giữ/lượng/giá/tồn. `issue_stock` ghi các thay đổi đã đư�
 `so_luong_ton_sau`. Không sửa giữ của yêu cầu khác, không tự commit, không lấy cache
 làm chuẩn. Transaction do PhieuXuatService sở hữu; lỗi ở bất kỳ bước nào rollback
 toàn bộ. Xem sequence duyệt và test GI-AC-08/09/13–17 tại module phiếu xuất.
+
+## Port nhập thành phẩm sản xuất UC-31 — không phải endpoint
+
+`ChungTuHoanThanhService → InventoryProductionWriter.receive_production →
+SqlAlchemyInventoryRepository → PostgreSQL`. Caller đã kiểm QLK, If-Match,
+chứng từ Chờ duyệt, yêu cầu Đang thực hiện và đã khóa theo thứ tự yêu cầu →
+chứng từ → MatHang thành phẩm. Caller cập nhật và flush chứng từ `da_duyet`
+**trước** khi gọi inventory, vì trigger `kiem_tra_nguon_giao_dich` kiểm trạng thái này.
+
+```mermaid
+sequenceDiagram
+    participant S as ChungTuHoanThanhService
+    participant I as SqlAlchemyInventoryRepository
+    participant DB as PostgreSQL
+    Note over S,DB: Một transaction chung, đã khóa yêu cầu, chứng từ và MatHang
+    Note over S,DB: Chứng từ đã da_duyet, có người xử lý và xu_ly_at, phien_ban + 1, flush
+    S->>I: receive_production(item_id, n, completion_id, actor_id, posted_at, hold)
+    I->>DB: UPDATE MatHang SET tồn + n, giữ + (n nếu hold), ton_kho_updated_at
+    DB-->>I: RETURNING so_luong_ton
+    I->>DB: INSERT GiaoDichKho nhap_san_pham_san_xuat, +n, tồn sau, nguồn chứng từ, QLK, posted_at
+    Note over I,DB: Trigger kiểm chứng từ đã duyệt và item/lượng khớp, UNIQUE nguồn chống ghi lại
+    DB-->>I: RETURNING id
+    I->>DB: flush, không commit
+    I-->>S: giao_dich_kho_id, so_luong_ton_sau
+    Note over S,DB: Xuất giao tạo giữ; nhập kho hoàn thành yêu cầu; caller ghi audit
+    alt Bất kỳ bước ghi hoặc commit lỗi
+        S->>DB: ROLLBACK toàn bộ
+    else Thành công
+        S->>DB: COMMIT
+    end
+```
+
+`hold=True` chỉ cho `xuat_giao`: cộng tồn và giữ cùng n; caller INSERT
+`GiuHang.thanh_pham_san_xuat` đang giữ, gắn đúng chứng từ. `hold=False` cho
+`nhap_kho`: giữ không đổi, caller không tạo giữ và chuyển yêu cầu `hoan_thanh`
+cùng `completed_at`. Không ghi linh kiện. Hàm trả `(giao_dich_kho_id,
+so_luong_ton_sau)` cho audit chứng từ; không tự mở transaction hay commit.
+Đường `issue_stock` và các đường legacy giữ nguyên. Kiểm chứng UC-31 không dùng DB:
+ASGI/service với trạng thái giả và câu SQL thật, kiểm thứ tự UPDATE/INSERT,
+tham số số dư/nguồn/người/thời điểm, khóa và rollback; không chạy tranh chấp PostgreSQL thật.

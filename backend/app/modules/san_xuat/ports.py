@@ -1,6 +1,7 @@
 """Application-owned contracts; adapters return detached document snapshots."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from app.modules.san_xuat.schemas import (
@@ -23,6 +24,13 @@ class ChungTuHoanThanhRepository(Protocol):
     async def get_for_update(self, resource_id: int) -> ChungTuRead | None: ...
     async def add(self, request_id: int, quantity: int, actor_id: int) -> ChungTuRead: ...
     async def update(self, resource_id: int, changes: dict[str, object]) -> ChungTuRead: ...
+    async def lock_product(self, item_id: int) -> None: ...
+    async def approve(
+        self, resource_id: int, version: int, actor_id: int, at: datetime,
+    ) -> ChungTuRead: ...
+    async def hold_production(
+        self, request_id: int, item_id: int, quantity: int, completion_id: int, at: datetime,
+    ) -> None: ...
 
 
 class ProductionIssues(Protocol):

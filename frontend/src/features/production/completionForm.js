@@ -1,4 +1,5 @@
 import { dateTime, itemName, number } from "../../lib/format.js";
+import { REQUEST_TYPE_LABELS } from "./requestForm.js";
 
 export function canCreateCompletion(record, completion, manager, userId) {
   return Boolean(record && !completion && !manager
@@ -37,4 +38,23 @@ export function completionConfirmEntries(completion, record, items) {
     ["Số lượng hoàn thành", number(completion.so_luong_hoan_thanh)],
     ["Đơn vị tính", item?.don_vi_tinh || "—"],
   ];
+}
+
+export function canApproveCompletion(completion, record, manager) {
+  return Boolean(manager && completion?.trang_thai === "cho_duyet"
+    && record?.trang_thai === "dang_thuc_hien");
+}
+
+// UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 3 năm dòng xác nhận (specs/use_cases/production/UC-31.md)
+export function approveConfirmEntries(completion, record, items) {
+  const [document, ...details] = completionConfirmEntries(completion, record, items);
+  return [document, ["Loại yêu cầu", REQUEST_TYPE_LABELS[record.loai_yeu_cau]], ...details];
+}
+
+// UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 3 tác động tồn và giữ theo loại yêu cầu (specs/use_cases/production/UC-31.md)
+export function approveImpact(completion, record) {
+  const quantity = number(completion.so_luong_hoan_thanh);
+  return record.loai_yeu_cau === "xuat_giao"
+    ? `Tồn thành phẩm tăng ${quantity}; ${quantity} xe được giữ cho yêu cầu này.`
+    : `Tồn thành phẩm tăng ${quantity}; ${quantity} xe còn dùng được; yêu cầu chuyển Hoàn thành.`;
 }
