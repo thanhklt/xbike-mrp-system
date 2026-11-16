@@ -54,8 +54,7 @@ class SqlAlchemyMatHangRepository:
             await self.session.execute(
                 text("""
             SELECT
-                EXISTS (SELECT 1 FROM "Bom" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietBom" WHERE mat_hang_id=:id) AS has_bom,
+                EXISTS (SELECT 1 FROM "ChiTietBom" WHERE mat_hang_id=:id) AS has_bom,
                 EXISTS (SELECT 1 FROM "ChiTietPhieuNhap" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietPhieuXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "GiaoDichKho" WHERE mat_hang_id=:id
@@ -88,6 +87,8 @@ class SqlAlchemyMatHangRepository:
         for name, value in changes.items():
             setattr(record, name, value)
         await self.session.flush()
+        # UPDATE expires PostgreSQL computed columns; hydrate before synchronous DTO validation.
+        await self.session.refresh(record)
         return MatHangRead.model_validate(record)
 
     async def read_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:

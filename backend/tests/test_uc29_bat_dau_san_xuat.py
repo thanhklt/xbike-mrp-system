@@ -366,7 +366,8 @@ async def test_item_reference_sql_excludes_order_tables():
     assert "LenhSanXuat" not in sql and "ChiTietLenhSanXuat" not in sql
     assert set(re.findall(r'FROM "(\w+)"', sql)) == {
         # v4 init.sql: điều chỉnh kho v3 đã gỡ; giữ hàng và nhu cầu linh kiện là tham chiếu mới.
-        "Bom", "ChiTietBom", "ChiTietPhieuNhap", "ChiTietPhieuXuat",
+        # PR-10 D2: Bom của chính thành phẩm không tính là tham chiếu công thức.
+        "ChiTietBom", "ChiTietPhieuNhap", "ChiTietPhieuXuat",
         "GiaoDichKho", "YeuCauSanXuat", "GiuHang", "NhuCauLinhKien", "MatHang",
     }
     assert 'WHERE id=:id AND so_luong_ton > 0' in sql

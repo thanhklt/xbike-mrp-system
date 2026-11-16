@@ -1,6 +1,7 @@
 """ORM mapping matching infra/postgres/init.sql."""
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -18,6 +19,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.modules.nha_cung_cap.models import NhaCungCap
 
 
 class PhieuNhap(Base):
@@ -63,6 +67,10 @@ class PhieuNhap(Base):
         Integer, ForeignKey("NhanVien.id", deferrable=True, initially="IMMEDIATE")
     )
     phien_ban: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+    nha_cung_cap: Mapped["NhaCungCap"] = relationship(
+        "NhaCungCap", foreign_keys=[ncc_id], viewonly=True, lazy="selectin"
+    )
 
     items: Mapped[list["ChiTietPhieuNhap"]] = relationship(
         "ChiTietPhieuNhap",

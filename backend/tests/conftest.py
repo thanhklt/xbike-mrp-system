@@ -76,6 +76,11 @@ async def receipt_api():
         record_id = max(current()["receipts"], default=0) + 1
         record = PhieuNhapRead(
             id=record_id, ma_phieu_nhap=f"PN-202611-{record_id:06d}",
+            nha_cung_cap={
+                "id": payload.ncc_id, "ma_ncc": f"NCC-{payload.ncc_id:06d}",
+                "ten_ncc": "Fixture supplier", "so_dien_thoai": "0900000000",
+                "dia_chi": "Fixture address", "phuong": "Fixture ward", "tinh": "Fixture province",
+            },
             **payload.model_dump(exclude={"items"}), created_at=created_at,
             updated_at=created_at, hoan_thanh_at=None, nguoi_hoan_thanh_id=None,
             phien_ban=1, items=[

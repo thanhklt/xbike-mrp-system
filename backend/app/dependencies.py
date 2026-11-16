@@ -111,7 +111,7 @@ def require_roles(allowed_roles: list[str]):
 def get_suppliers_service(db: Annotated[AsyncSession, Depends(get_db)]) -> SupplierService:
     return SupplierService(
         SqlAlchemySupplierRepository(db),
-        SqlAlchemyAuditRepository(db),
+        AuditService(SqlAlchemyAuditRepository(db)),
         SqlAlchemyTransaction(db),
     )
 

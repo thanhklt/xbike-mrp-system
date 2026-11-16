@@ -1,13 +1,9 @@
 """One immutable item snapshot per application instance."""
 
 import asyncio
-import fnmatch
-import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-
-from fastapi import HTTPException
 
 from app.core.errors import AppException
 from app.modules.mat_hang.schemas import MatHangRead
@@ -70,30 +66,11 @@ def filter_items(
     sort: str = "id",
 ) -> list[MatHangRead]:
     field = sort.removeprefix("-")
-    if field not in {"id", "ma_mat_hang", "ten_mat_hang", "don_gia"}:
-        raise HTTPException(422, "Trường sắp xếp không hợp lệ")
-    if don_gia_min is not None and don_gia_max is not None and don_gia_min > don_gia_max:
-        raise HTTPException(422, "don_gia_min không được lớn hơn don_gia_max")
-    # Preserve ILIKE wildcards/escapes. fnmatch uses atomic star groups rather
-    # than user-controlled backtracking chains in a regular expression.
-    pattern = None
-    if q and q.strip():
-        glob = []
-        escaped = False
-        for char in f"%{q.strip()}%":
-            if char == "\\" and not escaped:
-                escaped = True
-                continue
-            if not escaped and char in "%_":
-                glob.append("*" if char == "%" else "?")
-            else:
-                glob.append({"*": "[*]", "?": "[?]", "[": "[[]"}.get(char, char))
-            escaped = False
-        pattern = re.compile(fnmatch.translate("".join(glob)), re.IGNORECASE)
+    search = q.casefold() if q else None
     matches = []
     for item in snapshot.items:
-        if pattern and not any(
-            pattern.match(value) for value in (item.ma_mat_hang, item.ten_mat_hang, item.sku)
+        if search and not any(
+            search in value.casefold() for value in (item.ma_mat_hang, item.ten_mat_hang)
         ):
             continue
         if any(
@@ -111,7 +88,7 @@ def filter_items(
         if don_gia_max is not None and (item.don_gia is None or item.don_gia > don_gia_max):
             continue
         matches.append(item)
-    # Stable ID ties; PostgreSQL ASC puts NULL last and DESC puts NULL first.
+    # Input snapshot is ID-ascending; stable sorting preserves ID ties.
     return sorted(
         matches,
         key=lambda item: (getattr(item, field) is None, getattr(item, field)),

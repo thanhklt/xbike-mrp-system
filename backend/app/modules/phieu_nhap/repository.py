@@ -9,7 +9,7 @@ from sqlalchemy.orm import lazyload, selectinload
 
 from app.core.errors import ConflictException, NotFoundException
 from app.modules.mat_hang.models import MatHang
-from app.modules.nha_cung_cap.models import Supplier
+from app.modules.nha_cung_cap.models import NhaCungCap
 from app.modules.phieu_nhap.errors import ReceiptCodeConflict, ReceiptReferenced
 from app.modules.phieu_nhap.models import ChiTietPhieuNhap, PhieuNhap
 from app.modules.phieu_nhap.ports import ReceiptPart, ReceiptPosting
@@ -73,7 +73,11 @@ class SqlAlchemyPhieuNhapRepository:
         ordering = column.desc() if params.sort.startswith("-") else column.asc()
         records = (
             await self.session.scalars(
-                query.order_by(ordering, PhieuNhap.id).offset(offset).limit(params.page_size)
+                query.order_by(ordering, PhieuNhap.id)
+                .offset(offset)
+                .limit(params.page_size)
+                .options(selectinload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
+                .execution_options(populate_existing=True)
             )
         ).all()
         return RecordPage([PhieuNhapRead.model_validate(record) for record in records], total)
@@ -82,7 +86,7 @@ class SqlAlchemyPhieuNhapRepository:
         record = await self.session.scalar(
             select(PhieuNhap)
             .where(PhieuNhap.id == record_id)
-            .options(selectinload(PhieuNhap.items))
+            .options(selectinload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
             .execution_options(populate_existing=True)
         )
         return PhieuNhapRead.model_validate(record) if record is not None else None
@@ -91,7 +95,7 @@ class SqlAlchemyPhieuNhapRepository:
         record = await self.session.scalar(
             select(PhieuNhap)
             .where(PhieuNhap.id == record_id)
-            .options(lazyload(PhieuNhap.items))
+            .options(lazyload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -113,6 +117,7 @@ class SqlAlchemyPhieuNhapRepository:
                     for column in PhieuNhap.__table__.columns
                 },
                 "items": items,
+                "nha_cung_cap": record.nha_cung_cap,
             }
         )
 
@@ -189,8 +194,8 @@ class SqlAlchemyPhieuNhapRepository:
     async def lock_supplier(self, record_id: int) -> bool:
         return (
             await self.session.scalar(
-                select(Supplier.id)
-                .where(Supplier.id == record_id)
+                select(NhaCungCap.id)
+                .where(NhaCungCap.id == record_id)
                 .with_for_update(read=True, key_share=True)
             )
         ) is not None
@@ -261,4 +266,7 @@ class SqlAlchemyPhieuNhapRepository:
     async def add_draft(
         self, payload: GoodsReceiptNoteCreate, *, created_at: datetime
     ) -> PhieuNhapRead:
-        return PhieuNhapRead.model_validate(await self._insert(payload, created_at=created_at))
+        record = await self._insert(payload, created_at=created_at)
+        result = await self.get_receipt(record.id)
+        assert result is not None
+        return result

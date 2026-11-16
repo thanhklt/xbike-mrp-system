@@ -69,7 +69,7 @@ sequenceDiagram
     S->>P: list_receipts(query)
     P->>DB: COUNT and sorted page with AND filters
     opt Page nonempty
-        P->>DB: Batch/selectin load page lines
+        P->>DB: Batch/selectin load page lines and current NCC (UC-44)
     end
     P-->>S: Detached DTOs and count in same snapshot
     S-->>R: List data/meta with page/count/request_id
@@ -79,8 +79,9 @@ sequenceDiagram
 
 ## GET /api/v1/phieu_nhap/{id}
 
-ID positive, quá PostgreSQL INTEGER hoặc không tồn tại trả 404. ncc_id tham chiếu
-NCC hiện tại, không có snapshot NCC trong resource; UI lookup NCC để hiển thị sau này.
+ID positive, quá PostgreSQL INTEGER hoặc không tồn tại trả 404. `ncc_id` tham chiếu
+NCC hiện tại. Resource kèm `nha_cung_cap` là thông tin NCC hiện tại, nạp qua relationship
+view-only, không phải snapshot (UC-44). Audit phiếu nhập không lưu `nha_cung_cap`.
 
 ```mermaid
 %%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
@@ -108,7 +109,7 @@ sequenceDiagram
     S->>P: begin_read_snapshot
     P->>DB: REPEATABLE READ READ ONLY after releasing auth read TX
     S->>P: get_receipt(id)
-    P->>DB: Read PhieuNhap and selectin lines in same snapshot
+    P->>DB: Read PhieuNhap, selectin lines and current NCC in same snapshot
     break Missing / out-of-range ID
         S-->>C: 404
     end

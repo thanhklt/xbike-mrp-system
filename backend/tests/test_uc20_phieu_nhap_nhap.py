@@ -88,7 +88,10 @@ async def test_ac5_delete_audits_actor_time_and_draft_state(receipt_api):
     assert entry["thao_tac"] == "xoa_nhap" and entry["nhan_vien_id"] == 10
     assert entry["trang_thai_truoc"] == "nhap" and entry["trang_thai_sau"] is None
     assert entry["created_at"].tzinfo is not None
-    assert entry["du_lieu_truoc"] == created.json()["data"]
+    # UC-44: nha_cung_cap là thông tin NCC hiện tại, không phải snapshot nên audit không lưu.
+    assert entry["du_lieu_truoc"] == {
+        key: value for key, value in created.json()["data"].items() if key != "nha_cung_cap"
+    }
     assert entry["du_lieu_sau"] is None
     assert api.inventory.mock_calls == []
 

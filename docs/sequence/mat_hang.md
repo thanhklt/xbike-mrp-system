@@ -1,14 +1,16 @@
 # Sequence — mat_hang
 
-Endpoint thực tế; phần phụ thuộc BOM theo [plan đã duyệt](../../specs/use_cases/bom/PLAN.md). Không mô tả toàn bộ catalog như đã đạt UC v4. Role đọc hiện có QLK/NV, ghi QLK; không thay quyền QTV trong tác vụ BOM.
+Đối chiếu code theo [spec Catalog](../../specs/use_cases/catalog/README.md), [plan Catalog](../../specs/use_cases/catalog/PLAN.md) và phần BOM ([plan BOM](../../specs/use_cases/bom/PLAN.md)). Đọc QTV/QLK/NV, ghi chỉ QLK; service kiểm tra lại quyền trước I/O.
 
-Tạo chỉ nhận hai loại thanh_pham/linh_kien; mã do Identity/trigger cấp. Thành phẩm bắt buộc có `bom.chi_tiet`, không nhận mã/trạng thái/số tồn từ client. Linh kiện không có công thức. MatHangRead giữ các field đang công khai.
+Tạo chỉ nhận hai loại thanh_pham/linh_kien; mã do Identity/trigger cấp. Thành phẩm bắt buộc có `bom.chi_tiet`, không nhận mã/trạng thái/số tồn từ client. Linh kiện không có công thức. MatHangRead trả ba số chỉ đọc: so_luong_ton, so_luong_dang_giu, so_luong_con_dung = tồn - giữ.
 
-GET danh mục/list dùng cache hiện tại; filter/page/sort giữ nguyên (list page 1/20, max 100). GET detail đọc DB qua BomService.item_detail để body và ETag dùng cùng snapshot; tag thành phẩm có ngữ cảnh BOM. PATCH/DELETE so sánh tag của GET mặt hàng, không dùng tag BOM. Cache của instance xử lý được publish sau commit; instance khác theo LISTEN/NOTIFY và reconciliation hiện có.
+GET danh mục/list dùng cache hiện tại; list page 1/20, max 100, sort id/ma_mat_hang/ten_mat_hang/don_gia và tiền tố `-`, ID ASC khi giá trị bằng nhau. Query DTO cấm tham số lạ/lặp; mọi GET/DELETE cấm body, detail/write cấm query. q là literal substring mã/tên không phân biệt hoa/thường, không tìm SKU; AND các filter. is_active chỉ áp dụng TP, kết hợp loại LK trả 422. GET detail đọc DB qua BomService.item_detail để body và ETag dùng cùng snapshot; tag thành phẩm có ngữ cảnh BOM. PATCH/DELETE so sánh tag của GET mặt hàng, không dùng tag BOM. Cache publish sau commit, no-op không prepare/publish; instance khác theo LISTEN/NOTIFY và reconciliation hiện có.
+
+SKU chỉ đổi khi không có tham chiếu hoặc tồn; ĐVT không đổi khi mặt hàng là thành phần trong công thức (`ChiTietBom`) hoặc đã có chứng từ. `Bom` của chính thành phẩm không tính là tham chiếu (UC-11 AC-1). Mã/loại/số dư bất biến. PATCH không đổi giá trị trả 200 cùng tag, không UPDATE/audit/publish.
 
 ## GET /api/v1/danh_muc_mat_hang/
 
-[PNG](assets/mat_hang/mat-hang-1.png). Quyền QLK/NV.
+[PNG](assets/mat_hang/mat-hang-1.png). UC-09, quyền QTV/QLK/NV.
 
 ```mermaid
 sequenceDiagram
@@ -39,7 +41,8 @@ sequenceDiagram
     alt input không hợp lệ
         R-->>C: 422
     else hợp lệ
-        R->>S: danh_muc
+        R->>S: danh_muc(actor)
+        S->>S: Guard QTV/QLK/NV
         S->>K: snapshot, lọc/page/sort nếu là list
         alt cache unavailable
             K-->>C: 503
@@ -53,7 +56,7 @@ sequenceDiagram
 
 ## GET /api/v1/mat_hang
 
-[PNG](assets/mat_hang/mat-hang-2.png). Quyền QLK/NV.
+[PNG](assets/mat_hang/mat-hang-2.png). UC-09, quyền QTV/QLK/NV.
 
 ```mermaid
 sequenceDiagram
@@ -84,7 +87,8 @@ sequenceDiagram
     alt input không hợp lệ
         R-->>C: 422
     else hợp lệ
-        R->>S: list_mat_hang
+        R->>S: list_mat_hang(params, actor)
+        S->>S: Guard, is_active chỉ TP (LK + active trả 422)
         S->>K: snapshot, lọc/page/sort nếu là list
         alt cache unavailable
             K-->>C: 503
@@ -98,7 +102,7 @@ sequenceDiagram
 
 ## GET /api/v1/mat_hang/{id}
 
-[PNG](assets/mat_hang/mat-hang-3.png). Quyền QLK/NV.
+[PNG](assets/mat_hang/mat-hang-3.png). UC-09, quyền QTV/QLK/NV.
 
 ```mermaid
 sequenceDiagram
@@ -215,9 +219,13 @@ sequenceDiagram
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            M->>K: prepare snapshot
+            opt Có thay đổi thực tế
+                M->>K: prepare snapshot
+            end
             T->>DB: COMMIT một lần
-            M->>K: publish
+            opt Có snapshot mới
+                M->>K: publish
+            end
             S-->>R: kết quả
             R-->>C: 201 + Location + ETag
         end
@@ -288,7 +296,8 @@ sequenceDiagram
             BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
             I->>DB: UPDATE MatHang
             BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
-            S->>I: update thuộc tính mô tả nếu có, kiểm tra tham chiếu ĐVT
+            S->>I: get_references nếu đổi SKU / ĐVT (ChiTietBom, chứng từ, tồn; không tính Bom của chính TP)
+            S->>I: update thuộc tính thực sự đổi; no-op không UPDATE/audit/publish
             I->>DB: SELECT references / UPDATE fields
             S->>AU: audit sửa nếu có thuộc tính gửi sửa
             AU->>AR: append
@@ -299,9 +308,13 @@ sequenceDiagram
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            M->>K: prepare snapshot
+            opt Có thay đổi thực tế
+                M->>K: prepare snapshot
+            end
             T->>DB: COMMIT một lần
-            M->>K: publish
+            opt Có snapshot mới
+                M->>K: publish
+            end
             S-->>R: kết quả
             R-->>C: 200 + ETag
         end
@@ -380,9 +393,13 @@ sequenceDiagram
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            M->>K: prepare snapshot
+            opt Có thay đổi thực tế
+                M->>K: prepare snapshot
+            end
             T->>DB: COMMIT một lần
-            M->>K: publish
+            opt Có snapshot mới
+                M->>K: publish
+            end
             S-->>R: kết quả
             R-->>C: 204 rỗng
         end

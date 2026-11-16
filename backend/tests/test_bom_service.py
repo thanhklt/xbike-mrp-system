@@ -97,6 +97,8 @@ async def test_bom_ac04_mutation_scope_commits_before_cache_publish(monkeypatch)
         don_gia=100,
         is_active=True,
         so_luong_ton=0,
+        so_luong_dang_giu=0,
+        so_luong_con_dung=0,
         ton_kho_updated_at=None,
     )
     original = cache.publish

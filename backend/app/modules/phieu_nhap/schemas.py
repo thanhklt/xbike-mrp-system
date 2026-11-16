@@ -14,6 +14,7 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from app.modules.nha_cung_cap.schemas import NhaCungCapRead
 from app.modules.nhan_vien.schemas import ListResponseMeta, ResponseMeta
 
 INT_MAX = 2**31 - 1
@@ -139,6 +140,7 @@ class PhieuNhapRead(BaseModel):
     ma_phieu_nhap: str
     nhan_vien_id: int
     ncc_id: int
+    nha_cung_cap: NhaCungCapRead
     ngay_nhap: date
     ghi_chu: str | None
     tong_tien: ReceiptMoney | None

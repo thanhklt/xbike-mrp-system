@@ -36,13 +36,16 @@ class MatHangMutation:
                     async with self.transaction:
                         changes: list[MatHangRead] = []
                         yield changes
-                        prepared = self.cache.prepare(changes)
+                        # A no-op PATCH (UC-11) appends nothing and publishes nothing.
+                        if changes:
+                            prepared = self.cache.prepare(changes)
                 except ConflictException:
                     raise
                 except BaseException:
                     if prepared is not None:
                         self.cache.mark_unavailable()
                     raise
-                self.cache.publish(prepared)
+                if prepared is not None:
+                    self.cache.publish(prepared)
             finally:
                 _ACTIVE.reset(token)

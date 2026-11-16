@@ -51,7 +51,8 @@ async def api():
             id=id_, ma_mat_hang=f"MH-{id_:06d}", ten_mat_hang=name, sku=f"sku-{id_}",
             loai_mat_hang=kind, don_vi_tinh="xe" if kind == "thanh_pham" else "cai",
             mau_sac=None, mo_ta=None, don_gia=100, is_active=active,
-            so_luong_ton=inventory[id_], ton_kho_updated_at=None,
+            so_luong_ton=inventory[id_], so_luong_dang_giu=reservations[id_],
+            so_luong_con_dung=inventory[id_] - reservations[id_], ton_kho_updated_at=None,
         )
         for id_, name, kind, active in [
             (1, "Mountain Pro", "thanh_pham", True),
