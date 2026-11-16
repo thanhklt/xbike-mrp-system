@@ -176,15 +176,16 @@ class MatHangService:
                 if value != getattr(before, key)
             }
             changed = bool(update)
-            if "sku" in update and (await self.repository.get_references(item_id)).has_any:
-                raise ConflictException(message="SKU cannot change after a reference or stock")
-            if "don_vi_tinh" in update and update["don_vi_tinh"] != before.don_vi_tinh:
+            if "sku" in update or "don_vi_tinh" in update:
                 refs = await self.repository.get_references(item_id)
-                if refs.has_bom or refs.has_docs:
+                if "sku" in update and refs.has_any:
+                    raise ConflictException(message="SKU cannot change after a reference or stock")
+                if "don_vi_tinh" in update and (refs.has_bom or refs.has_docs):
                     raise ConflictException(message="Unit cannot change after a reference")
             if await self.repository.find_duplicate(sku=update.get("sku"), exclude_id=item_id):
                 raise ConflictException(message="SKU already exists")
             active = update.pop("is_active", None)
+            previous = before
             if active is False and before.loai_mat_hang == "linh_kien":
                 raise InvalidInputException(message="Components cannot be stopped")
             if active is not None and active != before.is_active:
@@ -193,7 +194,8 @@ class MatHangService:
                 else:
                     await self.boms.stop_for_item_in_transaction(item_id, actor)
             if update:
-                previous, _ = await self.boms.item_detail(item_id)
+                if active is not None and active != before.is_active:
+                    previous, _ = await self.boms.item_detail(item_id)
                 record = await self.repository.update(item_id, update)
                 await self._audit("sua", record, actor, previous)
             result = await self.boms.item_detail(item_id)

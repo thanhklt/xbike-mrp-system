@@ -2,10 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Header, Path, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Path, Query, Response
 
-from app.core.errors import InvalidInputException
-from app.core.request_context import get_request_id, reject_query
+from app.core.request_context import (
+    get_request_id,
+    get_strong_if_match,
+    reject_body,
+    reject_query,
+    reject_repeated_query,
+)
 from app.dependencies import get_bom_service, require_roles
 from app.modules.bom.schemas import (
     BomDetailResponse,
@@ -22,11 +27,6 @@ read_actor = require_roles(["quan_ly", "nhan_vien"])
 write_actor = require_roles(["quan_ly"])
 
 
-async def reject_body(request: Request) -> None:
-    if await request.body():
-        raise InvalidInputException(message="Endpoint không nhận request body")
-
-
 router = APIRouter(
     prefix="/bom",
     tags=["BOM"],
@@ -37,18 +37,15 @@ router = APIRouter(
 @router.get(
     "",
     response_model=BomListResponse,
-    dependencies=[Depends(read_actor), Depends(reject_body)],
+    dependencies=[Depends(read_actor), Depends(reject_body), Depends(reject_repeated_query)],
     description="UC-15 — specs/use_cases/bom/UC-15.md: xem phiên bản, lọc và phân trang.",
 )
 async def list_bom(
     params: Annotated[BomListQuery, Query()],
     actor: Annotated[dict, Depends(read_actor)],
-    request: Request,
     service: Annotated[BomService, Depends(get_bom_service)],
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> BomListResponse:
-    if len(request.query_params.multi_items()) != len(set(request.query_params.keys())):
-        raise InvalidInputException(message="Duplicate query parameter")
     return await service.list_bom(params, actor, request_id)
 
 
@@ -114,7 +111,7 @@ async def create_version(
     service: Annotated[BomService, Depends(get_bom_service)],
     request_id: Annotated[str, Depends(get_request_id)],
     response: Response,
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_strong_if_match)] = None,
 ) -> BomDetailResponse:
     result, etag = await service.create_version(id, payload, actor, if_match, request_id)
     response.headers["Location"] = f"/api/v1/bom/{result.data.id}"
@@ -133,7 +130,7 @@ async def delete_bom(
     id: Annotated[int, Path(gt=0)],
     actor: Annotated[dict, Depends(write_actor)],
     service: Annotated[BomService, Depends(get_bom_service)],
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_strong_if_match)] = None,
 ) -> Response:
     await service.delete_bom(id, actor, if_match)
     return Response(status_code=204)
@@ -153,7 +150,7 @@ async def activate_bom(
     request_id: Annotated[str, Depends(get_request_id)],
     payload: Annotated[KichHoatBomInput, Body()],
     response: Response,
-    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+    if_match: Annotated[str | None, Depends(get_strong_if_match)] = None,
 ) -> BomDetailResponse:
     result, etag = await service.activate_bom(id, actor, if_match, request_id)
     response.headers["ETag"] = etag

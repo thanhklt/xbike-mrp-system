@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pydantic import ValidationError
 
-from app.core.errors import ForbiddenException, InvalidInputException
+from app.core.errors import ConflictException, ForbiddenException, InvalidInputException
 from app.modules.mat_hang.cache import MatHangCache
-from app.modules.mat_hang.schemas import MatHangListQuery, MatHangRead
-from app.modules.mat_hang.service import MatHangReader
+from app.modules.mat_hang.mutation import MatHangMutation
+from app.modules.mat_hang.ports import ItemReferences
+from app.modules.mat_hang.schemas import MatHangListQuery, MatHangPatch, MatHangRead
+from app.modules.mat_hang.service import MatHangReader, MatHangService
 from app.modules.nha_cung_cap.schemas import NhaCungCapCreate, NhaCungCapListQuery, NhaCungCapPatch
 from app.modules.nha_cung_cap.service import SupplierService
 
@@ -137,3 +139,107 @@ async def test_uc13_uc14_uc44_cat_ac01_service_guard(method, args):
     with pytest.raises(ForbiddenException):
         await getattr(SupplierService(repo, audit, transaction), method)(*args)
     assert not repo.mock_calls and not audit.mock_calls and not transaction.mock_calls
+
+
+@pytest.fixture
+def patch_service():
+    before = item(loai_mat_hang="thanh_pham")
+    repository, audit, boms = AsyncMock(), AsyncMock(), AsyncMock()
+    repository.get_for_update.return_value = before
+    repository.find_duplicate.return_value = False
+    repository.get_references.return_value = ItemReferences(False, False, False)
+    boms.item_detail.return_value = (before, '"current"')
+    cache = MatHangCache()
+    cache.replace([before])
+    service = MatHangService(repository, audit, MatHangMutation(AsyncMock(), cache), boms)
+    return service, before
+
+
+@pytest.mark.parametrize("has_bom,has_docs", [(False, False), (True, False), (False, True)])
+# PR-10 F4/D2: chỉ thành phần công thức/chứng từ khóa đơn vị tính, tồn kho không khóa.
+async def test_finished_item_unit_reference_policy(patch_service, has_bom, has_docs):
+    service, before = patch_service
+    service.repository.get_references.return_value = ItemReferences(has_bom, has_docs, True)
+    after = before.model_copy(update={"don_vi_tinh": "bo"})
+    service.repository.update.return_value = after
+    if has_bom or has_docs:
+        with pytest.raises(ConflictException, match="Unit cannot change after a reference"):
+            await service.patch_mat_hang(1, MatHangPatch(don_vi_tinh="bo"), '"current"', MANAGER)
+        service.repository.update.assert_not_awaited()
+        service.audit.append.assert_not_awaited()
+    else:
+        service.boms.item_detail.side_effect = [(before, '"current"'), (after, '"after"')]
+        result, _ = await service.patch_mat_hang(
+            1, MatHangPatch(don_vi_tinh="bo"), '"current"', MANAGER
+        )
+        assert result.don_vi_tinh == "bo"
+    service.repository.get_references.assert_awaited_once_with(1)
+
+
+@pytest.mark.parametrize(
+    "values,reference_calls",
+    [
+        ({"sku": "new", "don_vi_tinh": "bo"}, 1),
+        ({"don_gia": 200}, 0),
+        ({"sku": "secret-sku", "don_vi_tinh": "chiec"}, 0),
+    ],
+)
+# PR-10 F7/F10: dùng chung references; audit sửa thường dùng before, không đọc lại previous.
+async def test_patch_reads_only_required_snapshots(patch_service, values, reference_calls):
+    service, before = patch_service
+    after = before.model_copy(update=values)
+    service.repository.update.return_value = after
+    service.boms.item_detail.side_effect = [(before, '"current"'), (after, '"after"')]
+    await service.patch_mat_hang(1, MatHangPatch(**values), '"current"', MANAGER)
+    assert service.repository.get_references.await_count == reference_calls
+    assert service.boms.item_detail.await_count == 2
+    if after != before:
+        entry = service.audit.append.call_args.args[0]
+        assert entry.du_lieu_truoc == before.model_dump(mode="json")
+    else:
+        service.repository.update.assert_not_awaited()
+        service.audit.append.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "has_bom,has_docs,has_stock",
+    [(True, False, False), (False, True, False), (False, False, True)],
+)
+# PR-10 F4/D2: SKU vẫn bị khóa bởi bất kỳ tham chiếu hoặc tồn kho nào.
+async def test_sku_remains_locked_by_any_reference(patch_service, has_bom, has_docs, has_stock):
+    service, _ = patch_service
+    service.repository.get_references.return_value = ItemReferences(has_bom, has_docs, has_stock)
+    with pytest.raises(ConflictException, match="SKU cannot change"):
+        await service.patch_mat_hang(1, MatHangPatch(sku="new"), '"current"', MANAGER)
+    service.repository.get_references.assert_awaited_once_with(1)
+    service.repository.update.assert_not_awaited()
+    service.audit.append.assert_not_awaited()
+
+
+@pytest.mark.parametrize("was_active", [True, False])
+# PR-10 F7: audit sửa sau stop/reuse phải lấy trạng thái mới làm previous.
+async def test_patch_state_and_description_refreshes_previous(patch_service, was_active):
+    service, original = patch_service
+    before = original.model_copy(update={"is_active": was_active})
+    previous = before.model_copy(update={"is_active": not was_active})
+    after = previous.model_copy(update={"don_gia": 200})
+    service.repository.get_for_update.return_value = before
+    service.repository.update.return_value = after
+    service.boms.item_detail.side_effect = [
+        (before, '"current"'),
+        (previous, '"state"'),
+        (after, '"after"'),
+    ]
+    await service.patch_mat_hang(
+        1, MatHangPatch(is_active=not was_active, don_gia=200), '"current"', MANAGER
+    )
+    assert service.boms.item_detail.await_count == 3
+    lifecycle = (
+        service.boms.stop_for_item_in_transaction
+        if was_active
+        else service.boms.reuse_last_for_item_in_transaction
+    )
+    lifecycle.assert_awaited_once_with(1, MANAGER)
+    entry = service.audit.append.call_args.args[0]
+    assert entry.du_lieu_truoc == previous.model_dump(mode="json")
+    service.repository.get_references.assert_not_awaited()

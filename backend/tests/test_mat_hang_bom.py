@@ -1,5 +1,8 @@
 """Dependent UC-10/12 integration and UC-16 validation/atomicity, not full catalog refactor."""
 
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import text
@@ -9,6 +12,8 @@ from test_bom_postgres import FORMULA, MANAGER, product, scalar, services, tag
 from test_bom_postgres import database as database
 
 from app.modules.bom.schemas import BomFormula
+from app.modules.mat_hang.cache import MatHangCache
+from app.modules.mat_hang.mutation import MatHangMutation
 from app.modules.mat_hang.schemas import MatHangCreate, MatHangPatch
 
 BASE = {
@@ -112,6 +117,49 @@ async def test_uc16_ac6_atomic_create_failure(database, monkeypatch, point):
     assert await scalar(database, 'SELECT count(*) FROM "MatHang"') == 2
     assert await scalar(database, 'SELECT count(*) FROM "Bom"') == 0
     assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 0
+
+
+# PR-10 F6: scope không được lồng kể cả instance khác; require_active chỉ nhận chủ scope.
+async def test_mutation_scope_rejects_nesting_and_checks_owner():
+    cache = MatHangCache()
+    cache.replace([])
+    transaction, other_transaction = AsyncMock(), AsyncMock()
+    mutation = MatHangMutation(transaction, cache)
+    other = MatHangMutation(other_transaction, cache)
+    for owner in (mutation, other):
+        with pytest.raises(RuntimeError, match="Caller must own"):
+            owner.require_active()
+    async with mutation.scope():
+        mutation.require_active()
+        with pytest.raises(RuntimeError, match="Caller must own"):
+            other.require_active()
+        for owner in (mutation, other):
+            with pytest.raises(RuntimeError, match="Nested catalog mutation"):
+                async with asyncio.timeout(1):
+                    async with owner.scope():
+                        pytest.fail("Nested scope entered")
+        mutation.require_active()
+    transaction.__aenter__.assert_awaited_once()
+    other_transaction.__aenter__.assert_not_awaited()
+    for owner in (mutation, other):
+        with pytest.raises(RuntimeError, match="Caller must own"):
+            owner.require_active()
+    async with other.scope():
+        other.require_active()
+
+
+# PR-10 F6: token được reset kể cả khi scope thoát do ngoại lệ.
+async def test_mutation_scope_resets_owner_after_error():
+    cache = MatHangCache()
+    cache.replace([])
+    mutation = MatHangMutation(AsyncMock(), cache)
+    with pytest.raises(ValueError, match="abort"):
+        async with mutation.scope():
+            raise ValueError("abort")
+    with pytest.raises(RuntimeError, match="Caller must own"):
+        mutation.require_active()
+    async with mutation.scope():
+        mutation.require_active()
 
 
 async def test_uc12_component_cannot_be_stopped(client):

@@ -8,6 +8,8 @@ GET list mặc định page=1/page_size=20 (max 100), lọc AND theo mat_hang_id
 
 Tất cả mutation dùng một session/transaction chung cho MatHang, Bom, ChiTietBom và audit; thứ tự cache lock → advisory lock → item → version. Cache publish sau commit, lỗi commit không chắc chắn làm cache unavailable. Không đổi tồn/giữ hàng/ledger/yêu cầu đã chốt.
 
+Luồng stop/reuse theo mặt hàng nằm trong PATCH/DELETE của [mat_hang](mat_hang.md): stop khi thành phẩm active nhưng không có version active, hoặc reuse khi thành phẩm ngừng nhưng còn version active, trả 409 "Trạng thái thành phẩm và công thức không khớp". Không tự sửa dữ liệu, ghi audit hoặc publish cache. Không có phiên bản nào vẫn trả 409 "Thành phẩm chưa có công thức".
+
 ## GET /api/v1/bom
 
 UC-15; quyền QLK / NV. Đầu vào: BomListQuery; reject duplicate query / body. [PNG](assets/bom/bom-1.png).

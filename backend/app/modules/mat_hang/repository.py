@@ -54,8 +54,7 @@ class SqlAlchemyMatHangRepository:
             await self.session.execute(
                 text("""
             SELECT
-                EXISTS (SELECT 1 FROM "Bom" WHERE mat_hang_id=:id
-                        UNION ALL SELECT 1 FROM "ChiTietBom" WHERE mat_hang_id=:id) AS has_bom,
+                EXISTS (SELECT 1 FROM "ChiTietBom" WHERE mat_hang_id=:id) AS has_bom,
                 EXISTS (SELECT 1 FROM "ChiTietPhieuNhap" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "ChiTietPhieuXuat" WHERE mat_hang_id=:id
                         UNION ALL SELECT 1 FROM "GiaoDichKho" WHERE mat_hang_id=:id

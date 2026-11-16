@@ -19,7 +19,6 @@ ItemType = Literal["linh_kien", "thanh_pham"]
 ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Money = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
 SnakeCode = Annotated[str, StringConstraints(pattern=r"^[a-z]+(_[a-z]+)*$")]
-ItemCode = Annotated[str, StringConstraints(pattern=r"^MH-[0-9]{6}$")]
 
 
 class MatHangRead(BaseModel):

@@ -287,23 +287,28 @@ sequenceDiagram
         B->>DB: đọc snapshot
         S->>S: so If-Match (428/412)
         S->>I: get_references neu doi SKU / don_vi_tinh
-        I->>DB: SELECT BOM/docs/stock references
-        S->>S: Guard SKU refs/tTon, unit refs (409), diff fields
+        I->>DB: SELECT ChiTietBom/docs/stock references, không tính Bom của chính thành phẩm
+        S->>S: SKU khóa khi có refs/stock, ĐVT khóa khi thuộc ChiTietBom hoặc có chứng từ (409)
         alt không thỏa quyền / dữ liệu / trạng thái
             S-->>R: 403 / 404 / 409 / 422
         else điều kiện hợp lệ
             Note over S,DB: No-op khong UPDATE/audit/publish, van verify tag
             S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
-            BS->>B: ngừng / dùng version gần kích hoạt nhất
-            B->>DB: UPDATE Bom, không sửa định mức
-            BS->>I: trạng thái thành phẩm đi cùng
-            I->>DB: UPDATE MatHang
-            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
-            S->>I: update thuộc tính mô tả nếu có, kiểm tra tham chiếu ĐVT
-            I->>DB: SELECT references / UPDATE fields
-            S->>AU: audit sửa nếu có thuộc tính gửi sửa
-            AU->>AR: append
-            AR->>DB: session.add, không commit
+            alt stop khi item active nhưng không có version active, hoặc reuse còn version active
+                BS-->>S: ConflictException - Trạng thái thành phẩm và công thức không khớp
+                S-->>R: 409, rollback, không cập nhật/audit/publish
+            else trạng thái khớp hoặc không đổi trạng thái
+                BS->>B: ngừng / dùng version gần kích hoạt nhất
+                B->>DB: UPDATE Bom, không sửa định mức
+                BS->>I: trạng thái thành phẩm đi cùng
+                I->>DB: UPDATE MatHang
+                BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+                S->>I: update thuộc tính mô tả nếu có, ĐVT đã kiểm tra ChiTietBom/chứng từ
+                I->>DB: UPDATE fields
+                S->>AU: audit sửa nếu có thuộc tính gửi sửa
+                AU->>AR: append
+                AR->>DB: session.add, không commit
+            end
         end
         alt ghi/audit/commit lỗi
             T->>DB: ROLLBACK
@@ -381,14 +386,19 @@ sequenceDiagram
             S-->>R: 403 / 404 / 409 / 422
         else điều kiện hợp lệ
             Note over S,DB: No-op khong UPDATE/audit/publish, van verify tag
-            S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
-            BS->>B: ngừng / dùng version gần kích hoạt nhất
-            B->>DB: UPDATE Bom, không sửa định mức
-            BS->>I: trạng thái thành phẩm đi cùng
-            I->>DB: UPDATE MatHang
-            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
-            AU->>AR: append
-            AR->>DB: session.add, không commit
+            S->>BS: stop_for_item_in_transaction nếu item active
+            alt item active nhưng không có version active
+                BS-->>S: ConflictException - Trạng thái thành phẩm và công thức không khớp
+                S-->>R: 409, rollback, không cập nhật/audit/publish
+            else item active và có version active
+                BS->>B: ngừng version active nếu có
+                B->>DB: UPDATE Bom, không sửa định mức
+                BS->>I: trạng thái thành phẩm đi cùng
+                I->>DB: UPDATE MatHang
+                BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+                AU->>AR: append
+                AR->>DB: session.add, không commit
+            end
         end
         alt ghi/audit/commit lỗi
             T->>DB: ROLLBACK

@@ -44,6 +44,39 @@ async def create_supplier(box, **values):
         )
 
 
+# UC-11 AC-1: thành phẩm mới có BOM v1 chưa dùng được đổi đơn vị tính.
+async def test_finished_item_with_initial_formula_can_change_unit(client, database):
+    item_id, bom_id = await product(database)
+    read = await client.get(f"/api/v1/mat_hang/{item_id}", headers=headers())
+    assert read.status_code == 200, read.text
+    response = await client.patch(
+        f"/api/v1/mat_hang/{item_id}",
+        json={"don_vi_tinh": "bo"},
+        headers={**headers(), "If-Match": read.headers["etag"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["don_vi_tinh"] == "bo"
+    assert await scalar(database, f'SELECT don_vi_tinh FROM "MatHang" WHERE id={item_id}') == "bo"
+    assert await scalar(database, f'SELECT version FROM "Bom" WHERE id={bom_id}') == 1
+    assert await scalar(database, f'SELECT is_active FROM "Bom" WHERE id={bom_id}')
+
+
+# UC-11 AC-2: linh kiện thuộc ChiTietBom không được đổi đơn vị tính.
+async def test_formula_component_cannot_change_unit(client, database):
+    await product(database)
+    read = await client.get("/api/v1/mat_hang/1", headers=headers())
+    assert read.status_code == 200, read.text
+    audits = await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"')
+    response = await client.patch(
+        "/api/v1/mat_hang/1",
+        json={"don_vi_tinh": "bo"},
+        headers={**headers(), "If-Match": read.headers["etag"]},
+    )
+    assert response.status_code == 409, response.text
+    assert await scalar(database, 'SELECT don_vi_tinh FROM "MatHang" WHERE id=1') == "chiec"
+    assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == audits
+
+
 async def test_cat_ac08_supplier_mapping_matches_real_schema(database):
     async with database.engine.connect() as connection:
         columns = await connection.run_sync(lambda conn: inspect(conn).get_columns("NhaCungCap"))

@@ -237,10 +237,11 @@ class BomService:
             if before.active:
                 await self.repository.deactivate(before.active.id)
             created = await self.repository.add(before.item.id, number, formula.chi_tiet)
-            item = await self.items.update(before.item.id, {"is_active": True})
+            if not before.item.is_active:
+                await self.items.update(before.item.id, {"is_active": True})
             after = await self._context(created.id)
             await self._audit("tao_phien_ban", before, after, created.id, actor)
-            changes.append(item)
+            changes.append(after.item)
             result = _detail(after, created.id, request_id)
         return result
 
@@ -261,7 +262,8 @@ class BomService:
         if before.active:
             await self.repository.deactivate(before.active.id)
         await self.repository.activate(bom_id)
-        await self.items.update(before.item.id, {"is_active": True})
+        if not before.item.is_active:
+            await self.items.update(before.item.id, {"is_active": True})
         after = await self._context(bom_id)
         await self._audit("dung_lai_phien_ban", before, after, bom_id, actor)
         return after
@@ -305,6 +307,8 @@ class BomService:
         context = await self.repository.context(item_id)
         if context is None or not context.versions:
             raise ConflictException(message="Thành phẩm chưa có công thức")
+        if context.item.is_active and context.active is None:
+            raise ConflictException(message="Trạng thái thành phẩm và công thức không khớp")
         if context.active:
             await self._stop(context, context.active.id, actor)
 
@@ -315,6 +319,7 @@ class BomService:
         context = await self.repository.context(item_id)
         if context is None or not context.versions:
             raise ConflictException(message="Thành phẩm chưa có công thức")
-        if context.active is None:
-            latest = max(context.versions, key=lambda v: (v.kich_hoat_gan_nhat_at, v.id))
-            await self._activate(context, latest.id, actor)
+        if context.active is not None:
+            raise ConflictException(message="Trạng thái thành phẩm và công thức không khớp")
+        latest = max(context.versions, key=lambda v: (v.kich_hoat_gan_nhat_at, v.id))
+        await self._activate(context, latest.id, actor)
