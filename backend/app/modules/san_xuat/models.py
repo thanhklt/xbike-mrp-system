@@ -26,10 +26,10 @@ class YeuCauSanXuat(Base):
             "trang_thai IN ('nhap', 'da_gui', 'cho_bo_sung_linh_kien', 'dang_thuc_hien', 'hoan_thanh', 'da_huy')",
             name="ck_yeu_cau_san_xuat_trang_thai",
         ),
-        CheckConstraint("loai_yeu_cau IN ('dap_ung', 'cho_kho')", name="ck_ycsx_loai"),
+        CheckConstraint("loai_yeu_cau IN ('xuat_giao', 'nhap_kho')", name="ck_ycsx_loai"),
         CheckConstraint(
-            "loai_yeu_cau = 'dap_ung' OR COALESCE(so_luong_dung_thanh_pham, 0) = 0",
-            name="ck_ycsx_cho_kho",
+            "loai_yeu_cau = 'xuat_giao' OR COALESCE(so_luong_dung_thanh_pham, 0) = 0",
+            name="ck_ycsx_nhap_kho",
         ),
         CheckConstraint("so_luong > 0", name="ck_ycsx_so_luong"),
         CheckConstraint("phien_ban > 0", name="ck_ycsx_phien_ban"),
@@ -69,7 +69,7 @@ class YeuCauSanXuat(Base):
     )
     id: Mapped[int] = mapped_column(Integer, Identity(always=False), primary_key=True)
     ma_yeu_cau_san_xuat: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    loai_yeu_cau: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'dap_ung'"))
+    loai_yeu_cau: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'xuat_giao'"))
     mat_hang_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("MatHang.id", deferrable=True, initially="IMMEDIATE"), nullable=False
     )

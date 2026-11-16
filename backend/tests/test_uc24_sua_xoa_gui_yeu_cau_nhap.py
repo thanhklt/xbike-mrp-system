@@ -22,7 +22,7 @@ from app.modules.san_xuat.repository.yeu_cau_san_xuat import SqlAlchemyYeuCauSan
 from app.modules.san_xuat.schemas import YeuCauPatch, YeuCauRead
 from app.modules.san_xuat.service import generate_yeu_cau_etag
 
-PATCH_BODY = {"loai_yeu_cau": "dap_ung", **BODY}
+PATCH_BODY = {"loai_yeu_cau": "xuat_giao", **BODY}
 
 
 @pytest.fixture(autouse=True)
@@ -91,18 +91,18 @@ async def test_patch_quantity_keeps_draft_and_audits_old_new_values(api):
     assert_stock_untouched(api)
 
 
-# UC-24 AC-1: Nháp đổi được loại dap_ung sang cho_kho qua service (R2)
+# UC-24 AC-1: Nháp đổi được loại xuat_giao sang nhap_kho qua service (R2)
 async def test_patch_request_type_through_service(api):
     created = await create(api)
     detail, etag = await api.service.patch_entry(
-        1, YeuCauPatch(**{**PATCH_BODY, "loai_yeu_cau": "cho_kho"}),
+        1, YeuCauPatch(**{**PATCH_BODY, "loai_yeu_cau": "nhap_kho"}),
         MANAGER, created.headers["etag"], "uc24",
     )
     assert detail.data == api.stored[1].model_copy(update={"so_luong_con_phai_xuat": 10})
-    assert detail.data.loai_yeu_cau == "cho_kho" and detail.data.trang_thai == "nhap"
+    assert detail.data.loai_yeu_cau == "nhap_kho" and detail.data.trang_thai == "nhap"
     assert etag == generate_yeu_cau_etag(detail.data)
-    assert api.history[-1].du_lieu_truoc["loai_yeu_cau"] == "dap_ung"
-    assert api.history[-1].du_lieu_sau["loai_yeu_cau"] == "cho_kho"
+    assert api.history[-1].du_lieu_truoc["loai_yeu_cau"] == "xuat_giao"
+    assert api.history[-1].du_lieu_sau["loai_yeu_cau"] == "nhap_kho"
     assert_stock_untouched(api)
 
 
@@ -243,7 +243,7 @@ async def test_deactivated_kids_fun_cannot_send_but_can_delete(api):
 # UC-24 AC-7: Đã gửi không sửa bất kỳ trường nào và không xóa, giữ nguyên dữ liệu/lịch sử
 @pytest.mark.parametrize("changes", [
     {"nhan_vien_duoc_giao_id": 22}, {"so_luong": 15}, {"mat_hang_id": 3},
-    {"loai_yeu_cau": "cho_kho"}, {"han_hoan_thanh": "2027-01-01"}, None,
+    {"loai_yeu_cau": "nhap_kho"}, {"han_hoan_thanh": "2027-01-01"}, None,
 ])
 async def test_sent_request_rejects_each_field_edit_and_deletion(api, changes):
     sent = await send(api, await create(api))

@@ -190,7 +190,7 @@ async def test_create_send_and_assignee_visibility_without_stock_changes(api):
     created = await create(api)
     draft = created.json()["data"]
     assert draft["trang_thai"] == "nhap" and draft["bom_id"] is None and draft["gui_at"] is None
-    assert draft["loai_yeu_cau"] == "dap_ung" and draft["han_hoan_thanh"] == BODY["han_hoan_thanh"]
+    assert draft["loai_yeu_cau"] == "xuat_giao" and draft["han_hoan_thanh"] == BODY["han_hoan_thanh"]
     assert draft["mat_hang_id"] == 1 and draft["so_luong"] == 10 and draft["nhan_vien_duoc_giao_id"] == 20
     assert created.headers["location"] == f"{URL}/1"
     assert created.headers["etag"] == generate_yeu_cau_etag(YeuCauRead.model_validate(draft))
@@ -344,13 +344,13 @@ async def test_creation_and_sending_audit_have_actor_time_and_states(api):
     assert api.history[0].created_at <= api.history[1].created_at
 
 
-# UC-23 AC-10: Yêu cầu cho kho 3 xe giữ loại, nhân viên thấy và tồn/giữ không đổi
+# UC-23 AC-10: Yêu cầu nhập kho 3 xe giữ loại, nhân viên thấy và tồn/giữ không đổi
 async def test_stock_request_three_bikes_sends_without_stock_changes(api):
-    created = await create(api, loai_yeu_cau="cho_kho", so_luong=3)
+    created = await create(api, loai_yeu_cau="nhap_kho", so_luong=3)
     response = await send(api, created)
     assert response.status_code == 200
     data = response.json()["data"]
-    assert (data["trang_thai"], data["loai_yeu_cau"], data["so_luong"]) == ("da_gui", "cho_kho", 3)
+    assert (data["trang_thai"], data["loai_yeu_cau"], data["so_luong"]) == ("da_gui", "nhap_kho", 3)
     visible = await api.client.get(URL, headers={"x-role": "nhan_vien", "x-actor": "20"})
     assert visible.status_code == 200 and [row["id"] for row in visible.json()["data"]] == [1]
     assert_stock_untouched(api)

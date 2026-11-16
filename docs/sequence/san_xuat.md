@@ -99,7 +99,7 @@ Không audit. `so_luong_con_phai_xuat = max(so_luong - so_luong_da_xuat, 0)`.
 
 ## POST /api/v1/yeu_cau_san_xuat
 
-Nguồn: UC-23 Main 4–6; A1. Loại mặc định `dap_ung` hoặc `cho_kho`; bắt buộc thành
+Nguồn: UC-23 Main 4–6; A1. Loại mặc định `xuat_giao` hoặc `nhap_kho`; bắt buộc thành
 phẩm, số lượng nguyên dương INT32, hạn kiểu date và nhân viên được giao.
 Không chặn ngày quá khứ. Body không nhận mã, trạng thái, BOM hoặc token do client đặt.
 
@@ -206,7 +206,7 @@ sequenceDiagram
 ```
 
 Số lượng phải là số nguyên dương INT32; ID phải là số nguyên dương; loại chỉ
-`dap_ung`/`cho_kho`; hạn kiểu date, không giới hạn ngày quá khứ. Thành phẩm ngừng
+`xuat_giao`/`nhap_kho`; hạn kiểu date, không giới hạn ngày quá khứ. Thành phẩm ngừng
 → 409 `mat_hang_ngung_hoat_dong`, linh kiện → 422 `du_lieu_khong_hop_le`,
 nhân viên khóa/sai vai trò → 409 `nguoi_duoc_giao_khong_hop_le`; không tồn tại → 404.
 Chỉ sửa Nháp, đổi được loại và cả 5 trường; sau gửi trả 409 `trang_thai_khong_hop_le`.
@@ -331,7 +331,7 @@ sequenceDiagram
 
 Chốt đúng `Bom.id` đang dùng tại lúc gửi; mỗi thành phẩm luôn có đúng một BOM active
 (D3). Không có nhánh nghiệp vụ thiếu BOM; sai bất biến gây lỗi hệ thống 500 và rollback.
-Không tính nhu cầu, sinh lệnh, đọc số dư tồn, ghi giữ hàng hoặc ledger. Loại `cho_kho`
+Không tính nhu cầu, sinh lệnh, đọc số dư tồn, ghi giữ hàng hoặc ledger. Loại `nhap_kho`
 cũng gửi theo cùng luồng; các số lượng kiểm tra lần đầu còn null. Response gửi có cùng
 cấu trúc với chi tiết yêu cầu. Audit `gui` lưu trước/sau, người, thời điểm và đối tượng.
 Hộp xác nhận hiển thị đủ loại, thành phẩm, số lượng, đơn vị, hạn, nhân viên và tác động

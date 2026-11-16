@@ -19,7 +19,7 @@ const resourceFields = readFileSync(
   "utf8",
 );
 const values = {
-  loai_yeu_cau: "dap_ung",
+  loai_yeu_cau: "xuat_giao",
   mat_hang_id: "1",
   so_luong: "10",
   han_hoan_thanh: "2026-12-01",
@@ -50,22 +50,22 @@ const items = [
 ];
 const employees = [{ id: 20, ho_ten: "Nhân viên A" }];
 
-// UC-23 AC-2: Loại mặc định Đáp ứng yêu cầu, đủ hai lựa chọn và không có lựa chọn rỗng
-test("request type defaults to dap_ung and presents exactly the approved choices", () => {
+// UC-23 AC-2: Loại mặc định Sản xuất để xuất giao, đủ hai lựa chọn và không có lựa chọn rỗng
+test("request type defaults to xuat_giao and presents exactly the approved choices", () => {
   assert.deepEqual(initialRequestValues(), {
-    loai_yeu_cau: "dap_ung",
+    loai_yeu_cau: "xuat_giao",
     mat_hang_id: "",
     so_luong: "",
     han_hoan_thanh: "",
     nhan_vien_duoc_giao_id: "",
   });
   assert.deepEqual(REQUEST_TYPES, [
-    { value: "dap_ung", label: "Đáp ứng yêu cầu" },
-    { value: "cho_kho", label: "Sản xuất cho kho" },
+    { value: "xuat_giao", label: "Sản xuất để xuất giao" },
+    { value: "nhap_kho", label: "Sản xuất nhập kho" },
   ]);
   assert.deepEqual(REQUEST_TYPE_LABELS, {
-    dap_ung: "Đáp ứng yêu cầu",
-    cho_kho: "Sản xuất cho kho",
+    xuat_giao: "Sản xuất để xuất giao",
+    nhap_kho: "Sản xuất nhập kho",
   });
   assert.match(
     source,
@@ -137,7 +137,7 @@ test("assignee selector is required and retains active employee filtering", () =
 // UC-23 AC-1: R6 hộp xác nhận đủ sáu thông tin (câu không đổi tồn nằm ở impact, xem test gửi)
 test("send confirmation contains all six R6 values", () => {
   assert.deepEqual(sendConfirmEntries(values, items, employees), [
-    ["Loại yêu cầu", "Đáp ứng yêu cầu"],
+    ["Loại yêu cầu", "Sản xuất để xuất giao"],
     ["Thành phẩm", "Mountain Pro"],
     ["Số lượng cần", "10"],
     ["Đơn vị tính", "xe"],
@@ -146,12 +146,12 @@ test("send confirmation contains all six R6 values", () => {
   ]);
 });
 
-// UC-23 AC-10: Body giữ loại cho_kho, ba xe, hạn và nhân viên; không gửi trường thừa
+// UC-23 AC-10: Body giữ loại nhap_kho, ba xe, hạn và nhân viên; không gửi trường thừa
 test("stock request payload preserves its type and all required fields", () => {
   assert.deepEqual(
-    requestCreateBody({ ...values, loai_yeu_cau: "cho_kho", so_luong: "3", bom_id: 999 }),
+    requestCreateBody({ ...values, loai_yeu_cau: "nhap_kho", so_luong: "3", bom_id: 999 }),
     {
-      loai_yeu_cau: "cho_kho",
+      loai_yeu_cau: "nhap_kho",
       mat_hang_id: 1,
       so_luong: 3,
       han_hoan_thanh: "2026-12-01",
@@ -159,8 +159,8 @@ test("stock request payload preserves its type and all required fields", () => {
     },
   );
   assert.equal(
-    sendConfirmEntries({ ...values, loai_yeu_cau: "cho_kho" }, items, employees)[0][1],
-    "Sản xuất cho kho",
+    sendConfirmEntries({ ...values, loai_yeu_cau: "nhap_kho" }, items, employees)[0][1],
+    "Sản xuất nhập kho",
   );
 });
 

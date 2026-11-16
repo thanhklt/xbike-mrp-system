@@ -23,7 +23,7 @@ const record = {
   id: 1,
   ma_yeu_cau_san_xuat: "YCSX-202611-000001",
   trang_thai: "nhap",
-  loai_yeu_cau: "cho_kho",
+  loai_yeu_cau: "nhap_kho",
   mat_hang_id: 1,
   so_luong: 15,
   han_hoan_thanh: "2026-12-01",
@@ -42,14 +42,14 @@ const employees = [{ id: 20, ho_ten: "Nhân viên A" }, { id: 10, ho_ten: "Quả
 test("edit prefill and payload preserve all five current draft values", () => {
   const values = initialRequestValues(record);
   assert.deepEqual(values, {
-    loai_yeu_cau: "cho_kho",
+    loai_yeu_cau: "nhap_kho",
     mat_hang_id: "1",
     so_luong: "15",
     han_hoan_thanh: "2026-12-01",
     nhan_vien_duoc_giao_id: "20",
   });
   assert.deepEqual(requestCreateBody({ ...values, so_luong: "25" }), {
-    loai_yeu_cau: "cho_kho",
+    loai_yeu_cau: "nhap_kho",
     mat_hang_id: 1,
     so_luong: 25,
     han_hoan_thanh: "2026-12-01",
@@ -82,7 +82,7 @@ test("edit form requires every field and retains active product and employee sel
 // UC-24 AC-1: Chi tiết chỉ đọc đủ nhãn và giá trị, tên NV/người lập và các dòng tiến độ (D3)
 test("read only detail contains all approved information with employee names", () => {
   assert.deepEqual(requestDetailEntries(record, items, employees), [
-    ["Loại yêu cầu", "Sản xuất cho kho"],
+    ["Loại yêu cầu", "Sản xuất nhập kho"],
     ["Thành phẩm", "Mountain Pro"],
     ["Số lượng cần", "15"],
     ["Đơn vị tính", "xe"],

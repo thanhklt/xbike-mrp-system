@@ -12,14 +12,14 @@ YeuCauStatus = Literal[
 YeuCauSort = Literal[
     "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat"
 ]
-LoaiYeuCau = Literal["dap_ung", "cho_kho"]
+LoaiYeuCau = Literal["xuat_giao", "nhap_kho"]
 LenhStatus = Literal["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"]
 
 
 class YeuCauCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    loai_yeu_cau: LoaiYeuCau = "dap_ung"
+    loai_yeu_cau: LoaiYeuCau = "xuat_giao"
     han_hoan_thanh: date
     mat_hang_id: int = Field(gt=0, strict=True)
     so_luong: int = Field(gt=0, le=2**31 - 1, strict=True)
