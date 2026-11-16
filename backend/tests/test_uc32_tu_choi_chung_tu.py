@@ -1,7 +1,7 @@
 """UC-32 service and ASGI contracts with transactional in-memory repositories."""
 
 from copy import deepcopy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -137,14 +137,33 @@ async def test_employee_reads_reason_and_resends_without_return_to_draft(api):
         assert api.data[key] == before[key]
 
 
-@pytest.mark.parametrize("status", ["nhap", "da_duyet", "tu_choi"])
+@pytest.mark.parametrize("status", ["da_duyet", "tu_choi"])
 # UC-32 A2: Chứng từ ngoài Chờ duyệt bị 409 Chứng từ đã thay đổi, không ghi dữ liệu
+# UC-33 D4: Tách Nháp khỏi nhóm 409, Nháp có kiểm thử 404 riêng
 async def test_changed_document_state_is_conflict(api, status):
     api.data["completion"] = api.data["completion"].model_copy(update={"trang_thai": status})
     before = deepcopy(api.data)
     response = await reject(api)
     assert response.status_code == 409
     assert response.json()["error"]["message"] == "Chứng từ đã thay đổi"
+    assert_no_writes(api, before)
+    api.session.rollback.assert_awaited_once()
+
+
+@pytest.mark.parametrize("etag", [None, "", '"old"', "current"])
+# UC-33 D4: Từ chối Nháp trả 404 sau khóa trước If-Match, giữ nguyên mọi dữ liệu
+async def test_draft_rejection_is_hidden_before_if_match(api, etag, monkeypatch):
+    api.data["completion"] = api.data["completion"].model_copy(update={"trang_thai": "nhap"})
+    before = deepcopy(api.data)
+    if etag == "current":
+        etag = generate_chung_tu_etag(before["completion"])
+    monkeypatch.setattr(uc30.completion_service, "generate_chung_tu_etag", Mock(side_effect=AssertionError("Must not check ETag")))
+    headers = {"x-role": "quan_ly"}
+    if etag is not None:
+        headers["If-Match"] = etag
+    response = await api.client.post(f"{URL}/12/tu_choi", json={"ly_do": REASON}, headers=headers)
+    assert response.status_code == 404
+    assert api.events == ["lock_request", "lock_completion"]
     assert_no_writes(api, before)
     api.session.rollback.assert_awaited_once()
 

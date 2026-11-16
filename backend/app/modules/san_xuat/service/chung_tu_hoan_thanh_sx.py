@@ -17,7 +17,10 @@ from app.modules.san_xuat.ports import ChungTuHoanThanhRepository, YeuCauSanXuat
 from app.modules.san_xuat.schemas import (
     ChungTuCreate,
     ChungTuDetailResponse,
+    ChungTuListQuery,
+    ChungTuListResponse,
     ChungTuRead,
+    ListResponseMeta,
     ResponseMeta,
     YeuCauRead,
 )
@@ -42,6 +45,11 @@ def _require_scope(request: YeuCauRead, actor: dict) -> None:
         raise ForbiddenException()
 
 
+# UC-33 Xem danh sách chứng từ hoàn thành sản xuất — D4 QLK không thấy Nháp (specs/use_cases/production/UC-33.md)
+def _hidden_draft(record: ChungTuRead | None, actor: dict) -> bool:
+    return record is not None and record.trang_thai == "nhap" and "quan_ly" in actor.get("roles", [])
+
+
 class ChungTuHoanThanhService:
     def __init__(
         self, repository: ChungTuHoanThanhRepository, requests: YeuCauSanXuatRepository,
@@ -53,6 +61,18 @@ class ChungTuHoanThanhService:
         self.audit = audit
         self.transaction = transaction
         self.inventory = inventory
+
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — Main 1–4; A1, A2 chỉ QLK, chỉ đọc (specs/use_cases/production/UC-33.md)
+    async def danh_sach(
+        self, params: ChungTuListQuery, actor: dict, request_id: str,
+    ) -> ChungTuListResponse:
+        if "quan_ly" not in actor.get("roles", []):
+            raise ForbiddenException()
+        result = await self.repository.list_entries(params)
+        return ChungTuListResponse(data=result.items, meta=ListResponseMeta(
+            request_id=request_id, page=params.page, page_size=params.page_size,
+            total=result.total, total_pages=(result.total + params.page_size - 1) // params.page_size,
+        ))
 
     async def _request(self, resource_id: int, actor: dict, *, lock: bool = False) -> YeuCauRead:
         if resource_id > 2**31 - 1:
@@ -95,6 +115,7 @@ class ChungTuHoanThanhService:
         ))
 
     # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 4–6; A2 một transaction và một lần ghi sổ (specs/use_cases/production/UC-31.md)
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — D4 QLK không thấy Nháp (specs/use_cases/production/UC-33.md)
     async def duyet(
         self, resource_id: int, actor: dict, if_match: str | None, request_id: str,
     ) -> tuple[ChungTuDetailResponse, str | None]:
@@ -105,6 +126,8 @@ class ChungTuHoanThanhService:
             request = await self._request(reference.yeu_cau_san_xuat_id, actor, lock=True)
             before = await self.repository.get_for_update(resource_id)
             if before is None:
+                raise NotFoundException()
+            if _hidden_draft(before, actor):
                 raise NotFoundException()
             if not if_match or not if_match.strip():
                 raise PreconditionRequiredException()
@@ -149,6 +172,7 @@ class ChungTuHoanThanhService:
         return self._detail(after, request_id)
 
     # UC-32 Từ chối chứng từ hoàn thành sản xuất — Main 2–5; A1, A2 (specs/use_cases/production/UC-32.md)
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — D4 QLK không thấy Nháp (specs/use_cases/production/UC-33.md)
     async def tu_choi(
         self, resource_id: int, ly_do: str, actor: dict, if_match: str | None, request_id: str,
     ) -> tuple[ChungTuDetailResponse, str | None]:
@@ -159,6 +183,8 @@ class ChungTuHoanThanhService:
             await self._request(reference.yeu_cau_san_xuat_id, actor, lock=True)
             before = await self.repository.get_for_update(resource_id)
             if before is None:
+                raise NotFoundException()
+            if _hidden_draft(before, actor):
                 raise NotFoundException()
             if not if_match or not if_match.strip():
                 raise PreconditionRequiredException()
@@ -201,19 +227,25 @@ class ChungTuHoanThanhService:
         return self._detail(created, request_id)
 
     # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 6; D3 xem theo quyền (specs/use_cases/production/UC-30.md)
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — D4 QLK không thấy Nháp (specs/use_cases/production/UC-33.md)
     async def chi_tiet(
         self, resource_id: int, actor: dict, request_id: str,
     ) -> tuple[ChungTuDetailResponse, str | None]:
         record = await self._completion(resource_id)
         await self._request(record.yeu_cau_san_xuat_id, actor)
+        if _hidden_draft(record, actor):
+            raise NotFoundException()
         return self._detail(record, request_id)
 
     # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 1; A1 mở chứng từ của yêu cầu (specs/use_cases/production/UC-30.md)
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — D4 QLK không thấy Nháp (specs/use_cases/production/UC-33.md)
     async def cua_yeu_cau(
         self, resource_id: int, actor: dict, request_id: str,
     ) -> tuple[ChungTuDetailResponse, str | None]:
         request = await self._request(resource_id, actor)
         record = await self.repository.get_by_request(request.id)
+        if _hidden_draft(record, actor):
+            record = None
         return self._detail(record, request_id)
 
     # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 8–9; A3 gửi lại trực tiếp (specs/use_cases/production/UC-30.md)

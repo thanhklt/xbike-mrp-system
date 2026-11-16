@@ -130,6 +130,7 @@ test("existing completion replaces creation actions with readonly detail and sta
 });
 
 // UC-30 D3: Quyền lập/gửi theo NV được giao, trạng thái yêu cầu và chứng từ; QLK chỉ xem
+// UC-33 D4: API ẩn Nháp với QLK, khối QLK nhận data null
 test("creation and send permissions enforce all role scope and state conditions", () => {
   assert.equal(canCreateCompletion(row, null, false, "20"), true);
   assert.equal(canSendCompletion(row, draft, false, "20"), true);
@@ -147,8 +148,8 @@ test("creation and send permissions enforce all role scope and state conditions"
   ]) assert.equal(canSendCompletion(record, completion, manager, userId), false);
   assert.equal(canSendCompletion(row, { ...draft, trang_thai: "tu_choi" }, false, 20), true);
   for (const manager of [true, false]) {
-    const ui = section({ completion: draft, manager, userId: manager ? 20 : 21 });
-    assert.match(ui.render(), /HTSX-202611-000012/);
+    const ui = section({ completion: manager ? null : draft, manager, userId: manager ? 20 : 21 });
+    assert.match(ui.render(), manager ? /Chưa có chứng từ hoàn thành\./ : /HTSX-202611-000012/);
     assert.deepEqual([...ui.state.buttons.keys()], []);
   }
 });
@@ -267,10 +268,11 @@ test("completion uses its own query and mutation with loading error and disabled
 });
 
 // UC-30 D4: Khối chỉ xuất hiện khi đã bắt đầu hoặc đã có chứng từ; QLK xem cả Chờ duyệt/Đã duyệt
+// UC-33 D4: QLK chỉ nhận chứng từ đã gửi, không nhận Nháp
 test("section visibility follows production start or existing completion and manager is readonly", () => {
   const record = { ...row, started_at: null };
   assert.equal(section({ record }).render(), "");
-  for (const trang_thai of ["nhap", "tu_choi", "cho_duyet", "da_duyet"]) {
+  for (const trang_thai of ["tu_choi", "cho_duyet", "da_duyet"]) {
     const ui = section({ record, completion: { ...draft, trang_thai }, manager: true });
     const html = ui.render();
     assert.match(html, /Chứng từ hoàn thành sản xuất/);
@@ -279,6 +281,16 @@ test("section visibility follows production start or existing completion and man
     // UC-32 thêm Từ chối trước Duyệt khi chứng từ Chờ duyệt; QLK không lập/gửi.
     assert.deepEqual([...ui.state.buttons.keys()], trang_thai === "cho_duyet" ? ["Từ chối", "Duyệt"] : []);
   }
+});
+
+// UC-33 D4: QLK nhận data null khi đang thực hiện hiện thông báo, không có nút lập/gửi/duyệt/từ chối
+test("manager sees empty completion notice without any actions for hidden draft", () => {
+  const ui = section({ completion: null, manager: true });
+  const html = ui.render();
+  assert.match(html, /Chưa có chứng từ hoàn thành\./);
+  assert.doesNotMatch(html, /<button|Lập chứng từ|>Gửi|>Duyệt|>Từ chối/);
+  assert.deepEqual([...ui.state.buttons.keys()], []);
+  assert.deepEqual(ui.state.writes, []);
 });
 
 // UC-30 D4: Khối không để trơ tiêu đề khi người xem không lập được; chỉ đọc chứng từ sau khi bắt đầu sản xuất

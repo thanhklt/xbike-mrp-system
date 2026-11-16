@@ -367,18 +367,39 @@ async def test_write_permissions(api, headers, status):
 
 
 # UC-30 D3: QLK/NV được giao xem được qua cả hai GET; NV khác bị 403
-@pytest.mark.parametrize("headers,status", [({}, 200), ({"x-role": "quan_ly"}, 200), ({"x-user": "21"}, 403)])
+# UC-33 D4: QLK đọc Nháp nhận 404 hoặc null không ETag; NV vẫn đọc được Nháp
+@pytest.mark.parametrize("headers,status", [({}, 200), ({"x-role": "quan_ly"}, 404), ({"x-user": "21"}, 403)])
 async def test_read_permissions_and_etag(api, headers, status):
     await create(api)
     reset_writes(api)
     before = deepcopy(api.data)
     for path in (f"{URL}/12", BY_REQUEST):
         response = await api.client.get(path, headers=headers)
-        assert response.status_code == status
+        expected_status = 200 if status == 404 and path == BY_REQUEST else status
+        assert response.status_code == expected_status
+        if status == 404:
+            assert "etag" not in response.headers
+            if path == BY_REQUEST:
+                assert response.json()["data"] is None
         if status == 200:
             assert response.json()["data"] == before["completion"].model_dump(mode="json")
             assert response.headers["etag"] == generate_chung_tu_etag(before["completion"])
     assert_unchanged(api, before)
+
+
+# UC-33 D4: QLK vẫn đọc Chờ duyệt qua hai GET với snapshot và ETag chính xác
+async def test_manager_reads_submitted_completion_with_etag(api):
+    await create(api)
+    await send(api)
+    reset_writes(api)
+    before = deepcopy(api.data)
+    for path in (f"{URL}/12", BY_REQUEST):
+        response = await api.client.get(path, headers={"x-role": "quan_ly"})
+        assert response.status_code == 200
+        assert response.json()["data"] == before["completion"].model_dump(mode="json")
+        assert response.headers["etag"] == generate_chung_tu_etag(before["completion"])
+    assert_unchanged(api, before)
+    api.session.commit.assert_not_awaited()
 
 
 # UC-30 D3: Gọi trực tiếp service vẫn kiểm quyền, không phụ thuộc router
@@ -554,12 +575,13 @@ async def test_repository_add_and_bootstrap_contract():
 
 
 # UC-30 D1: Ứng dụng thật đăng ký đúng API mới, không thêm danh sách/duyệt/từ chối
+# UC-33 D1: Bổ sung GET danh sách bên cạnh POST lập chứng từ
 def test_application_registers_only_uc30_completion_routes():
     from app.main import app
 
     paths = app.openapi()["paths"]
     assert {path: set(methods) for path, methods in paths.items() if path.startswith(URL)} == {
-        URL: {"post"}, f"{URL}/{{id}}": {"get"}, f"{URL}/{{id}}/gui": {"post"},
+        URL: {"post", "get"}, f"{URL}/{{id}}": {"get"}, f"{URL}/{{id}}/gui": {"post"},
         f"{URL}/{{id}}/duyet": {"post"},
         f"{URL}/{{id}}/tu_choi": {"post"},
     }

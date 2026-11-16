@@ -304,9 +304,10 @@ async def test_ac3_service_rejects_non_managers(api, roles):
     api.requests.get_for_update.assert_not_awaited()
 
 
-# UC-31 D1: Nháp, từ chối, đã duyệt hoặc yêu cầu đã kết thúc đều 409 và không ghi
+# UC-31 D1: Từ chối, đã duyệt hoặc yêu cầu đã kết thúc đều 409 và không ghi
+# UC-33 D4: Tách Nháp khỏi các trạng thái gây 409
 @pytest.mark.parametrize("document,request_state", [
-    ("nhap", "dang_thuc_hien"), ("tu_choi", "dang_thuc_hien"),
+    ("tu_choi", "dang_thuc_hien"),
     ("da_duyet", "dang_thuc_hien"), ("cho_duyet", "da_huy"),
     ("cho_duyet", "hoan_thanh"), ("cho_duyet", "da_gui"),
 ])
@@ -320,6 +321,26 @@ async def test_invalid_workflow_returns_document_changed(api, document, request_
     assert api.data == before
     api.repo.lock_product.assert_not_awaited()
     api.repo.approve.assert_not_awaited()
+
+
+# UC-33 D4: Nháp bị 404 sau khóa, trước kiểm If-Match dù thiếu/cũ/đúng và không ghi
+@pytest.mark.parametrize("etag", [None, "", '"old"', "current"])
+async def test_draft_approval_is_hidden_before_if_match(api, etag, monkeypatch):
+    api.data["completion"] = api.data["completion"].model_copy(update={"trang_thai": "nhap"})
+    before = deepcopy(api.data)
+    if etag == "current":
+        etag = generate_chung_tu_etag(before["completion"])
+    monkeypatch.setattr(completion_service, "generate_chung_tu_etag", Mock(side_effect=AssertionError("Must not check ETag")))
+    response = await api.client.post(f"{URL}/12/duyet", json={}, headers={} if etag is None else {"If-Match": etag})
+    assert response.status_code == 404
+    assert api.data == before
+    assert api.events == ["request_lock", "completion_lock"]
+    api.repo.lock_product.assert_not_awaited()
+    api.repo.approve.assert_not_awaited()
+    api.audit.append.assert_not_awaited()
+    api.session.scalar.assert_not_awaited()
+    api.session.commit.assert_not_awaited()
+    api.session.rollback.assert_awaited_once()
 
 
 # UC-31 D1: If-Match bắt buộc và phải là strong ETag hiện hành của chứng từ

@@ -14,6 +14,8 @@ from app.dependencies import (
 from app.modules.san_xuat.schemas import (
     ChungTuCreate,
     ChungTuDetailResponse,
+    ChungTuListQuery,
+    ChungTuListResponse,
     GuiChungTuInput,
     GuiYeuCauInput,
     GuiYeuCauResponse,
@@ -183,6 +185,18 @@ def reject_repeated_query(request: Request) -> None:
                 for key in repeated
             ]
         )
+
+
+# UC-33 Xem danh sách chứng từ hoàn thành sản xuất — Main 1–4; A1, A2 chỉ QLK (specs/use_cases/production/UC-33.md)
+@chung_tu_hoan_thanh_router.get(
+    "", response_model=ChungTuListResponse,
+    dependencies=[Depends(write_actor), Depends(reject_repeated_query)],
+)
+async def danh_sach_chung_tu(
+    params: Annotated[ChungTuListQuery, Query()], actor: WriteActor,
+    service: CompletionService, request_id: RequestId,
+) -> ChungTuListResponse:
+    return await service.danh_sach(params, actor, request_id)
 
 
 # UC-25 Xem danh sách yêu cầu sản xuất — Main 1–3; A1, A3 (specs/use_cases/production/UC-25.md)

@@ -17,7 +17,8 @@ Lệnh sản xuất v3 và các endpoint chứng từ hoàn thành v3 đã gỡ.
 theo [UC-30](../../specs/use_cases/production/UC-30.md), plan `docs/plans/UC-30.md`,
 D1–D5 dev duyệt ngày 16/11/2026 và data model v4 §3.5. Duyệt chứng từ theo
 [UC-31](../../specs/use_cases/production/UC-31.md), plan `docs/plans/UC-31.md`,
-D1–D4 dev duyệt ngày 16/11/2026. Từ chối/danh sách (UC-32 – UC-33) chưa triển khai.
+D1–D4 dev duyệt ngày 16/11/2026. Từ chối theo UC-32; danh sách theo UC-33 và
+quy tắc UC-33 D4: QLK không thấy chứng từ Nháp, NV được giao vẫn đọc/gửi Nháp.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
 JWT được kiểm tra bằng tài khoản, vai trò và phiên bản đăng nhập/mật khẩu hiện hành.
 N chỉ đọc yêu cầu được giao đã gửi: danh sách loại `nhap` trước COUNT/phân trang;
@@ -857,10 +858,75 @@ Response `{data: ChungTuRead, meta: {request_id}}`; số lượng bằng đúng 
 `trang_thai = nhap`, `finish_time = null`, `phien_ban = 1`. Không truy cập tồn,
 giữ hàng hoặc giao dịch kho. Audit và chứng từ cùng session/transaction.
 
+## GET /api/v1/chung_tu_hoan_thanh_sx
+
+Nguồn: UC-33 Main 1–5, R1–R3, AC-1–AC-3, A1–A2; D1–D8.
+Chỉ QLK; NV/Admin → 403, chưa đăng nhập → 401. Query `ChungTuListQuery`
+strip chuỗi, cấm tham số dư/lặp: `page` ≥ 1 (mặc định 1), `page_size` 1–100
+(mặc định 20), `mat_hang_id`, `nhan_vien_id` > 0, `trang_thai`
+(`cho_duyet|da_duyet|tu_choi`), `loai_yeu_cau` (`xuat_giao|nhap_kho`),
+`tu_ngay`, `den_ngay`. Không nhận tìm kiếm hoặc sắp xếp tùy chọn.
+
+```mermaid
+sequenceDiagram
+    actor Q as Quản lý kho
+    participant FE as CompletionListPage và Collection
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant C as ChungTuHoanThanhRepository
+    participant DB as PostgreSQL
+    Q->>FE: Mở danh sách hoặc chọn bộ lọc
+    FE->>API: GET /api/v1/chung_tu_hoan_thanh_sx, query phân trang và bộ lọc
+    API->>Auth: Xác thực và vai trò quan_ly
+    alt Chưa đăng nhập hoặc NV/Admin
+        Auth-->>Q: 401 hoặc 403
+    else Được phép
+        API->>API: Validate query, cấm dư/lặp, kiểm tu_ngay không sau den_ngay
+        alt Query không hợp lệ, gồm trang_thai nhap
+            API-->>Q: 422
+        else Query hợp lệ
+            API->>S: danh_sach(params, actor, request_id)
+            S->>S: Kiểm quyền QLK cả khi gọi trực tiếp
+            S->>C: list_entries(params)
+            C->>DB: COUNT chứng từ JOIN YeuCauSanXuat, loại nhap, lọc AND
+            DB-->>C: total không gồm Nháp
+            alt offset lớn hơn hoặc bằng total
+                C-->>S: RecordPage rỗng, giữ total
+            else Còn dòng
+                C->>DB: SELECT cùng JOIN và WHERE, finish_time DESC, id DESC, OFFSET và LIMIT
+                DB-->>C: Chứng từ và mã yêu cầu, mặt hàng, loại yêu cầu
+                C-->>S: RecordPage ChungTuListItem và total
+            end
+            S-->>API: ChungTuListResponse, ListResponseMeta
+            API-->>FE: 200 data và meta, không ETag
+            alt Không khớp tiêu chí
+                FE-->>Q: Chưa có dữ liệu phù hợp, total và total_pages bằng 0
+            else Có dữ liệu
+                FE-->>Q: Chín cột, tên từ catalog và nhân viên, giờ Việt Nam
+                Q->>FE: Mã chứng từ hoặc Mở
+                FE-->>Q: /kho/yeu-cau/yeu_cau_san_xuat_id để duyệt hoặc từ chối
+            end
+        end
+    end
+```
+
+Lọc ngày trên `finish_time`: từ 00:00 ngày bắt đầu (bao gồm) đến 00:00 ngày
+sau ngày kết thúc (không bao gồm), múi giờ `Asia/Ho_Chi_Minh`, đổi sang UTC.
+ID bộ lọc vượt INT32 không khớp dòng nào. Mỗi dòng gồm toàn bộ `ChungTuRead`
+và `ma_yeu_cau_san_xuat`, `mat_hang_id`, `loai_yeu_cau`; API không trả tên.
+Meta gồm `request_id`, `page`, `page_size`, `total`, `total_pages`; không khớp
+trả `data: []`, `total: 0`, `total_pages: 0`; trang vượt tổng giữ nguyên total.
+Chỉ đọc, không khóa, không commit, không audit. Lỗi nội bộ → 500.
+QLK có menu sau Nhu cầu bổ sung linh kiện; route nằm trong RoleGate của `/kho`.
+Lịch sử thao tác giữ nguyên theo D8, gồm cả snapshot tạo Nháp; không sửa module audit.
+
 ## GET /api/v1/chung_tu_hoan_thanh_sx/{id}
 
-Nguồn: UC-30 Main 6, A1, A3; D1, D3. QLK hoặc NV được giao xem cùng dữ liệu,
-không phân trang, không query. QLK không có quyền lập/gửi.
+Nguồn: UC-30 Main 6, A1, A3; D1, D3 và UC-33 D4. NV được giao đọc mọi trạng thái;
+QLK chỉ thấy chứng từ đã gửi, Nháp → 404. Không phân trang, không query.
+QLK không có quyền lập/gửi. Dùng chung hàm `_hidden_draft` với tra theo yêu cầu,
+duyệt và từ chối.
 
 ```mermaid
 sequenceDiagram
@@ -892,6 +958,8 @@ sequenceDiagram
                     S-->>U: 404
                 else NV khác người được giao
                     S-->>U: 403
+                else QLK và chứng từ Nháp
+                    S-->>U: 404, không ETag
                 else NV được giao hoặc QLK
                     S-->>API: ChungTuDetailResponse và hash ETag
                     API-->>U: 200, ETag
@@ -908,7 +976,8 @@ Response có toàn bộ trường `ChungTuRead`, gồm `finish_time`, thông tin
 ## GET /api/v1/yeu_cau_san_xuat/{id}/chung_tu_hoan_thanh
 
 Nguồn: UC-30 Main 1–2, A1; D1, D3–D4. Cùng quyền xem như GET chứng từ;
-response `{data: ChungTuRead | null, meta: {request_id}}`.
+response `{data: ChungTuRead | null, meta: {request_id}}`. UC-33 D4: QLK gặp Nháp
+nhận `data: null`, không ETag; NV được giao vẫn đọc Nháp 200 với ETag.
 
 ```mermaid
 sequenceDiagram
@@ -938,7 +1007,7 @@ sequenceDiagram
             else NV được giao hoặc QLK
                 S->>C: get_by_request(id)
                 C->>DB: SELECT ChungTuHoanThanhSx theo yêu cầu
-                alt Không có chứng từ
+                alt Không có chứng từ hoặc QLK gặp chứng từ Nháp
                     S-->>API: data null, meta request_id
                     API-->>U: 200, không ETag
                 else Có chứng từ
@@ -954,6 +1023,7 @@ Không ghi, không khóa, không audit, không phân trang. Lỗi nội bộ →
 FE dùng `useResource` bọc `QueryState`; chỉ hiện khối khi yêu cầu có `started_at`
 hoặc đã có chứng từ. Chưa có chứng từ thì NV đủ điều kiện mở form chỉ đọc,
 Lưu chỉ POST id yêu cầu. QLK có thể duyệt chứng từ Chờ duyệt theo UC-31 bên dưới.
+QLK gặp Nháp hiển thị "Chưa có chứng từ hoàn thành.", không có nút lập/gửi/duyệt/từ chối.
 
 ## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/gui
 
@@ -1085,6 +1155,8 @@ sequenceDiagram
                 C->>DB: SELECT ChungTuHoanThanhSx FOR UPDATE, refresh
                 alt Thiếu chứng từ/yêu cầu hoặc ID vượt INT32
                     S-->>Q: 404 và rollback
+                else Chứng từ Nháp, ẩn với QLK theo UC-33 D4
+                    S-->>Q: 404 và rollback trước khi kiểm If-Match
                 else Thiếu hoặc rỗng If-Match
                     S-->>Q: 428 thieu_if_match và rollback
                 else ETag cũ, weak hoặc wildcard
@@ -1192,6 +1264,8 @@ sequenceDiagram
                 C->>DB: SELECT ChungTuHoanThanhSx FOR UPDATE, refresh
                 alt Thiếu chứng từ/yêu cầu hoặc ID vượt INT32
                     S-->>Q: 404 và rollback
+                else Chứng từ Nháp, ẩn với QLK theo UC-33 D4
+                    S-->>Q: 404 và rollback trước khi kiểm If-Match
                 else Thiếu hoặc rỗng If-Match
                     S-->>Q: 428 thieu_if_match và rollback
                 else ETag cũ, weak hoặc wildcard
@@ -1237,8 +1311,8 @@ Không có endpoint hoặc nút đưa về Nháp.
 
 ## Phạm vi và kiểm chứng
 
-- Không còn endpoint `/api/v1/lenh_san_xuat*`; trả 404. Chứng từ có bốn endpoint UC-30, POST duyệt UC-31 và POST từ chối UC-32.
-- UC-33 chưa triển khai, không mô tả như chức năng đang có.
+- Không còn endpoint `/api/v1/lenh_san_xuat*`; trả 404. Chứng từ có bốn endpoint UC-30, POST duyệt UC-31, POST từ chối UC-32 và GET danh sách UC-33.
+- UC-33 dùng service/ASGI với repository giả và SQL PostgreSQL biên dịch; FE render trang và Collection/DataTable thật với hook giả, kiểm query GET qua axios adapter. Không chạy PostgreSQL thật hoặc Playwright.
 - UC-29 dùng service/ASGI với port giả có trạng thái, transaction commit/rollback thật qua
   session giả, và biên dịch SQL PostgreSQL. Không chạy DB/Docker hoặc Playwright.
 - ORM chứng từ được đối chiếu cột, kiểu, nullable/default, FK, UNIQUE, check và index với `init.sql`.

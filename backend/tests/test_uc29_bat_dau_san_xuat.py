@@ -286,6 +286,7 @@ async def test_service_checks_scope(api, actor):
 
 # UC-29 D6: Router lệnh và chứng từ v3 đã gỡ khỏi ứng dụng thật, mọi đường dẫn cũ trả 404
 @pytest.mark.parametrize("resource", ["lenh_san_xuat", "chung_tu_hoan_thanh_sx"])
+# UC-33 D1: Chứng từ có GET danh sách và POST lập cùng URL; các route v3 vẫn bị gỡ
 async def test_removed_v3_routes_return_404(resource):
     from app.main import app
 
@@ -297,6 +298,7 @@ async def test_removed_v3_routes_return_404(resource):
             f"/api/v1/{resource}/{{id}}/duyet",  # UC-31
             f"/api/v1/{resource}/{{id}}/tu_choi",  # UC-32
         }
+        assert set(app.openapi()["paths"][f"/api/v1/{resource}"]) == {"post", "get"}
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
         for path in ("", "/1", "/1/bat_dau", "/1/gui", "/1/duyet", "/1/tu_choi", "/1/huy", "/1/ve_nhap", "/1/vat_tu"):
             if resource == "chung_tu_hoan_thanh_sx" and path in {"", "/1", "/1/gui", "/1/duyet", "/1/tu_choi"}:

@@ -1,18 +1,63 @@
 """Completion persistence; transaction boundaries belong to the service."""
 
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text, update
+from sqlalchemy import false, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictException, InvalidWorkflowState
-from app.modules.san_xuat.models import ChungTuHoanThanhSx
-from app.modules.san_xuat.schemas import ChungTuRead
+from app.modules.san_xuat.models import ChungTuHoanThanhSx, YeuCauSanXuat
+from app.modules.san_xuat.schemas import ChungTuListItem, ChungTuListQuery, ChungTuRead
+from app.shared.records import RecordPage
 
 
 class SqlAlchemyChungTuHoanThanhRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — Main 2–4; R2 lọc AND, D4 loại Nháp, D6 thứ tự (specs/use_cases/production/UC-33.md)
+    async def list_entries(self, params: ChungTuListQuery) -> RecordPage[ChungTuListItem]:
+        query = select(
+            ChungTuHoanThanhSx,
+            YeuCauSanXuat.ma_yeu_cau_san_xuat,
+            YeuCauSanXuat.mat_hang_id,
+            YeuCauSanXuat.loai_yeu_cau,
+        ).join(
+            YeuCauSanXuat, ChungTuHoanThanhSx.yeu_cau_san_xuat_id == YeuCauSanXuat.id,
+        ).where(ChungTuHoanThanhSx.trang_thai != "nhap")
+        for column, value in (
+            (YeuCauSanXuat.mat_hang_id, params.mat_hang_id),
+            (ChungTuHoanThanhSx.nhan_vien_id, params.nhan_vien_id),
+            (ChungTuHoanThanhSx.trang_thai, params.trang_thai),
+            (YeuCauSanXuat.loai_yeu_cau, params.loai_yeu_cau),
+        ):
+            if value is not None:
+                query = query.where(
+                    false() if isinstance(value, int) and value > 2**31 - 1 else column == value
+                )
+        local_zone = ZoneInfo("Asia/Ho_Chi_Minh")
+        if params.tu_ngay:
+            start = datetime.combine(params.tu_ngay, time.min, local_zone).astimezone(timezone.utc)
+            query = query.where(ChungTuHoanThanhSx.finish_time >= start)
+        if params.den_ngay:
+            end = datetime.combine(params.den_ngay, time.min, local_zone).astimezone(
+                timezone.utc
+            ) + timedelta(days=1)
+            query = query.where(ChungTuHoanThanhSx.finish_time < end)
+        total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        offset = (params.page - 1) * params.page_size
+        if offset >= total:
+            return RecordPage([], total)
+        rows = (await self.session.execute(query.order_by(
+            ChungTuHoanThanhSx.finish_time.desc(), ChungTuHoanThanhSx.id.desc(),
+        ).offset(offset).limit(params.page_size))).all()
+        return RecordPage([
+            ChungTuListItem(
+                **ChungTuRead.model_validate(record).model_dump(),
+                ma_yeu_cau_san_xuat=code, mat_hang_id=item_id, loai_yeu_cau=kind,
+            ) for record, code, item_id, kind in rows
+        ], total)
 
     async def lock_product(self, item_id: int) -> None:
         item = await self.session.scalar(

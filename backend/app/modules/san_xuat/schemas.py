@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
@@ -155,6 +155,36 @@ class ChungTuDetailResponse(BaseModel):
     meta: ResponseMeta
 
 
+class ChungTuListQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    mat_hang_id: int | None = Field(default=None, gt=0)
+    nhan_vien_id: int | None = Field(default=None, gt=0)
+    trang_thai: Literal["cho_duyet", "da_duyet", "tu_choi"] | None = None
+    loai_yeu_cau: LoaiYeuCau | None = None
+    tu_ngay: date | None = None
+    den_ngay: date | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_query_strings(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
+            raise ValueError("tu_ngay phải nhỏ hơn hoặc bằng den_ngay")
+        return self
+
+
+class ChungTuListItem(ChungTuRead):
+    ma_yeu_cau_san_xuat: str
+    mat_hang_id: int
+    loai_yeu_cau: LoaiYeuCau
+
+
 class HuyPreviewResponse(BaseModel):
     data: HuyPreview
     meta: ResponseMeta
@@ -165,6 +195,11 @@ class ListResponseMeta(ResponseMeta):
     page_size: int
     total: int
     total_pages: int
+
+
+class ChungTuListResponse(BaseModel):
+    data: list[ChungTuListItem]
+    meta: ListResponseMeta
 
 
 class YeuCauDetailResponse(BaseModel):

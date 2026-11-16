@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Protocol
 
 from app.modules.san_xuat.schemas import (
+    ChungTuListItem,
+    ChungTuListQuery,
     ChungTuRead,
     HangTraLine,
     YeuCauCreate,
@@ -19,6 +21,7 @@ class AssigneeReader(Protocol):
 
 
 class ChungTuHoanThanhRepository(Protocol):
+    async def list_entries(self, params: ChungTuListQuery) -> RecordPage[ChungTuListItem]: ...
     async def get_by_id(self, resource_id: int) -> ChungTuRead | None: ...
     async def get_by_request(self, request_id: int) -> ChungTuRead | None: ...
     async def get_for_update(self, resource_id: int) -> ChungTuRead | None: ...

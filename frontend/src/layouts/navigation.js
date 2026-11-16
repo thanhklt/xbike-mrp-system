@@ -28,6 +28,7 @@ const navigation = {
         ["/kho/bom", "BOM"],
         ["/kho/yeu-cau", "Yêu cầu sản xuất"],
         ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"],
+        ["/kho/chung-tu-hoan-thanh", "Chứng từ hoàn thành sản xuất"],
         ["/kho/phieu-xuat", "Phiếu xuất kho"],
       ],
     },

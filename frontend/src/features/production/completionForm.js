@@ -1,5 +1,28 @@
-import { dateTime, itemName, number } from "../../lib/format.js";
-import { REQUEST_TYPE_LABELS } from "./requestForm.js";
+import { dateTime, employeeLabel, itemName, number } from "../../lib/format.js";
+import { dateFilters } from "../../components/filterFields.js";
+import { REQUEST_TYPES, REQUEST_TYPE_LABELS } from "./requestForm.js";
+
+// UC-33 Xem danh sách chứng từ hoàn thành sản xuất — Main 3–4; R2 lọc loại, thành phẩm, nhân viên và ngày (specs/use_cases/production/UC-33.md)
+export function completionListFilters(items, employees) {
+  return [
+    {
+      name: "loai_yeu_cau", label: "Loại yêu cầu", as: "select",
+      options: [{ value: "", label: "Tất cả" }, ...REQUEST_TYPES],
+    },
+    {
+      name: "mat_hang_id", label: "Thành phẩm", as: "select",
+      options: [{ value: "", label: "Tất cả" }, ...items
+        .filter((item) => item.loai_mat_hang === "thanh_pham")
+        .map((item) => ({ value: String(item.id), label: itemName(items, item.id) }))],
+    },
+    {
+      name: "nhan_vien_id", label: "Nhân viên", as: "select",
+      options: [{ value: "", label: "Tất cả" }, ...employees
+        .map((employee) => ({ value: String(employee.id), label: employeeLabel(employee) }))],
+    },
+    ...dateFilters,
+  ];
+}
 
 export function canCreateCompletion(record, completion, manager, userId) {
   return Boolean(record && !completion && !manager
