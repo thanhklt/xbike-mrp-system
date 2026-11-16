@@ -13,8 +13,10 @@ Nhu cầu bổ sung theo [UC-27](../../specs/use_cases/production/UC-27.md),
 plan `docs/plans/UC-27.md` và D1–D6 dev duyệt ngày 16/11/2026.
 Hủy theo [UC-28](../../specs/use_cases/production/UC-28.md).
 Bắt đầu theo [UC-29](../../specs/use_cases/production/UC-29.md), D1–D6d dev duyệt ngày 16/11/2026.
-Lệnh sản xuất v3 và các endpoint chứng từ hoàn thành v3 đã gỡ. ORM
-`ChungTuHoanThanhSx` khớp v4; chức năng chứng từ sẽ dựng lại trên yêu cầu ở UC-30 – UC-33.
+Lệnh sản xuất v3 và các endpoint chứng từ hoàn thành v3 đã gỡ. Lập/xem/gửi chứng từ v4
+theo [UC-30](../../specs/use_cases/production/UC-30.md), plan `docs/plans/UC-30.md`,
+D1–D5 dev duyệt ngày 16/11/2026 và data model v4 §3.5. Duyệt/từ chối/danh sách
+chứng từ (UC-31 – UC-33) chưa triển khai.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
 JWT được kiểm tra bằng tài khoản, vai trò và phiên bản đăng nhập/mật khẩu hiện hành.
 N chỉ đọc yêu cầu được giao đã gửi: danh sách loại `nhap` trước COUNT/phân trang;
@@ -788,11 +790,264 @@ ghi toàn bộ bản ghi trước/sau, trong đó `du_lieu_sau.started_at` là t
 Không có hộp xác nhận trên FE. Lỗi bắt đầu hiển thị qua `startError`/`ErrorNotice` riêng;
 thành công thông báo “Đã ghi nhận bắt đầu sản xuất.” và tải lại dữ liệu qua `useWrite`.
 
+## POST /api/v1/chung_tu_hoan_thanh_sx
+
+Nguồn: UC-30 Main 2–5, R1–R2, R6, AC-1, AC-4, A1; D1–D2, D5.
+Body bắt buộc `{yeu_cau_san_xuat_id: int > 0}`, `extra="forbid"`; không nhận số lượng,
+thời điểm, trạng thái, người lập; query bất kỳ → 422. Chỉ N được giao được lập;
+QLK/Admin hoặc N khác → 403. Không cần `If-Match` khi tạo.
+Mã `HTSX-YYYYMM-NNNNNN` dùng `nextval` sequence `id` của `"ChungTuHoanThanhSx"`,
+tháng theo `Asia/Ho_Chi_Minh`. Ràng buộc UNIQUE trên yêu cầu cùng khóa yêu cầu
+ngăn tạo trùng; 409 có id chứng từ hiện có trong thông điệp.
+
+```mermaid
+sequenceDiagram
+    actor N as Nhân viên
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant R as YeuCauSanXuatRepository
+    participant C as ChungTuHoanThanhRepository
+    participant A as AuditService
+    participant DB as PostgreSQL
+    N->>API: POST /chung_tu_hoan_thanh_sx
+    API->>Auth: Xác thực và vai trò nhan_vien
+    alt Chưa đăng nhập hoặc sai vai trò
+        Auth-->>N: 401 hoặc 403
+    else Được phép gọi
+        API->>API: Validate body, reject_query
+        alt ID không dương, thiếu body hoặc trường lạ
+            API-->>N: 422
+        else Input hợp lệ
+            API->>S: tao(payload, actor, request_id)
+            S->>R: get_for_update(yeu_cau_id)
+            R->>DB: SELECT YeuCauSanXuat FOR UPDATE
+            alt Yêu cầu thiếu hoặc ID vượt INT32
+                S-->>N: 404, rollback
+            else Không phải NV được giao
+                S-->>N: 403, rollback
+            else Trong phạm vi
+                S->>C: get_by_request(yeu_cau_id)
+                C->>DB: SELECT ChungTuHoanThanhSx theo yêu cầu
+                alt Đã có chứng từ
+                    S-->>N: 409 kèm id hiện có, rollback
+                else Sai trạng thái, chưa started_at hoặc số cần sản xuất không dương
+                    S-->>N: 409, rollback
+                else Đủ điều kiện
+                    S->>C: add(request.id, so_luong_can_san_xuat, actor.id)
+                    C->>DB: nextval và tháng giờ Việt Nam; INSERT Nháp, finish_time NULL
+                    S->>A: append tao, None sang nhap, người thực hiện và snapshot
+                    A->>DB: INSERT LichSuThaoTac cùng transaction
+                    alt Ghi chứng từ, audit hoặc commit lỗi
+                        S->>DB: ROLLBACK
+                        S-->>N: 409 nếu vi phạm ràng buộc, lỗi nội bộ 500
+                    else Thành công
+                        S->>DB: COMMIT
+                        S-->>API: ChungTuDetailResponse và hash ETag
+                        API-->>N: 201, ETag, Location /api/v1/chung_tu_hoan_thanh_sx/{id}
+                    end
+                end
+            end
+        end
+    end
+```
+
+Response `{data: ChungTuRead, meta: {request_id}}`; số lượng bằng đúng số cần sản xuất,
+`trang_thai = nhap`, `finish_time = null`, `phien_ban = 1`. Không truy cập tồn,
+giữ hàng hoặc giao dịch kho. Audit và chứng từ cùng session/transaction.
+
+## GET /api/v1/chung_tu_hoan_thanh_sx/{id}
+
+Nguồn: UC-30 Main 6, A1, A3; D1, D3. QLK hoặc NV được giao xem cùng dữ liệu,
+không phân trang, không query. QLK không có quyền lập/gửi.
+
+```mermaid
+sequenceDiagram
+    actor U as NV hoặc QLK
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant C as ChungTuHoanThanhRepository
+    participant R as YeuCauSanXuatRepository
+    participant DB as PostgreSQL
+    U->>API: GET /chung_tu_hoan_thanh_sx/{id}
+    API->>Auth: Vai trò nhan_vien hoặc quan_ly
+    alt Phiên hoặc quyền không hợp lệ
+        Auth-->>U: 401 hoặc 403
+    else Hợp lệ
+        API->>API: Validate id dương, reject_query
+        alt ID không dương hoặc có query
+            API-->>U: 422
+        else Input hợp lệ
+            API->>S: chi_tiet(id, actor, request_id)
+            S->>C: get_by_id(id)
+            C->>DB: SELECT ChungTuHoanThanhSx, không khóa
+            alt Không có chứng từ hoặc ID vượt INT32
+                S-->>U: 404
+            else Có chứng từ
+                S->>R: get_by_id(yeu_cau_san_xuat_id)
+                R->>DB: SELECT YeuCauSanXuat, không khóa
+                alt Yêu cầu không có
+                    S-->>U: 404
+                else NV khác người được giao
+                    S-->>U: 403
+                else NV được giao hoặc QLK
+                    S-->>API: ChungTuDetailResponse và hash ETag
+                    API-->>U: 200, ETag
+                end
+            end
+        end
+    end
+```
+
+Response có toàn bộ trường `ChungTuRead`, gồm `finish_time`, thông tin/lý do từ chối,
+`phien_ban`. ETag hash toàn bản ghi, giống ETag của endpoint tra theo yêu cầu.
+Đọc không ghi audit, không khóa, không commit dữ liệu nghiệp vụ. Lỗi nội bộ → 500.
+
+## GET /api/v1/yeu_cau_san_xuat/{id}/chung_tu_hoan_thanh
+
+Nguồn: UC-30 Main 1–2, A1; D1, D3–D4. Cùng quyền xem như GET chứng từ;
+response `{data: ChungTuRead | null, meta: {request_id}}`.
+
+```mermaid
+sequenceDiagram
+    actor U as NV hoặc QLK
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant R as YeuCauSanXuatRepository
+    participant C as ChungTuHoanThanhRepository
+    participant DB as PostgreSQL
+    U->>API: GET /yeu_cau_san_xuat/{id}/chung_tu_hoan_thanh
+    API->>Auth: Vai trò nhan_vien hoặc quan_ly
+    alt Phiên hoặc quyền không hợp lệ
+        Auth-->>U: 401 hoặc 403
+    else Hợp lệ
+        API->>API: Validate id dương, reject_query
+        alt ID không dương hoặc có query
+            API-->>U: 422
+        else Input hợp lệ
+            API->>S: cua_yeu_cau(id, actor, request_id)
+            S->>R: get_by_id(id)
+            R->>DB: SELECT YeuCauSanXuat, không khóa
+            alt Yêu cầu thiếu hoặc ID vượt INT32
+                S-->>U: 404
+            else NV không được giao
+                S-->>U: 403
+            else NV được giao hoặc QLK
+                S->>C: get_by_request(id)
+                C->>DB: SELECT ChungTuHoanThanhSx theo yêu cầu
+                alt Không có chứng từ
+                    S-->>API: data null, meta request_id
+                    API-->>U: 200, không ETag
+                else Có chứng từ
+                    S-->>API: ChungTuDetailResponse và hash ETag
+                    API-->>U: 200, ETag chứng từ
+                end
+            end
+        end
+    end
+```
+
+Không ghi, không khóa, không audit, không phân trang. Lỗi nội bộ → 500.
+FE dùng `useResource` bọc `QueryState`; chỉ hiện khối khi yêu cầu có `started_at`
+hoặc đã có chứng từ. Chưa có chứng từ thì NV đủ điều kiện mở form chỉ đọc,
+Lưu chỉ POST id yêu cầu. QLK chỉ xem.
+
+## POST /api/v1/chung_tu_hoan_thanh_sx/{id}/gui
+
+Nguồn: UC-30 Main 6–9, R3–R6, AC-2–AC-3, AC-5, A2–A3; D1–D4.
+Body bắt buộc `{}`, không nhận thời điểm/số lượng hoặc query. Chỉ NV được giao;
+QLK/Admin/NV khác → 403. Bắt buộc `If-Match` strong ETag của chứng từ đã xem.
+Khóa yêu cầu trước rồi khóa chứng từ; lượt đọc chứng từ đầu chỉ tìm id yêu cầu,
+không khóa. Sau khi khóa chứng từ, đọc lại bằng `populate_existing=True`.
+
+```mermaid
+sequenceDiagram
+    actor N as Nhân viên
+    participant FE as Khối chứng từ và hộp xác nhận
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant C as ChungTuHoanThanhRepository
+    participant R as YeuCauSanXuatRepository
+    participant A as AuditService
+    participant DB as PostgreSQL
+    N->>FE: Gửi hoặc Gửi lại
+    FE-->>N: Chứng từ, Thành phẩm, Số lượng hoàn thành, Đơn vị tính; Chưa cộng tồn thành phẩm
+    alt Đóng hộp xác nhận
+        FE-->>N: Không POST, giữ nguyên trạng thái và finish_time
+    else Xác nhận
+        FE->>API: POST /chung_tu_hoan_thanh_sx/{id}/gui, body {}, If-Match
+        API->>Auth: Vai trò nhan_vien
+        alt Chưa đăng nhập hoặc sai vai trò
+            Auth-->>N: 401 hoặc 403
+        else Hợp lệ
+            API->>API: Validate id/body rỗng, reject_query
+            alt Input không hợp lệ
+                API-->>N: 422
+            else Input hợp lệ
+                API->>S: gui(id, actor, If-Match, request_id)
+                S->>C: get_by_id(id), chỉ tìm yêu cầu
+                C->>DB: SELECT ChungTuHoanThanhSx, không khóa
+                alt Thiếu chứng từ hoặc ID vượt INT32
+                    S-->>N: 404, rollback
+                else Có chứng từ
+                    S->>R: get_for_update(yeu_cau_san_xuat_id)
+                    R->>DB: SELECT YeuCauSanXuat FOR UPDATE
+                    alt Yêu cầu thiếu hoặc NV không được giao
+                        S-->>N: 404 hoặc 403, rollback
+                    else Trong phạm vi
+                        S->>C: get_for_update(id)
+                        C->>DB: SELECT ChungTuHoanThanhSx FOR UPDATE và refresh
+                        alt Chứng từ không còn
+                            S-->>N: 404, rollback
+                        else If-Match thiếu hoặc blank
+                            S-->>N: 428 thieu_if_match, rollback
+                        else ETag cũ, weak hoặc wildcard
+                            S-->>N: 412 du_lieu_da_thay_doi, rollback
+                        else Chứng từ không phải nhap/tu_choi hoặc yêu cầu không dang_thuc_hien
+                            S-->>N: 409, rollback
+                        else Đủ điều kiện
+                            S->>C: update cho_duyet, finish_time giờ máy chủ, xóa thông tin xử lý/từ chối
+                            C->>DB: UPDATE, phien_ban + 1, updated_at mới
+                            S->>A: append gui hoặc gui_lai, trạng thái và snapshot trước/sau
+                            A->>DB: INSERT LichSuThaoTac cùng transaction
+                            alt Ghi hoặc commit lỗi
+                                S->>DB: ROLLBACK
+                                S-->>N: 409 nếu vi phạm ràng buộc, lỗi nội bộ 500
+                            else Thành công
+                                S->>DB: COMMIT
+                                S-->>API: ChungTuDetailResponse và hash ETag mới
+                                API-->>FE: 200, ETag
+                                FE-->>N: Đã gửi chứng từ hoàn thành.
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+```
+
+`nhap → cho_duyet` ghi `gui`; `tu_choi → cho_duyet` trực tiếp ghi `gui_lai`.
+Mỗi lần xác nhận đều ghi mới `finish_time`; xóa `nguoi_xu_ly_id`, `xu_ly_at`,
+`ly_do_tu_choi`, giữ lý do cũ trong snapshot audit và lịch sử từ chối trước.
+Audit có `nhan_vien_id`, loại `chung_tu_hoan_thanh_san_xuat`, trạng thái trước/sau
+và toàn bộ snapshot trước/sau. Không đổi yêu cầu, tồn, giữ hàng hoặc giao dịch kho.
+Lỗi POST hiển thị trong hộp xác nhận, lỗi lập có `ErrorNotice` riêng; `useWrite`
+tải lại dữ liệu sau thành công. Không có endpoint sửa Nháp, về Nháp, duyệt/từ chối
+hoặc danh sách chứng từ trong UC-30. Tất cả bốn endpoint dùng envelope lỗi hợp đồng.
+
 ## Phạm vi và kiểm chứng
 
-- Không còn endpoint `/api/v1/lenh_san_xuat*` và `/api/v1/chung_tu_hoan_thanh_sx*`; trả 404.
-- Chứng từ hoàn thành sẽ dựng lại ở UC-30 – UC-33; chưa có endpoint v4 của chứng từ trong tác vụ này.
+- Không còn endpoint `/api/v1/lenh_san_xuat*`; trả 404. Chứng từ chỉ có bốn endpoint UC-30 bên trên.
+- UC-31 – UC-33 chưa triển khai, không mô tả như chức năng đang có.
 - UC-29 dùng service/ASGI với port giả có trạng thái, transaction commit/rollback thật qua
   session giả, và biên dịch SQL PostgreSQL. Không chạy DB/Docker hoặc Playwright.
 - ORM chứng từ được đối chiếu cột, kiểu, nullable/default, FK, UNIQUE, check và index với `init.sql`.
+- UC-30 dùng service/ASGI với repository giả có trạng thái; cố định thời gian gửi, kiểm rollback,
+  thứ tự khóa, hash ETag, mã từ sequence và không đổi tồn/giữ/ledger. Không chạy DB/Docker/seed.
+- Test FE UC-30 chạy các handler và render khối bằng React, kiểm nội dung xác nhận,
+  đóng hộp không POST, quyền, thông tin chỉ đọc, trạng thái tải/lỗi/đang ghi; không Playwright.
 - Mermaid được đối chiếu source; kết quả kiểm tra cú pháp/render được báo khi bàn giao.

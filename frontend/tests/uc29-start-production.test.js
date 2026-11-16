@@ -136,7 +136,7 @@ test("retired pages and APIs are gone and order wildcard routes redirect", async
   }
   assert.doesNotMatch(routes, /path="\/(?:kho\/duyet-hoan-thanh|nv\/hoan-thanh)/);
   assert.equal(Object.hasOwn(API, "orders"), false);
-  assert.equal(Object.hasOwn(API, "completions"), false);
+  assert.equal(API.completions, "/chung_tu_hoan_thanh_sx");
   for (const page of ["ProductionPage", "CompletionsPage"]) {
     assert.equal(existsSync(new URL(`../src/features/production/${page}.jsx`, import.meta.url)), false);
   }

@@ -7,10 +7,11 @@ import {
   useChoices,
   useCollection,
   useDetail,
+  useResource,
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { itemName, formatDate } from "../../lib/format.js";
+import { itemName, formatDate, number } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -45,6 +46,13 @@ import {
   requestCreateBody,
   sendConfirmEntries,
 } from "./requestForm.js";
+import {
+  canCreateCompletion,
+  canSendCompletion,
+  completionEntries,
+  completionConfirmEntries,
+  completionSendLabel,
+} from "./completionForm.js";
 
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
@@ -331,6 +339,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
             <Badge status={record.trang_thai} />
           </div>
           <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
+          <CompletionSection record={record} items={items} manager={manager} userId={userId} />
         </>
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
@@ -433,5 +442,93 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
         </div>
       )}
     </div>
+  );
+}
+
+function CompletionSection({ record, items, manager, userId }) {
+  // Chứng từ chỉ có sau khi bắt đầu sản xuất; không đọc với yêu cầu chưa bắt đầu.
+  const query = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {}, Boolean(record.id && record.started_at));
+  const completion = query.data?.data;
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const completionMutation = useWrite();
+  const { confirm, notify } = useFeedback();
+  const canCreate = canCreateCompletion(record, completion, manager, userId);
+  const canSend = canSendCompletion(record, completion, manager, userId);
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 2–3 mở biểu mẫu chỉ đọc (specs/use_cases/production/UC-30.md)
+  function openCompletion() {
+    setCreateError(null);
+    setCreating(true);
+  }
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 4–5 lưu Nháp (specs/use_cases/production/UC-30.md)
+  async function saveCompletion() {
+    setCreateError(null);
+    try {
+      await completionMutation.mutateAsync({
+        path: API.completions,
+        body: { yeu_cau_san_xuat_id: record.id },
+        versioned: false,
+      });
+      setCreating(false);
+      notify("Đã lưu chứng từ hoàn thành.");
+    } catch (failure) {
+      setCreateError(failure);
+    }
+  }
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 6–9; A2, A3 xác nhận mới gửi (specs/use_cases/production/UC-30.md)
+  function sendCompletion() {
+    const etag = query.data.etag;
+    confirm({
+      title: completion.trang_thai === "tu_choi" ? "Gửi lại chứng từ hoàn thành" : "Gửi chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      content: <InfoGrid entries={completionConfirmEntries(completion, record, items)} />,
+      impact: "Chưa cộng tồn thành phẩm.",
+      onConfirm: async () => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "gui"].join("/"),
+          body: {},
+          etag,
+        });
+        notify("Đã gửi chứng từ hoàn thành.");
+      },
+    });
+  }
+
+  if (!record.started_at && !completion) return null;
+  return (
+    <section className="stack">
+      <h3>Chứng từ hoàn thành sản xuất</h3>
+      <QueryState query={query}>
+        <ErrorNotice error={createError} />
+        {completion ? (
+          <InfoGrid entries={completionEntries(completion).map(([label, value]) => [
+            label, label === "Trạng thái" ? <Badge status={value} /> : value,
+          ])} />
+        ) : !canCreate ? (
+          <Notice>Chưa có chứng từ hoàn thành.</Notice>
+        ) : (creating ? (
+          <>
+            <InfoGrid entries={[["Số lượng hoàn thành", number(record.so_luong_can_san_xuat)]]} />
+            <Notice>Thời điểm hoàn thành do hệ thống ghi khi bạn xác nhận gửi.</Notice>
+            <div className="actions actions-end">
+              <Button variant="secondary" disabled={completionMutation.isPending} onClick={() => setCreating(false)}>Bỏ</Button>
+              <Button disabled={completionMutation.isPending} onClick={saveCompletion}>Lưu</Button>
+            </div>
+          </>
+        ) : (
+          <div className="actions actions-end">
+            <Button disabled={completionMutation.isPending} onClick={openCompletion}>Lập chứng từ hoàn thành</Button>
+          </div>
+        ))}
+        {canSend && (
+          <div className="actions actions-end">
+            <Button disabled={completionMutation.isPending} onClick={sendCompletion}>{completionSendLabel(completion)}</Button>
+          </div>
+        )}
+      </QueryState>
+    </section>
   );
 }

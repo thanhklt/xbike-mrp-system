@@ -7,10 +7,14 @@ from fastapi.exceptions import RequestValidationError
 
 from app.core.request_context import get_request_id, reject_query
 from app.dependencies import (
+    get_chung_tu_hoan_thanh_service,
     get_yeu_cau_san_xuat_service,
     require_roles,
 )
 from app.modules.san_xuat.schemas import (
+    ChungTuCreate,
+    ChungTuDetailResponse,
+    GuiChungTuInput,
     GuiYeuCauInput,
     GuiYeuCauResponse,
     HuyPreviewResponse,
@@ -29,12 +33,14 @@ from app.modules.san_xuat.schemas import (
 from app.modules.san_xuat.service import (
     YeuCauSanXuatService,
 )
+from app.modules.san_xuat.service.chung_tu_hoan_thanh_sx import ChungTuHoanThanhService
 
 read_actor = require_roles(["quan_ly", "nhan_vien"])
 write_actor = require_roles(["quan_ly"])
 ReadActor = Annotated[dict, Depends(read_actor)]
 WriteActor = Annotated[dict, Depends(write_actor)]
 Service = Annotated[YeuCauSanXuatService, Depends(get_yeu_cau_san_xuat_service)]
+CompletionService = Annotated[ChungTuHoanThanhService, Depends(get_chung_tu_hoan_thanh_service)]
 RequestId = Annotated[str, Depends(get_request_id)]
 ResourceId = Annotated[int, Path(gt=0)]
 IfMatch = Annotated[
@@ -42,6 +48,7 @@ IfMatch = Annotated[
 ]
 CheckActor = Annotated[dict, Depends(require_roles(["nhan_vien"]))]
 ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong ETag của yêu cầu"}
+COMPLETION_ETAG_HEADER = {"schema": {"type": "string"}, "description": "Strong ETag của chứng từ"}
 yeu_cau_sx_router = APIRouter(
     prefix="/yeu_cau_san_xuat",
     tags=["san_xuat"],
@@ -56,6 +63,72 @@ nhu_cau_bo_sung_router = APIRouter(
     tags=["san_xuat"],
     responses={code: {"model": SanXuatErrorResponse} for code in (401, 403, 422, 500)},
 )
+
+chung_tu_hoan_thanh_router = APIRouter(
+    prefix="/chung_tu_hoan_thanh_sx", tags=["san_xuat"],
+    responses={
+        code: {"model": SanXuatErrorResponse} for code in (401, 403, 404, 409, 412, 422, 428, 500)
+    },
+)
+
+
+# UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 4–5 tạo Nháp (specs/use_cases/production/UC-30.md)
+@chung_tu_hoan_thanh_router.post(
+    "", status_code=201, response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)],
+    responses={201: {"headers": {"ETag": COMPLETION_ETAG_HEADER, "Location": {"schema": {"type": "string"}}}}},
+)
+async def tao_chung_tu(
+    payload: ChungTuCreate, actor: CheckActor, service: CompletionService,
+    request_id: RequestId, request: Request, response: Response,
+) -> ChungTuDetailResponse:
+    result, etag = await service.tao(payload, actor, request_id)
+    response.headers["ETag"] = etag
+    response.headers["Location"] = f"{request.url.path}/{result.data.id}"
+    return result
+
+
+# UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 6; D3 xem chi tiết (specs/use_cases/production/UC-30.md)
+@chung_tu_hoan_thanh_router.get(
+    "/{id}", response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},
+)
+async def chi_tiet_chung_tu(
+    id: ResourceId, actor: ReadActor, service: CompletionService,
+    request_id: RequestId, response: Response,
+) -> ChungTuDetailResponse:
+    result, etag = await service.chi_tiet(id, actor, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+# UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 8–9; A3 xác nhận gửi lại (specs/use_cases/production/UC-30.md)
+@chung_tu_hoan_thanh_router.post(
+    "/{id}/gui", response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},
+)
+async def gui_chung_tu(
+    id: ResourceId, payload: GuiChungTuInput, actor: CheckActor, service: CompletionService,
+    request_id: RequestId, response: Response, if_match: IfMatch = None,
+) -> ChungTuDetailResponse:
+    result, etag = await service.gui(id, actor, if_match, request_id)
+    response.headers["ETag"] = etag
+    return result
+
+
+# UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 1; A1 chứng từ hiện có (specs/use_cases/production/UC-30.md)
+@yeu_cau_sx_router.get(
+    "/{id}/chung_tu_hoan_thanh", response_model=ChungTuDetailResponse,
+    dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},
+)
+async def chung_tu_cua_yeu_cau(
+    id: ResourceId, actor: ReadActor, service: CompletionService,
+    request_id: RequestId, response: Response,
+) -> ChungTuDetailResponse:
+    result, etag = await service.cua_yeu_cau(id, actor, request_id)
+    if etag:
+        response.headers["ETag"] = etag
+    return result
 
 
 # UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 endpoint chỉ đọc cho QLK (specs/use_cases/production/UC-27.md)

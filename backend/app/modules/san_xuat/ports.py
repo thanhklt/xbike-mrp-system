@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from app.modules.san_xuat.schemas import (
+    ChungTuRead,
     HangTraLine,
     YeuCauCreate,
     YeuCauListQuery,
@@ -14,6 +15,14 @@ from app.shared.records import RecordPage
 
 class AssigneeReader(Protocol):
     async def kiem_tra_nguoi_duoc_giao(self, employee_id: int, *, lock: bool) -> None: ...
+
+
+class ChungTuHoanThanhRepository(Protocol):
+    async def get_by_id(self, resource_id: int) -> ChungTuRead | None: ...
+    async def get_by_request(self, request_id: int) -> ChungTuRead | None: ...
+    async def get_for_update(self, resource_id: int) -> ChungTuRead | None: ...
+    async def add(self, request_id: int, quantity: int, actor_id: int) -> ChungTuRead: ...
+    async def update(self, resource_id: int, changes: dict[str, object]) -> ChungTuRead: ...
 
 
 class ProductionIssues(Protocol):

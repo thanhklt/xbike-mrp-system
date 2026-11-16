@@ -122,6 +122,39 @@ class ResponseMeta(BaseModel):
     request_id: str
 
 
+class ChungTuCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    yeu_cau_san_xuat_id: int = Field(gt=0, strict=True)
+
+
+class GuiChungTuInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ChungTuRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ma_phieu: str
+    yeu_cau_san_xuat_id: int
+    so_luong_hoan_thanh: int
+    nhan_vien_id: int
+    trang_thai: Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
+    finish_time: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    nguoi_xu_ly_id: int | None
+    xu_ly_at: datetime | None
+    ly_do_tu_choi: str | None
+    phien_ban: int
+
+
+class ChungTuDetailResponse(BaseModel):
+    data: ChungTuRead | None
+    meta: ResponseMeta
+
+
 class HuyPreviewResponse(BaseModel):
     data: HuyPreview
     meta: ResponseMeta

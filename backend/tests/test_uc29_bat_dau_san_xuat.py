@@ -289,9 +289,16 @@ async def test_service_checks_scope(api, actor):
 async def test_removed_v3_routes_return_404(resource):
     from app.main import app
 
-    assert not any(path.startswith(f"/api/v1/{resource}") for path in app.openapi()["paths"])
+    if resource == "lenh_san_xuat":
+        assert not any(path.startswith(f"/api/v1/{resource}") for path in app.openapi()["paths"])
+    else:
+        assert {path for path in app.openapi()["paths"] if path.startswith(f"/api/v1/{resource}")} == {
+            f"/api/v1/{resource}", f"/api/v1/{resource}/{{id}}", f"/api/v1/{resource}/{{id}}/gui",
+        }
     async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
         for path in ("", "/1", "/1/bat_dau", "/1/gui", "/1/duyet", "/1/tu_choi", "/1/huy", "/1/ve_nhap", "/1/vat_tu"):
+            if resource == "chung_tu_hoan_thanh_sx" and path in {"", "/1", "/1/gui"}:
+                continue  # UC-30 restores these resources; their methods are tested in UC-30.
             for method in ("GET", "POST", "PATCH", "DELETE"):
                 response = await client.request(method, f"/api/v1/{resource}{path}")
                 assert response.status_code == 404, (method, path, response.text)
