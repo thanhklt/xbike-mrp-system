@@ -14,7 +14,7 @@ from app.modules.audit.repository import SqlAlchemyAuditRepository
 from app.modules.audit.service import AuditService
 from app.modules.auth.service import AuthService
 from app.modules.bom.repository import SqlAlchemyBomRepository
-from app.modules.bom.service import BomPlanningReader, BomService
+from app.modules.bom.service import BomService
 from app.modules.dieu_chinh_kho.repository import (
     SqlAlchemyPhieuDieuChinhRepository,
     SqlAlchemyTicketDieuChinhRepository,
@@ -25,6 +25,7 @@ from app.modules.inventory.service import InventoryService
 from app.modules.luu_luong.repository import SqlAlchemyLuuLuongRepository
 from app.modules.luu_luong.service import LuuLuongService
 from app.modules.mat_hang.cache import MatHangCache
+from app.modules.mat_hang.mutation import MatHangMutation
 from app.modules.mat_hang.repository import SqlAlchemyMatHangRepository
 from app.modules.mat_hang.service import MatHangAvailabilityService, MatHangReader, MatHangService
 from app.modules.nha_cung_cap.repository import SqlAlchemySupplierRepository
@@ -38,15 +39,15 @@ from app.modules.phieu_xuat.service import PhieuXuatService
 from app.modules.reporting.repository import SqlAlchemyBaoCaoRepository
 from app.modules.reporting.service import BaoCaoService
 from app.modules.san_xuat.repository import (
-    SqlAlchemyHoanThanhRepository,
-    SqlAlchemyLenhSanXuatRepository,
     SqlAlchemyYeuCauSanXuatRepository,
 )
+from app.modules.san_xuat.repository.chung_tu_hoan_thanh_sx import (
+    SqlAlchemyChungTuHoanThanhRepository,
+)
 from app.modules.san_xuat.service import (
-    ChungTuHoanThanhService,
-    LenhSanXuatService,
     YeuCauSanXuatService,
 )
+from app.modules.san_xuat.service.chung_tu_hoan_thanh_sx import ChungTuHoanThanhService
 from app.shared.pagination import PageParams
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token", auto_error=False)
@@ -116,7 +117,7 @@ def require_roles(allowed_roles: list[str]):
 def get_suppliers_service(db: Annotated[AsyncSession, Depends(get_db)]) -> SupplierService:
     return SupplierService(
         SqlAlchemySupplierRepository(db),
-        SqlAlchemyAuditRepository(db),
+        AuditService(SqlAlchemyAuditRepository(db)),
         SqlAlchemyTransaction(db),
     )
 
@@ -127,8 +128,9 @@ def get_mat_hang_cache(request: Request) -> MatHangCache:
 
 def get_mat_hang_reader(
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MatHangReader:
-    return MatHangReader(cache)
+    return MatHangReader(cache, build_bom_service(db, cache))
 
 
 def get_mat_hang_service(
@@ -136,20 +138,32 @@ def get_mat_hang_service(
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
     audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> MatHangService:
-    return MatHangService(SqlAlchemyMatHangRepository(db), audit, SqlAlchemyTransaction(db), cache)
+    boms = build_bom_service(db, cache, audit)
+    return MatHangService(SqlAlchemyMatHangRepository(db), audit, boms.mutation, boms)
 
 
 def get_mat_hang_availability(db: AsyncSession) -> MatHangAvailabilityService:
     return MatHangAvailabilityService(SqlAlchemyMatHangRepository(db))
 
 
-def get_bom_service(db: Annotated[AsyncSession, Depends(get_db)]) -> BomService:
+def build_bom_service(
+    db: AsyncSession, cache: MatHangCache, audit: AuditService | None = None
+) -> BomService:
+    """Callers pass the request's AuditService so catalog and formula rows share it."""
     return BomService(
         SqlAlchemyBomRepository(db),
-        SqlAlchemyAuditRepository(db),
-        SqlAlchemyTransaction(db),
-        get_mat_hang_availability(db),
+        audit if audit is not None else AuditService(SqlAlchemyAuditRepository(db)),
+        MatHangMutation(SqlAlchemyTransaction(db), cache),
+        SqlAlchemyMatHangRepository(db),
     )
+
+
+def get_bom_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
+) -> BomService:
+    return build_bom_service(db, cache, audit)
 
 
 def get_receiving_service(
@@ -175,37 +189,24 @@ def get_yeu_cau_san_xuat_service(
         transaction,
         get_mat_hang_availability(db),
         NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
-        BomPlanningReader(SqlAlchemyBomRepository(db)),
         PhieuXuatService(
             SqlAlchemyPhieuXuatRepository(db), audit, transaction, SqlAlchemyInventoryRepository(db)
         ),
     )
 
 
-def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
-    return InventoryService(SqlAlchemyInventoryRepository(db))
-
-
-def get_lenh_san_xuat_service(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    audit: Annotated[AuditService, Depends(get_audit_service)],
-) -> LenhSanXuatService:
-    transaction = SqlAlchemyTransaction(db)
-    return LenhSanXuatService(
-        SqlAlchemyLenhSanXuatRepository(db),
-        audit,
-        transaction,
-        NhanVienService(SqlAlchemyNhanVienRepository(db), audit, transaction),
-    )
-
-
 def get_chung_tu_hoan_thanh_service(
     db: Annotated[AsyncSession, Depends(get_db)],
-    audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> ChungTuHoanThanhService:
     return ChungTuHoanThanhService(
-        SqlAlchemyHoanThanhRepository(db), audit, SqlAlchemyTransaction(db)
+        SqlAlchemyChungTuHoanThanhRepository(db), SqlAlchemyYeuCauSanXuatRepository(db),
+        AuditService(SqlAlchemyAuditRepository(db)), SqlAlchemyTransaction(db),
+        inventory=SqlAlchemyInventoryRepository(db),
     )
+
+
+def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
+    return InventoryService(SqlAlchemyInventoryRepository(db))
 
 
 def get_phieu_xuat_service(

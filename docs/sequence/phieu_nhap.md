@@ -1,462 +1,435 @@
-# Luồng API phiếu nhập
+# Sequence phiếu nhập v4 — UC-20 đến UC-22
 
-Đối chiếu ngày 03/11/2026 với router, service, repository, schema, ORM và dependency hiện tại trong `backend/app/modules/phieu_nhap/`. Cấu trúc phiếu nhập/tồn nâng theo ERD v3.1 và quyết định của dev; giữ tên bảng snake_case.
-Nguồn nghiệp vụ: [API contract v2](https://drive.google.com/file/d/16hj1yTLvhQ4peRENCLjbCKhNdGy_L2Xz/view), mục 2, 3, 5, 7, 13, 14 và quy ước mã trong `infra/postgres/init.sql`.
+Nguồn: [UC-20](../../specs/use_cases/goods_receipt/UC-20.md),
+[UC-21](../../specs/use_cases/goods_receipt/UC-21.md),
+[UC-22](../../specs/use_cases/goods_receipt/UC-22.md),
+[plan đã duyệt](../plans/PR-08-phieu-nhap.md),
+`phieu_nhap/{router,service,repository,schemas,models,ports}.py`, `inventory/{ports,repository}.py`,
+`audit/{service,repository,schemas,models}.py`, dependencies/core transaction và init.sql v4.
 
-## Mở sơ đồ từng endpoint
-
-Mỗi endpoint có mã Mermaid bên dưới và ảnh PNG tương ứng để mở trong trình duyệt hoặc đưa vào báo cáo. Q = `quan_ly`.
-
-Ba route cũ GET `/api/v1/receiving`, GET `/api/v1/receiving/{grn_id}` và POST `/api/v1/receiving` đã được gỡ theo yêu cầu của dev. Các URL này trả 404; client cần chuyển sang `/api/v1/phieu_nhap` với payload, quyền và response hiện tại.
-
-| Endpoint | Quyền | Ảnh sequence |
+| Endpoint thực tế | UC | PNG |
 |---|---|---|
-| GET `/api/v1/phieu_nhap` | Q | [Danh sách phiếu nhập](assets/phieu_nhap/01-danh-sach.png) |
-| GET `/api/v1/phieu_nhap/{id}` | Q | [Chi tiết phiếu nhập](assets/phieu_nhap/02-chi-tiet.png) |
-| POST `/api/v1/phieu_nhap` | Q | [Tạo phiếu nháp](assets/phieu_nhap/03-tao-nhap.png) |
-| PATCH `/api/v1/phieu_nhap/{id}` | Q | [Sửa phiếu nháp](assets/phieu_nhap/04-sua-nhap.png) |
-| DELETE `/api/v1/phieu_nhap/{id}` | Q | [Xóa phiếu nháp](assets/phieu_nhap/05-xoa-nhap.png) |
-| POST `/api/v1/phieu_nhap/{id}/hoan_tat` | Q | [Hoàn tất và ghi sổ kho](assets/phieu_nhap/06-hoan-tat.png) |
+| GET `/api/v1/phieu_nhap` | UC-22 | [Danh sách](assets/phieu_nhap/01-danh-sach.png) |
+| GET `/api/v1/phieu_nhap/{id}` | UC-22 | [Chi tiết](assets/phieu_nhap/02-chi-tiet.png) |
+| POST `/api/v1/phieu_nhap` | UC-20 | [Tạo nháp](assets/phieu_nhap/03-tao-nhap.png) |
+| PATCH `/api/v1/phieu_nhap/{id}` | UC-20 | [Sửa nháp](assets/phieu_nhap/04-sua-nhap.png) |
+| DELETE `/api/v1/phieu_nhap/{id}` | UC-20 | [Xóa nháp](assets/phieu_nhap/05-xoa-nhap.png) |
+| POST `/api/v1/phieu_nhap/{id}/hoan_tat` | UC-21 | [Hoàn tất](assets/phieu_nhap/06-hoan-tat.png) |
 
-Các bước xác thực và validation trong sơ đồ được nhóm để dễ đọc; FastAPI có thể xử lý dependency/validation xen kẽ trước khi vào handler. Transaction dùng chung session đã được mở khi xác thực. Mũi tên lỗi gửi về Client biểu diễn HTTP response sau exception handler, không phải repository tự tạo HTTP response.
+Chỉ `quan_ly` (QLK) dùng cả sáu endpoint; QTV/NV bị chặn, QLK không bị giới hạn
+chỉ phiếu mình lập. Mỗi endpoint nhận `actor` qua `Depends(receipt_actor)`;
+APIRouter không khai báo thêm dependency quyền trùng. Dependency dùng
+`get_current_user_payload` / `AuthService.current_payload` để xác thực người dùng
+và kiểm vai trò hiện tại. Service giữ `_require_manager` để bảo vệ lời gọi trực tiếp.
+Không phục hồi /receiving hoặc thêm route duyệt.
 
-Trong các sơ đồ ghi, fragment `break` là nhánh dừng xử lý nếu AuditService hoặc repository phát sinh lỗi trước commit. Lỗi truyền ngược về PhieuNhapService và transaction rollback; không tiếp tục sang nhánh commit thành công. Lỗi ghi phiếu/chi tiết/tồn/ledger ở các bước trước cũng thoát transaction ngay, không chạy các bước phía sau.
+Response success `{data,meta}`; lỗi `{error:{code,message,details},meta:{request_id}}`.
+Tiền integer VND/BIGINT, không Decimal/chuỗi. Timestamp UTC/Z; ngay_nhap là DATE.
+Chi tiết có updated_at, hoan_thanh_at, nguoi_hoan_thanh_id, phien_ban. ETag strong
+SHA-256 JSON canonical của toàn resource/dòng theo ID/metadata, không gồm request_id.
+Phien_ban đổi khi patch thực tế hoặc hoàn tất, không đổi khi no-op/replay.
 
-AuditRepository chỉ `session.add(LichSuThaoTac)`, chưa gửi INSERT ngay tại append. Khi `SqlAlchemyTransaction` gọi `session.commit()`, SQLAlchemy flush dữ liệu đang chờ (gồm audit) rồi COMMIT. Lỗi flush/commit được xử lý riêng bằng rollback. Các lời gọi được đánh số để dễ theo dõi trên ảnh PNG.
-
-## Quy ước đang triển khai
-
-- Sáu endpoint `/phieu_nhap` chỉ dành cho Q (`quan_ly`). JWT, phiên bản mật khẩu và trạng thái tài khoản được kiểm tra ở mỗi request. A không mặc định có quyền Q.
-- Response thành công: `{data, meta}`; danh sách có page/page_size/total/total_pages/request_id. Lỗi: `{error: {code, message, details}, meta: {request_id}}`.
-- GET chi tiết và POST trả strong ETag tính trên toàn bộ PhieuNhapRead, bao gồm các dòng chi tiết được sắp theo ID. `request_id` không tham gia ETag.
-- POST tạo mới chỉ tạo trạng thái `nhap`, không ghi `ton_kho` hoặc `giao_dich_kho`. PATCH/DELETE chỉ tác động nháp chưa có giao dịch kho. Chỉ action `hoan_tat` cộng tồn, ghi ledger và chuyển trạng thái.
-- PATCH, DELETE và hoàn tất yêu cầu If-Match. Sau khi khóa phiếu, không tìm thấy trả 404, thiếu header trả 428. ETag cũ trả 412; riêng hoàn tất đã thành công cho phép retry với ETag cũ nhưng vẫn cần header. Header lặp trả 422.
-- GET mới giữ khóa FOR SHARE trên phiếu đến khi đọc xong chi tiết để response và ETag cùng một phiên bản. GET không ghi dữ liệu. COUNT và trang danh sách là hai truy vấn, tổng số có thể thay đổi khi có request tạo/xóa đồng thời.
-- Hoàn tất khóa phiếu, chi tiết rồi mặt hàng FOR UPDATE theo ID tăng dần. Cập nhật trực tiếp `MatHang.so_luong_ton` và `ton_kho_updated_at`; không truy vấn hoặc ghi `ton_kho`, không cấp ID tồn hay lấy advisory lock tồn. Các phiếu dùng chung mặt hàng được tuần tự hóa bằng khóa dòng.
-- Trước cộng tồn, số dư phải khớp tổng ledger và số lượng mới không vượt INTEGER. Sai lệch trả 409, không tự sửa số dư. Mỗi chi tiết sinh đúng một `nhap_vat_tu` dương với duy nhất FK nguồn `chi_tiet_phieu_nhap_id`. Tồn, ledger, trạng thái và audit cùng commit hoặc cùng rollback.
-- PostgreSQL cấp ID phiếu và chi tiết bằng IDENTITY. Advisory transaction lock `(20261022, 1)` chỉ bảo vệ mã tháng; mã lớn nhất xét cả bảng và snapshot audit. Migration đồng bộ sequence theo ID đang có và lịch sử; rollback có thể tạo khoảng trống ID.
-- Mã `PN-YYYYMM-NNNNNN` do server sinh theo tháng Asia/Ho_Chi_Minh, từ 000001 đến 999999. PostgreSQL chuyển múi giờ, không phụ thuộc tzdata trên máy Windows. Hết dải trả 409, không quay vòng.
-- `created_at` là TIMESTAMPTZ, API mới trả UTC có Z; `ngay_nhap` là DATE bắt buộc, `ghi_chu` nullable. Người lập/NCC/thời gian không được NULL sau nâng cấp. Tiền NULL cũ được giữ nhưng phiếu có giá/tổng không hợp lệ không được hoàn tất.
-- Tiền dùng Decimal/numeric(18,2), giá >= 0, tối đa 9999999999999999.99 và hai chữ số thập phân; request nhận chuỗi hoặc integer, từ chối float/bool. Response tiền là chuỗi hai chữ số. Số lượng/ID vẫn integer nghiêm ngặt trong dải INTEGER. Tổng do server tính.
-- POST khóa nhà cung cấp bằng FOR KEY SHARE và mặt hàng bằng FOR UPDATE theo ID tăng dần trước khi kiểm tra; giữ khóa đến commit/rollback. Chỉ nhận mặt hàng active là NVL hoặc linh kiện. PATCH cũng khóa mặt hàng trước khi kiểm tra/thay dòng; tránh nâng khóa SHARE sang UPDATE khi hoàn tất.
-- Tạo phiếu, mọi dòng và audit `tao` cùng transaction. Audit lỗi thì rollback tất cả. Audit lưu snapshot PhieuNhapRead và người thực hiện từ JWT.
-- Luồng ghi audit: `PhieuNhapService → AuditService.append → SqlAlchemyAuditRepository.append`. `get_receiving_service` nhận AuditService từ dependency get_audit_service, dùng chung get_db/session. AuditService/repository không mở transaction hoặc commit riêng; lỗi được truyền về transaction phiếu nhập.
-- Module chỉ có một `APIRouter` tên `router`, prefix `/phieu_nhap`, gắn trực tiếp sáu endpoint trên. Các route cũ `/receiving` đã được gỡ và trả 404.
+PATCH/DELETE/hoan_tat yêu cầu một If-Match dạng quoted 64 hex thường. Thiếu/trắng
+428; weak/wildcard/nhiều physical header/compound/sai định dạng 412. Tag cũ 412,
+ngoại lệ replay hoàn tất bên dưới. GET không body; DELETE không body; mọi endpoint
+trừ GET list không nhận query. Khi cùng sai auth và cấu trúc không cam kết ưu tiên lỗi.
 
 ## GET /api/v1/phieu_nhap
 
-Query: page (1), page_size (20, tối đa 100), q tìm mã không phân biệt hoa/thường, trang_thai, ncc_id, nhan_vien_id, tu_ngay, den_ngay, sort. Sort cho phép id/created_at/ma_phieu_nhap và dạng `-` giảm dần, ID là tiêu chí phụ. Ký tự `%`/`_` trong q được hiểu theo nghĩa đen. Filter kết hợp AND.
-
-Ngày lọc theo Asia/Ho_Chi_Minh, lấy cả hai ngày bằng khoảng UTC nửa mở. Không tìm thấy trả 200 với danh sách rỗng. Không ghi audit hay thay đổi trạng thái/tồn kho.
+Query AND: q tìm mã không phân biệt hoa/thường (`%`/`_` literal), trang_thai,
+ncc_id, nhan_vien_id, tu_ngay/den_ngay theo **created_at** giờ Asia/Ho_Chi_Minh,
+bao gồm cả ngày. Không thêm lọc ngay_nhap. Page1/size20/max100, sort id/created_at/
+ma_phieu_nhap hoặc `-`, mặc định id tăng, ID tăng làm tiêu chí phụ. Không ETag list.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
     participant DB as PostgreSQL
     C->>R: GET /api/v1/phieu_nhap + JWT + query
-    R->>D: Xác thực và require_roles Q
-    D->>DB: Đọc tài khoản hiện tại và vai trò
-    alt JWT thiếu, hết hạn hoặc bị thu hồi
-        D-->>C: 401 chua_xac_thuc
-    else Tài khoản bị khóa hoặc vai trò không phải Q
-        D-->>C: 403
-    else Được phép
-        R->>R: Validate query, cấm tham số lạ và lặp
-        alt Sai enum, ngày, phân trang hoặc sort
-            R-->>C: 422 du_lieu_khong_hop_le
-        else Hợp lệ
-            R->>S: list_receipts(params, request_id)
-            S->>P: list_receipts(params)
-            P->>DB: COUNT theo bộ lọc và khoảng ngày UTC
-            opt Trang còn dữ liệu
-                P->>DB: SELECT phiếu phân trang FOR SHARE rồi đọc chi tiết liên quan
-            end
-            DB-->>P: Dữ liệu và tổng số phiếu
-            P-->>S: RecordPage
-            S-->>R: data + meta phân trang
-            R-->>C: 200 PhieuNhapListResponse
-        end
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / locked or forbidden role
+        R-->>C: 401 / 403
     end
-    Note over R,DB: Lỗi nội bộ chưa phân loại trả 500 an toàn, không lộ SQL
+    R->>R: Validate query, reject repeated keys and GET body
+    break Invalid / unknown filters or input
+        R-->>C: 422
+    end
+    R->>S: list_receipts(query, actor, request_id)
+    S->>S: Require quan_ly
+    S->>P: begin_read_snapshot
+    P->>DB: Release auth read TX, REPEATABLE READ READ ONLY
+    S->>P: list_receipts(query)
+    P->>DB: COUNT and sorted page with AND filters
+    opt Page nonempty
+        P->>DB: Batch/selectin load page lines and current NCC (UC-44)
+    end
+    P-->>S: Detached DTOs and count in same snapshot
+    S-->>R: List data/meta with page/count/request_id
+    R-->>C: 200, empty page is valid
+    Note over S,DB: No row locks or INSERT/UPDATE/DELETE, closing session ends read TX
 ```
 
 ## GET /api/v1/phieu_nhap/{id}
 
-ID nguyên dương; không nhận query. ID vượt INTEGER PostgreSQL trả 404, không đưa giá trị tràn vào truy vấn. GET được đọc cả phiếu nháp và hoàn thành, kể cả dữ liệu lịch sử có mặt hàng ngừng hoạt động.
+ID positive, quá PostgreSQL INTEGER hoặc không tồn tại trả 404. `ncc_id` tham chiếu
+NCC hiện tại. Resource kèm `nha_cung_cap` là thông tin NCC hiện tại, nạp qua relationship
+view-only, không phải snapshot (UC-44). Audit phiếu nhập không lưu `nha_cung_cap`.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
     participant DB as PostgreSQL
-    C->>R: GET /api/v1/phieu_nhap/id + JWT
-    R->>D: Kiểm tra JWT và quyền Q
-    D->>DB: Đọc trạng thái tài khoản và vai trò
-    alt Xác thực hoặc quyền không hợp lệ
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate ID và cấm query
-        alt Đầu vào không hợp lệ
-            R-->>C: 422
-        else Hợp lệ
-            R->>S: get_receipt(id, request_id)
-            S->>P: get_receipt(id) nếu ID trong dải INTEGER
-            P->>DB: SELECT phiếu FOR SHARE rồi đọc chi tiết
-            alt ID không tồn tại hoặc vượt dải
-                S-->>C: 404 khong_tim_thay
-            else Có phiếu
-                P->>P: Chuyển ORM sang schema, chuẩn hóa UTC và thứ tự dòng
-                P-->>S: PhieuNhapRead
-                S->>S: Tính ETag trên PhieuNhapRead
-                S-->>R: data + meta + ETag
-                R-->>C: 200 và header ETag
-            end
-        end
+    C->>R: GET /api/v1/phieu_nhap/{id} + JWT
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
     end
-    Note over R,DB: Chỉ đọc dữ liệu, lỗi nội bộ trả 500 an toàn
+    R->>R: Validate positive ID, no body or query
+    break Structural error
+        R-->>C: 422
+    end
+    R->>S: get_receipt(id, actor, request_id)
+    S->>S: Require quan_ly
+    S->>P: begin_read_snapshot
+    P->>DB: REPEATABLE READ READ ONLY after releasing auth read TX
+    S->>P: get_receipt(id)
+    P->>DB: Read PhieuNhap, selectin lines and current NCC in same snapshot
+    break Missing / out-of-range ID
+        S-->>C: 404
+    end
+    S->>S: Canonical resource hash including metadata/version
+    S-->>R: Read DTO and strong ETag
+    R-->>C: 200 data/meta + ETag
+    Note over S,DB: Same resource version for header, lines and ETag, no writes
 ```
 
 ## POST /api/v1/phieu_nhap
 
-Body: `ncc_id`, `ngay_nhap` (YYYY-MM-DD) và `chi_tiet` bắt buộc; `ghi_chu` tùy chọn nullable. Chi tiết có ít nhất một dòng `{mat_hang_id, so_luong, don_gia_thuc}`, không trùng mặt hàng. Không cần If-Match khi tạo mới. Nếu nhà cung cấp/mặt hàng không tồn tại trả 404; mặt hàng không active hoặc sai loại trả 409 `phu_thuoc_khong_hop_le`.
+Input ncc_id, ngay_nhap, ghi_chu optional/null, chi_tiet gồm LK/quantity/đơn giá nhập.
+ID/lượng strict positive INTEGER, tiền strict nonnegative BIGINT, không float/bool/
+chuỗi. Server tính tổng; mã/actor/state/metadata không do client đặt. Giá danh mục
+không bị sửa và không thay giá nhập. NCC key-share và LK theo ID tăng FOR UPDATE
+trước cấp mã; advisory (20261022,1) chỉ bảo vệ PN-YYYYMM-NNNNNN theo tháng created_at
+giờ VN, gồm cả history audit để không reuse mã xóa. ID do Identity, có thể khuyết khi rollback.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemy<br/>AuditRepository
+    participant T as SqlAlchemy<br/>Transaction
     participant DB as PostgreSQL
     C->>R: POST /api/v1/phieu_nhap + JWT + JSON
-    R->>D: Kiểm tra JWT, account active và quyền Q
-    D->>DB: SELECT tài khoản và vai trò
-    alt Không xác thực hoặc không có quyền
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate NCC/ngày nhập, Decimal, số lượng, tổng tiền, dòng trùng và query
-        alt Input không hợp lệ
-            R-->>C: 422 du_lieu_khong_hop_le
-        else Hợp lệ
-            R->>S: create_receipt(payload, actor, request_id)
-            S->>T: Vào transaction của session
-            S->>P: lock_supplier(ncc_id)
-            P->>DB: SELECT NCC FOR KEY SHARE
-            S->>P: lock_parts(ids)
-            P->>DB: SELECT FOR UPDATE mặt hàng theo ID tăng dần
-            alt Không tồn tại tham chiếu hoặc mặt hàng không được nhập
-                S->>T: Rollback
-                S-->>C: 404 hoặc 409
-            else Tham chiếu hợp lệ
-                S->>S: Lấy người tạo từ JWT, tính tiền, đặt nhap và UTC
-                S->>P: add_draft
-                P->>DB: Advisory lock mã tháng, đọc mã trong bảng cùng audit
-                alt Hết dải mã tháng
-                    P-->>S: Conflict
-                    S->>T: Rollback
-                    S-->>C: 409
-                else Cấp được mã
-                    P->>DB: INSERT phiếu và mọi dòng chi tiết bằng IDENTITY
-                    P-->>S: PhieuNhapRead
-                    S->>A: append audit tao với snapshot sau tạo
-                    A->>AR: append(entry)
-                    break AuditService hoặc repository phát sinh lỗi trong append
-                        AR-->>A: Truyền lỗi nếu phát sinh ở repository
-                        A-->>S: Truyền exception về PhieuNhapService
-                        S->>T: __aexit__ với exception
-                        T->>DB: ROLLBACK toàn bộ transaction
-                        S-->>C: 500 an toàn qua exception handler
-                    end
-                    AR->>AR: session.add LichSuThaoTac trong session chung
-                    AR-->>A: Đã thêm vào session
-                    A-->>S: Kết thúc append, không commit riêng
-                    S->>T: Commit phiếu, chi tiết và audit
-                    alt Lỗi flush hoặc commit
-                        T->>DB: ROLLBACK toàn bộ
-                        T-->>C: 409 constraint hoặc 500 lỗi nội bộ
-                    else Thành công
-                        T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
-                        S-->>R: data + meta + ETag
-                        R-->>C: 201, Location và ETag
-                    end
-                end
-            end
-        end
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
     end
-    Note over S,DB: Chỉ lưu nháp và audit, không cập nhật tồn mat_hang hoặc ghi giao_dich_kho
+    R->>R: Validate schema, unique lines, money range, forbid extras/query
+    break Invalid input / extra fields
+        R-->>C: 422
+    end
+    R->>S: create_receipt(payload, actor, request_id)
+    S->>S: Require quan_ly
+    S->>T: Enter shared transaction
+    S->>P: lock_supplier, lock_parts
+    P->>DB: NCC FOR KEY SHARE then ordered MatHang FOR UPDATE
+    S->>S: Require existing supplier/items and only active linh_kien
+    break Missing supplier (404) / missing, inactive or non-component item (409)
+        S->>T: Roll back
+        S-->>C: 404 / 409
+    end
+    S->>S: Calculate actual line amounts and total
+    S->>P: add_draft with server-owned actor/time
+    P->>DB: Advisory monthly code lock, read rows and audit code history
+    P->>DB: INSERT Identity header and lines, state nhap, version1
+    S->>AU: append tao, state/snapshot after
+    AU->>AR: append
+    AR->>AR: session.add LichSuThaoTac
+    S->>T: Commit once
+    T->>DB: Flush audit and COMMIT
+    alt Success
+        R-->>C: 201 resource + Location + ETag
+    else Exhausted code / constraint / unexpected write or commit failure
+        T->>DB: ROLLBACK all writes
+        R-->>C: 409 / safe 500
+    end
+    Note over S,DB: No stock, holds, ledger or production writes in a draft
 ```
 
 ## PATCH /api/v1/phieu_nhap/{id}
 
-Body nhận `ncc_id`, `ngay_nhap`, `ghi_chu` và `chi_tiet` tùy chọn. Bỏ trường nghĩa là giữ nguyên; chỉ `ghi_chu` được gửi null để xóa ghi chú. `chi_tiet` nếu gửi phải là mảng có ít nhất một dòng, thay toàn bộ chi tiết, không nhận null hoặc mặt hàng trùng. Server tính lại tiền; database cấp ID mới cho bộ chi tiết thay thế. Payload không làm thay đổi dữ liệu trả 200 với ETag cũ, không ghi audit. Không sửa phiếu hoàn thành hoặc phiếu có ledger.
+Field bỏ qua giữ nguyên; ghi_chu=null xóa ghi chú. ncc_id/ngay_nhap/chi_tiet null
+bị 422; gửi chi_tiet là thay cả danh sách không rỗng, không endpoint sửa dòng riêng.
+So sánh dòng theo `mat_hang_id`, gồm số lượng, đơn giá và `tong_gia`, cùng tổng tiền
+phiếu; thứ tự gửi không làm thay đổi phiếu. No-op giữ nguyên dòng/ID, metadata,
+phien_ban, ETag và audit, không gọi `patch_draft`. Chỉ gọi `_validate_parts` khi
+nội dung dòng thực sự thay đổi; nếu chỉ tổng tiền phiếu sai, cập nhật tổng tiền
+không thay dòng hoặc kiểm lại linh kiện. Vì vậy sửa ghi chú kèm dòng cũ vẫn
+được phép nếu linh kiện đã ngừng hoạt động. Thay đổi thực tế tăng version/updated_at,
+audit before/after. Hoàn tất không được sửa.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemy<br/>AuditRepository
+    participant T as SqlAlchemy<br/>Transaction
     participant DB as PostgreSQL
-    C->>R: PATCH /api/v1/phieu_nhap/id + JWT + If-Match + JSON
-    R->>D: Kiểm tra JWT, account và quyền Q
-    D->>DB: Đọc tài khoản hiện tại
-    alt Không xác thực hoặc không có quyền
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate ID, body, query và header không lặp
-        alt Input sai
-            R-->>C: 422
-        else Input hợp lệ
-            R->>S: patch_receipt
-            S->>T: Vào transaction
-            S->>P: lock_receipt
-            P->>DB: FOR UPDATE phiếu rồi chi tiết
-            alt Không tồn tại hoặc thiếu If-Match
-                S->>T: Rollback
-                S-->>C: 404 hoặc 428
-            else Có phiếu và header
-                S->>S: So sánh ETag dưới khóa
-                S->>P: receipt_postings nếu ETag đúng và phiếu nhap
-                P->>DB: Đọc ledger theo chi tiết
-                alt ETag cũ, không phải nháp hoặc đã có ledger
-                    S->>T: Rollback
-                    S-->>C: 412 hoặc 409
-                else Có thể sửa
-                    S->>P: Khóa NCC mới nếu có và mặt hàng khi gửi chi_tiet
-                    P->>DB: NCC FOR KEY SHARE, mặt hàng FOR UPDATE theo ID
-                    alt Tham chiếu thiếu hoặc mặt hàng inactive, sai loại
-                        S->>T: Rollback
-                        S-->>C: 404 hoặc 409
-                    else Tham chiếu hợp lệ
-                        S->>S: Tính tiền và xác định thay đổi
-                        alt Không có thay đổi dữ liệu
-                            S->>S: Giữ resource, ID chi tiết và ETag, không ghi audit
-                        else Có thay đổi dữ liệu
-                            S->>P: patch_draft
-                            P->>DB: Khi thay chi tiết, DELETE và INSERT dòng với IDENTITY
-                            P->>DB: UPDATE phiếu và đọc lại dữ liệu
-                            S->>A: append sua với snapshot trước và sau
-                            A->>AR: append(entry)
-                            break AuditService hoặc repository phát sinh lỗi trong append
-                                AR-->>A: Truyền lỗi nếu phát sinh ở repository
-                                A-->>S: Truyền exception về PhieuNhapService
-                                S->>T: __aexit__ với exception
-                                T->>DB: ROLLBACK toàn bộ transaction
-                                S-->>C: 500 an toàn qua exception handler
-                            end
-                            AR->>AR: session.add LichSuThaoTac trong session chung
-                            AR-->>A: Đã thêm vào session
-                            A-->>S: Kết thúc append, không commit riêng
-                        end
-                        S->>T: Commit
-                        alt Lỗi flush hoặc commit
-                            T->>DB: ROLLBACK mọi thay đổi
-                            T-->>C: 409 constraint hoặc 500 an toàn
-                        else Thành công
-                            T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
-                            S-->>R: PhieuNhapDetailResponse và ETag
-                            R-->>C: 200 và ETag hiện tại
-                        end
-                    end
-                end
-            end
+    C->>R: PATCH /api/v1/phieu_nhap/{id} + JWT + If-Match + JSON
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
+    end
+    R->>R: Validate schema/query, retain every physical If-Match
+    break Invalid structure / field semantics
+        R-->>C: 422
+    end
+    R->>S: patch_receipt
+    S->>S: Require quan_ly
+    S->>T: Enter transaction
+    S->>P: lock_receipt(id)
+    P->>DB: PhieuNhap then ordered lines FOR UPDATE
+    break Missing resource
+        S-->>C: 404, rollback
+    end
+    S->>S: Require one canonical tag and compare under lock
+    break Missing / invalid / stale validator
+        S-->>C: 428 / 412, rollback
+    end
+    S->>S: Require nhap
+    break Already completed
+        S-->>C: 409, rollback
+    end
+    S->>P: receipt_postings
+    P->>DB: Read ledger references
+    break Referenced by ledger
+        S-->>C: 409, rollback
+    end
+    opt Supplier changed
+        S->>P: lock_supplier
+        P->>DB: NCC FOR KEY SHARE
+    end
+    break Missing supplier
+        S-->>C: 404, rollback
+    end
+    S->>S: Calculate lines and total, compare by mat_hang_id including tong_gia
+    opt Actual line content changed
+        S->>P: lock_parts
+        P->>DB: MatHang FOR UPDATE ordered by ID
+        S->>S: Shared validation of existing active components
+        break Missing, inactive or non-component item
+            S-->>C: 409 phu_thuoc_khong_hop_le, rollback
         end
     end
-    Note over S,DB: Không ghi tồn kho hoặc ledger khi sửa nháp
+    alt Actual change
+        S->>P: patch_draft(changes, replacement lines)
+        P->>DB: Replace lines only if changed, update header/time/version +1
+        S->>AU: append sua, before/after state and snapshots
+        AU->>AR: append
+        AR->>AR: session.add
+    else No-op
+        S->>S: Keep resource, version and audit unchanged
+    end
+    S->>T: Commit
+    T->>DB: Flush audit if any and COMMIT
+    R-->>C: 200 resource + ETag
+    Note over T,DB: Any write/audit/commit failure rolls back all changes, 409 or safe 500
 ```
 
 ## DELETE /api/v1/phieu_nhap/{id}
 
-Không nhận query. Xóa chi tiết rồi phiếu nháp trong cùng transaction với audit `xoa_nhap`, snapshot trước xóa và snapshot sau là NULL. Giữ lịch sử trong audit; sequence không quay lùi khi xóa nháp, mã xét cả lịch sử. Thành công 204 không body. Phiếu hoàn thành hoặc đã có giao dịch phụ thuộc không được xóa.
+Chỉ nháp chưa có ledger. Audit giữ full snapshot trước/mã; snapshot và state sau null.
+Xóa/audit cùng transaction, không cascade xóa ledger/audit. Thành công 204 không body.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemy<br/>AuditRepository
+    participant T as SqlAlchemy<br/>Transaction
     participant DB as PostgreSQL
-    C->>R: DELETE /api/v1/phieu_nhap/id + JWT + If-Match
-    R->>D: Kiểm tra JWT, account và quyền Q
-    D->>DB: Đọc tài khoản hiện tại
-    alt Không xác thực hoặc không có quyền
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate ID, cấm query và header lặp
-        alt Input sai
-            R-->>C: 422
-        else Hợp lệ
-            R->>S: delete_receipt
-            S->>T: Vào transaction
-            S->>P: lock_receipt
-            P->>DB: FOR UPDATE phiếu rồi chi tiết
-            alt Không tìm thấy hoặc thiếu header
-                S->>T: Rollback
-                S-->>C: 404 hoặc 428
-            else Có phiếu và If-Match
-                S->>S: So sánh ETag và kiểm tra nhap
-                S->>P: receipt_postings nếu kiểm tra trước hợp lệ
-                P->>DB: SELECT ledger theo chi tiết
-                alt ETag cũ, không phải nháp hoặc có phụ thuộc
-                    S->>T: Rollback
-                    S-->>C: 412 hoặc 409
-                else Được xóa
-                    S->>P: delete_draft
-                    P->>DB: DELETE chi tiết rồi phiếu
-                    S->>A: append xoa_nhap với snapshot trước xóa
-                    A->>AR: append(entry)
-                    break AuditService hoặc repository phát sinh lỗi trong append
-                        AR-->>A: Truyền lỗi nếu phát sinh ở repository
-                        A-->>S: Truyền exception về PhieuNhapService
-                        S->>T: __aexit__ với exception
-                        T->>DB: ROLLBACK toàn bộ transaction
-                        S-->>C: 500 an toàn qua exception handler
-                    end
-                    AR->>AR: session.add LichSuThaoTac trong session chung
-                    AR-->>A: Đã thêm vào session
-                    A-->>S: Kết thúc append, không commit riêng
-                    S->>T: Commit
-                    alt Lỗi flush hoặc commit
-                        T->>DB: ROLLBACK cả xóa và audit
-                        T-->>C: 409 hoặc 500 an toàn
-                    else Thành công
-                        T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
-                        R-->>C: 204 không body
-                    end
-                end
-            end
-        end
+    C->>R: DELETE /api/v1/phieu_nhap/{id} + JWT + If-Match
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
     end
-    Note over S,DB: Không xóa hoặc sửa ledger, không thay đổi tồn kho
+    R->>R: Positive ID, no body/query, retain physical headers
+    break Invalid structure
+        R-->>C: 422
+    end
+    R->>S: delete_receipt
+    S->>S: Require quan_ly
+    S->>T: Enter transaction
+    S->>P: lock_receipt(id)
+    P->>DB: Header and ordered lines FOR UPDATE
+    break Missing resource
+        S-->>C: 404, rollback
+    end
+    S->>S: Validate one strong If-Match and current version
+    break Missing / invalid / stale tag
+        S-->>C: 428 / 412, rollback
+    end
+    S->>S: Require nhap
+    break Already completed
+        S-->>C: 409, rollback
+    end
+    S->>P: receipt_postings
+    P->>DB: Read references
+    break Referenced by ledger
+        S-->>C: 409, rollback
+    end
+    S->>P: delete_draft
+    P->>DB: DELETE lines then header
+    S->>AU: append xoa_nhap, full before, null after/state
+    AU->>AR: append
+    AR->>AR: session.add
+    S->>T: Commit
+    T->>DB: Flush audit and COMMIT
+    alt Success
+        R-->>C: 204, no body
+    else Write / audit / commit failure
+        T->>DB: ROLLBACK deletion and audit
+        R-->>C: 409 / safe 500
+    end
 ```
 
 ## POST /api/v1/phieu_nhap/{id}/hoan_tat
 
-Body bắt buộc là `{}`, không nhận query hay trường thêm. Kết quả gồm PhieuNhapRead, `giao_dich_kho_ids` và `da_ghi_so_truoc_do`. ETag tính từ PhieuNhapRead, giống GET chi tiết, không tính hai trường action. Người ghi ledger/audit là người đang thực hiện action, không đổi người tạo phiếu. Thời điểm ghi sổ là UTC, dùng chung cho mọi dòng của một lần hoàn tất.
-
-Retry phải còn quyền Q và có If-Match. Nếu phiếu hoàn thành, đối chiếu chính xác ledger với từng dòng trước khi trả `da_ghi_so_truoc_do=true`; không tạo thêm audit/ledger hoặc cộng lại tồn. Trạng thái hoàn thành nhưng thiếu/sai ledger trả 409. Nháp cũ thiếu giá, sai tổng hoặc rỗng trả 409 để sửa trước khi hoàn tất.
+Body `{}` bắt buộc. Thứ tự khóa: phiếu → chi tiết tăng ID → MatHang tăng ID.
+Service kiểm nội dung persisted, số dư khớp SUM ledger và không tràn INTEGER.
+mark_completed UPDATE có điều kiện id/nhap/phien_ban, ghi metadata cùng state trước
+INSERT ledger để đáp ứng trigger. Tiền nhập giữ nguyên; không sửa giá danh mục,
+so_luong_dang_giu hoặc GiuHang, không tự kiểm tra/đổi yêu cầu sản xuất.
 
 ```mermaid
+%%{init: {"sequence": {"width": 220, "wrap": true, "actorMargin": 40}}}%%
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant R as Router
-    participant D as Auth dependencies
+    actor C as QLK
+    participant R as phieu_nhap.router<br/>dependencies
+    participant A as AuthService
     participant S as PhieuNhapService
-    participant P as SqlAlchemyPhieuNhapRepository
-    participant I as SqlAlchemyInventoryRepository
-    participant A as AuditService
-    participant AR as SqlAlchemyAuditRepository
-    participant T as SqlAlchemyTransaction
+    participant P as SqlAlchemy<br/>PhieuNhapRepository
+    participant I as SqlAlchemy<br/>InventoryRepository
+    participant AU as AuditService
+    participant AR as SqlAlchemy<br/>AuditRepository
+    participant T as SqlAlchemy<br/>Transaction
     participant DB as PostgreSQL
-    C->>R: POST /api/v1/phieu_nhap/id/hoan_tat + JWT + If-Match + {}
-    R->>D: Kiểm tra JWT, account và quyền Q
-    D->>DB: Đọc tài khoản hiện tại
-    alt Không xác thực hoặc không có quyền
-        D-->>C: 401 hoặc 403
-    else Được phép
-        R->>R: Validate ID, body rỗng, cấm query và header lặp
-        alt Input sai
-            R-->>C: 422
-        else Input hợp lệ
-            R->>S: complete_receipt
-            S->>T: Vào transaction
-            S->>P: lock_receipt
-            P->>DB: FOR UPDATE phiếu rồi chi tiết
-            alt Không tìm thấy hoặc thiếu If-Match
-                S->>T: Rollback
-                S-->>C: 404 hoặc 428
-            else Có phiếu và header
-                S->>P: receipt_postings
-                P->>DB: Đọc ledger theo chi tiết
-                alt Phiếu đã hoàn thành
-                    S->>S: Đối chiếu đủ nguồn, mặt hàng, loại và lượng ledger
-                    alt Ledger không khớp
-                        S->>T: Rollback
-                        S-->>C: 409
-                    else Đã ghi sổ đúng
-                        Note over S,DB: Không so sánh ETag cũ, không cộng tồn hay thêm audit/ledger
-                        S->>T: Kết thúc transaction chỉ đọc
-                        T->>DB: COMMIT và nhả khóa, không có dữ liệu ghi mới
-                        S-->>R: Resource hiện tại, ID ledger cũ và ETag
-                        R-->>C: 200, da_ghi_so_truoc_do=true
-                    end
-                else Phiếu nháp
-                    S->>S: So sánh ETag, kiểm tra chưa có ledger và dữ liệu tiền/dòng
-                    alt ETag cũ hoặc dữ liệu nháp không hợp lệ
-                        S->>T: Rollback
-                        S-->>C: 412 hoặc 409
-                    else Nháp hợp lệ
-                        S->>P: lock_parts theo ID tăng dần
-                        P->>DB: FOR UPDATE mặt hàng
-                        alt Thiếu mặt hàng, inactive hoặc không phải NVL/linh kiện
-                            S->>T: Rollback
-                            S-->>C: 404 hoặc 409
-                        else Được nhập
-                            S->>P: mark_completed
-                            P->>DB: UPDATE PhieuNhap hoan_thanh v? ??c l?i phi?u
-                            Note over S,DB: Trigger GiaoDichKho y?u c?u ngu?n ?? ho?n th?nh, m?i thay ??i v?n trong c?ng transaction
-                            S->>I: receive_receipt(lines, actor, posted_at)
-                            I->>DB: SELECT MatHang FOR UPDATE theo ID tăng dần (khóa đã giữ từ validate)
-                            I->>DB: Đọc tổng biến động ledger cho từng mặt hàng
-                            alt Số dư không khớp ledger hoặc tràn INTEGER
-                                S->>T: Rollback
-                                S-->>C: 409
-                            else Có thể ghi sổ
-                                I->>DB: UPDATE MatHang.so_luong_ton và ton_kho_updated_at
-                                I->>DB: INSERT một nhap_vat_tu dương cho mỗi chi tiết
-                                I-->>S: Danh sách ID giao dịch
-                                S->>P: mark_completed
-                                P->>DB: UPDATE hoan_thanh và đọc lại phiếu
-                                S->>A: append hoan_tat với snapshot trước và sau
-                                A->>AR: append(entry)
-                                break AuditService hoặc repository phát sinh lỗi trong append
-                                    AR-->>A: Truyền lỗi nếu phát sinh ở repository
-                                    A-->>S: Truyền exception về PhieuNhapService
-                                    S->>T: __aexit__ với exception
-                                    T->>DB: ROLLBACK toàn bộ transaction
-                                    S-->>C: 500 an toàn qua exception handler
-                                end
-                                AR->>AR: session.add LichSuThaoTac trong session chung
-                                AR-->>A: Đã thêm vào session
-                                A-->>S: Kết thúc append, không commit riêng
-                                S->>T: Commit
-                                alt Lỗi flush hoặc commit cuối transaction
-                                    T->>DB: ROLLBACK tồn, ledger, trạng thái và audit
-                                    T-->>C: 409 constraint hoặc 500 an toàn
-                                else Thành công
-                                    T->>DB: session.commit tự flush dữ liệu chờ nếu có rồi COMMIT
-                                    S-->>R: PhieuNhapActionResponse và ETag mới
-                                    R-->>C: 200, da_ghi_so_truoc_do=false
-                                end
-                            end
-                        end
-                    end
-                end
-            end
+    C->>R: POST /api/v1/phieu_nhap/{id}/hoan_tat + JWT + If-Match + empty object
+    R->>A: current_payload(token) via get_current_user_payload
+    A-->>R: Authenticated actor with current roles
+    R->>R: receipt_actor requires quan_ly
+    break Invalid credentials / not active QLK
+        R-->>C: 401 / 403
+    end
+    R->>R: Required empty object, positive ID, no query, retain headers
+    break Invalid structure
+        R-->>C: 422
+    end
+    R->>S: complete_receipt
+    S->>S: Require quan_ly
+    S->>T: Enter shared transaction
+    S->>P: lock_receipt
+    P->>DB: Header then ordered lines FOR UPDATE
+    break Missing / out-of-range ID
+        S-->>C: 404, rollback
+    end
+    S->>S: Require one quoted SHA-256 validator including replay
+    break Missing / blank / malformed, weak, wildcard or multiple tags
+        S-->>C: 428 / 412, rollback
+    end
+    S->>P: receipt_postings(id)
+    P->>DB: Read existing ledger rows
+    alt Already hoan_thanh
+        S->>S: Require one matching item/type/quantity posting per line
+        alt Complete consistent posting
+            R-->>C: 200 current resource, old ledger IDs, replay=true, ETag
+        else Incomplete or inconsistent ledger
+            S-->>C: 409, no repair
+        end
+        Note over S,DB: Retry carries the old draft ETag (AC-3), check format only, no writes or second audit
+    else First completion
+        S->>S: Compare current ETag, validate no ledger and persisted content/totals
+        break Stale tag / referenced or invalid draft
+            S-->>C: 412 / 409, rollback
+        end
+        S->>I: lock_receipt_stock(item IDs)
+        I->>DB: MatHang FOR UPDATE ordered by ID, read SUM ledger
+        I-->>S: Detached ReceiptStock snapshots
+        S->>S: Validate LK, balance equals ledger, stock plus quantity in INTEGER range
+        break Missing/wrong item, inconsistent or overflowing balance
+            S-->>C: 409, rollback
+        end
+        S->>P: mark_completed(expected_version, actor_id, timestamp)
+        P->>DB: Conditional UPDATE state, completion actor/time, updated_at, version +1
+        break Zero rows updated
+            S-->>C: 412, rollback
+        end
+        S->>I: receive_receipt(lines, actor_id, timestamp)
+        I->>DB: Increase stock, RETURNING balance, preserve held/price
+        break UPDATE returns no row
+            I-->>S: ConflictException (409)
+            T->>DB: ROLLBACK state and all writes
+        end
+        I->>DB: INSERT nhap_linh_kien per line with so_luong_ton_sau
+        S->>AU: append hoan_tat, before/after state and snapshots
+        AU->>AR: append
+        AR->>AR: session.add LichSuThaoTac
+        S->>T: Commit once
+        T->>DB: Flush audit and COMMIT
+        alt Success
+            R-->>C: 200 resource, ledger IDs, replay=false, new ETag
+        else Error in state/stock/ledger/audit/commit
+            T->>DB: ROLLBACK every write
+            R-->>C: 409 / safe 500
         end
     end
 ```
+
+Replay giữ quyền/header đúng policy; không quyết định lại theo giá hoặc tồn hiện tại.
+Nhập không có ticket/phiếu điều chỉnh hoặc bước duyệt. Trigger MatHang thông báo sau
+commit, cache khác cập nhật theo listener/reconciliation, không bảo đảm tức thì.
+Test ASGI với repository/session giả kiểm tra các AC backend, SQL ghi sổ thật và
+rollback khi UPDATE không có dòng. Test FE `uc21-hoan-tat-phieu-nhap.test.js` dùng
+ReceiptEditor và Confirmation hiện tại, xác nhận Hủy/X/Escape không gọi API.
+Chưa kiểm chứng DB PostgreSQL thật, tranh chấp đồng thời hoặc E2E trình duyệt.

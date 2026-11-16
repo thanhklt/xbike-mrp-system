@@ -98,42 +98,17 @@ test("BOM creation explicitly confirms activation and sends no state or version 
   });
 });
 
-test("assigned employee starts an order only after checking issued materials", async ({ page }) => {
+// UC-29 AC-2: Bắt đầu ngay trên yêu cầu, không qua xác nhận, gửi ETag chi tiết
+test("assigned employee starts a request without a confirmation dialog", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
-  await page.goto("/nv/lenh-sx/1");
+  state.resources.phieu_xuat[0].trang_thai = "da_duyet";
+  await page.goto("/nv/yeu-cau/2");
   await page.getByRole("button", { name: "Bắt đầu sản xuất", exact: true }).click();
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Xác nhận", exact: true })
-    .click();
-  await expect(
-    page.getByRole("link", { name: "Tạo chứng từ hoàn thành SX", exact: true }),
-  ).toBeVisible();
-  const action = state.calls.find((call) => call.path === "lenh_san_xuat/1/bat_dau");
+  await expect(page.locator("dialog.confirmation")).toHaveCount(0);
+  await expect(page.getByText("Bắt đầu sản xuất lúc", { exact: true })).toBeVisible();
+  const action = state.calls.find((call) => call.path === "yeu_cau_san_xuat/2/bat_dau");
   expect(action.body).toEqual({});
   expect(action.headers["if-match"]).toBe('"v1"');
-});
-
-test("completion draft submits Vietnam time with offset even when browser timezone is UTC", async ({
-  page,
-}) => {
-  const state = await installApi(page, { role: "nhan_vien" });
-  await page.goto("/nv/hoan-thanh/moi");
-  await page.getByLabel("Lệnh sản xuất", { exact: true }).selectOption("2");
-  await page.getByLabel("Số lượng hoàn thành đợt này", { exact: true }).fill("2");
-  await page
-    .getByLabel("Thời điểm hoàn thành (giờ Việt Nam)", { exact: true })
-    .fill("2026-11-05T09:30");
-  await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
-  await expect(page).toHaveURL(/\/nv\/hoan-thanh\/3$/);
-  expect(
-    state.calls.find((call) => call.path === "chung_tu_hoan_thanh_sx" && call.method === "POST")
-      .body,
-  ).toEqual({
-    lenh_san_xuat_id: 2,
-    so_luong_hoan_thanh: 2,
-    finish_time: "2026-11-05T09:30:00+07:00",
-  });
 });
 
 test("adjustment allows correct quantity zero and sends original ledger ID instead of receipt-line ID", async ({

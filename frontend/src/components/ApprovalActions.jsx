@@ -24,7 +24,6 @@ export function ApprovalActions({ kind, path, base, snapshot, items, dirty = fal
         entries={[
           ["Mặt hàng", itemName(items, record.mat_hang_id)],
           ["Số lượng hoàn thành", record.so_luong_hoan_thanh],
-          ["Lệnh sản xuất", `#${record.lenh_san_xuat_id}`],
         ]}
       />
     );

@@ -13,11 +13,14 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
-ItemType = Literal["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham", "thanh_pham"]
+from app.modules.bom.schemas import BomFormula
+
+ItemType = Literal["linh_kien", "thanh_pham"]
 ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+# Same rule for create and patch: surrounding spaces stripped, blank rejected.
+Sku = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Money = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
 SnakeCode = Annotated[str, StringConstraints(pattern=r"^[a-z]+(_[a-z]+)*$")]
-ItemCode = Annotated[str, StringConstraints(pattern=r"^MH-[0-9]{6}$")]
 
 
 class MatHangRead(BaseModel):
@@ -34,7 +37,15 @@ class MatHangRead(BaseModel):
     don_gia: Money
     is_active: bool
     so_luong_ton: int = Field(ge=0)
+    so_luong_dang_giu: int = Field(ge=0)
+    so_luong_con_dung: int = Field(ge=0)
     ton_kho_updated_at: datetime | None
+
+    @model_validator(mode="after")
+    def validate_stock(self) -> "MatHangRead":
+        if self.so_luong_con_dung != self.so_luong_ton - self.so_luong_dang_giu:
+            raise ValueError("Stock quantities are inconsistent")
+        return self
 
     @field_validator("ton_kho_updated_at")
     @classmethod
@@ -45,36 +56,39 @@ class MatHangRead(BaseModel):
 class MatHangCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ma_mat_hang: ItemCode
-    sku: str = Field(min_length=1)
+    sku: Sku
     ten_mat_hang: ItemName
     loai_mat_hang: ItemType
     don_vi_tinh: SnakeCode
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
     don_gia: Money
-    is_active: bool = True
+    bom: BomFormula | None = None
 
-    @field_validator("ma_mat_hang")
-    @classmethod
-    def validate_ma(cls, value: str) -> str:
-        if value == "MH-000000":
-            raise ValueError("Mã mặt hàng không được kết thúc bằng 000000")
-        return value
+    @model_validator(mode="after")
+    def validate_formula(self) -> "MatHangCreate":
+        if (self.loai_mat_hang == "thanh_pham") != (self.bom is not None):
+            raise ValueError("Thành phẩm phải có công thức; linh kiện không có công thức")
+        return self
 
 
 class MatHangPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ma_mat_hang: ItemCode | None = None
-    sku: str | None = Field(default=None, min_length=1)
+    sku: Sku | None = None
     ten_mat_hang: ItemName | None = None
-    loai_mat_hang: ItemType | None = None
     don_vi_tinh: SnakeCode | None = None
     mau_sac: SnakeCode | None = None
     mo_ta: str | None = None
     don_gia: Money | SkipJsonSchema[None] = None
     is_active: bool | None = None
+
+    @field_validator("sku")
+    @classmethod
+    def validate_sku(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("SKU must not be blank")
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -94,12 +108,44 @@ class MatHangPatch(BaseModel):
                     raise ValueError(f"{name} không được null")
         return values
 
-    @field_validator("ma_mat_hang")
+
+class MatHangListQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    q: str | None = None
+    loai_mat_hang: ItemType | None = None
+    is_active: bool | None = None
+    don_vi_tinh: str | None = None
+    mau_sac: str | None = None
+    don_gia_min: int | None = Field(default=None, ge=0, le=2**63 - 1)
+    don_gia_max: int | None = Field(default=None, ge=0, le=2**63 - 1)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    sort: Literal[
+        "id",
+        "-id",
+        "ma_mat_hang",
+        "-ma_mat_hang",
+        "ten_mat_hang",
+        "-ten_mat_hang",
+        "don_gia",
+        "-don_gia",
+    ] = "id"
+
+    @field_validator("q")
     @classmethod
-    def validate_ma(cls, value: str | None) -> str | None:
-        if value == "MH-000000":
-            raise ValueError("Mã mặt hàng không được kết thúc bằng 000000")
-        return value
+    def normalize_search(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_prices(self) -> "MatHangListQuery":
+        if (
+            self.don_gia_min is not None
+            and self.don_gia_max is not None
+            and self.don_gia_min > self.don_gia_max
+        ):
+            raise ValueError("Minimum price must not exceed maximum price")
+        return self
 
 
 class SingleMeta(BaseModel):

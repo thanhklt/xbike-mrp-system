@@ -222,7 +222,6 @@ class VaiTroListResponse(BaseModel):
 @dataclass(frozen=True)
 class NewEmployee:
     ten_dang_nhap: str
-    ma_nhan_vien: str
     vai_tro_id: int
     password_hash: str = field(repr=False)
     profile: dict[str, object]

@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Identity,
     Integer,
@@ -43,7 +44,9 @@ class NhanVien(Base):
     mat_khau: Mapped[str] = mapped_column(
         String, nullable=False, comment="Password hash only, never plaintext"
     )
-    ma_nhan_vien: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    ma_nhan_vien: Mapped[str] = mapped_column(
+        String, nullable=False, unique=True, server_default=FetchedValue()
+    )
     ho_ten: Mapped[str | None] = mapped_column(String, nullable=True)
     ngay_sinh: Mapped[date | None] = mapped_column(Date, nullable=True)
     so_dien_thoai: Mapped[str | None] = mapped_column(String, nullable=True)
