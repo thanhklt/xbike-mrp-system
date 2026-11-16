@@ -1,0 +1,265 @@
+{
+  "source": "Actual app.main ASGI requests with real PostgreSQL v4 test DB and real auth/repositories; application lifespan not started; no application DB used",
+  "cases": [
+    {
+      "case": "filtered_list",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit?loai_doi_tuong=cong_thuc&nhan_vien_id=2&thao_tac=tao_phien_ban&tu_ngay=2026-11-14&den_ngay=2026-11-14",
+        "test_actor_id": 2
+      },
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": [
+          {
+            "id": 5,
+            "nhan_vien_id": 2,
+            "loai_doi_tuong": "cong_thuc",
+            "doi_tuong_id": 10,
+            "thao_tac": "tao_phien_ban",
+            "trang_thai_truoc": null,
+            "trang_thai_sau": null,
+            "ly_do": "end of day",
+            "created_at": "2026-11-14T16:59:59.999999Z",
+            "du_lieu_truoc": null,
+            "du_lieu_sau": null
+          },
+          {
+            "id": 2,
+            "nhan_vien_id": 2,
+            "loai_doi_tuong": "cong_thuc",
+            "doi_tuong_id": 10,
+            "thao_tac": "tao_phien_ban",
+            "trang_thai_truoc": null,
+            "trang_thai_sau": null,
+            "ly_do": "literal 50%_x\\path",
+            "created_at": "2026-11-13T17:00:00Z",
+            "du_lieu_truoc": null,
+            "du_lieu_sau": null
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "page_size": 20,
+          "total_items": 2,
+          "total_pages": 1,
+          "has_next": false,
+          "has_prev": false
+        },
+        "message": "Items retrieved successfully"
+      }
+    },
+    {
+      "case": "admin_detail",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit/7",
+        "test_actor_id": 1
+      },
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": 7,
+          "nhan_vien_id": 2,
+          "loai_doi_tuong": "yeu_cau_san_xuat",
+          "doi_tuong_id": 20,
+          "thao_tac": "kiem_tra",
+          "trang_thai_truoc": "da_gui",
+          "trang_thai_sau": "cho_bo_sung_linh_kien",
+          "ly_do": null,
+          "created_at": "2026-11-14T01:00:00Z",
+          "du_lieu_truoc": null,
+          "du_lieu_sau": {
+            "nested": [
+              {
+                "quantity": 10
+              }
+            ],
+            "danh_sach_thieu": [
+              {
+                "mat_hang_id": 1,
+                "ten_mat_hang": "Frame",
+                "so_luong_thieu": 10
+              }
+            ]
+          }
+        },
+        "message": "Audit entry retrieved successfully"
+      }
+    },
+    {
+      "case": "manager_detail",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit/7",
+        "test_actor_id": 2
+      },
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": {
+          "id": 7,
+          "nhan_vien_id": 2,
+          "loai_doi_tuong": "yeu_cau_san_xuat",
+          "doi_tuong_id": 20,
+          "thao_tac": "kiem_tra",
+          "trang_thai_truoc": "da_gui",
+          "trang_thai_sau": "cho_bo_sung_linh_kien",
+          "ly_do": null,
+          "created_at": "2026-11-14T01:00:00Z",
+          "du_lieu_truoc": null,
+          "du_lieu_sau": {
+            "nested": [
+              {
+                "quantity": 10
+              }
+            ],
+            "danh_sach_thieu": [
+              {
+                "mat_hang_id": 1,
+                "ten_mat_hang": "Frame",
+                "so_luong_thieu": 10
+              }
+            ]
+          }
+        },
+        "message": "Audit entry retrieved successfully"
+      }
+    },
+    {
+      "case": "legacy_exclusion",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit?bo_thao_tac=thu_hoi_quyen&page_size=1",
+        "test_actor_id": 1
+      },
+      "status": 200,
+      "body": {
+        "success": true,
+        "data": [
+          {
+            "id": 6,
+            "nhan_vien_id": 2,
+            "loai_doi_tuong": "cong_thuc",
+            "doi_tuong_id": 10,
+            "thao_tac": "tao_phien_ban",
+            "trang_thai_truoc": null,
+            "trang_thai_sau": null,
+            "ly_do": "next day",
+            "created_at": "2026-11-14T17:00:00Z",
+            "du_lieu_truoc": null,
+            "du_lieu_sau": null
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "page_size": 1,
+          "total_items": 8,
+          "total_pages": 8,
+          "has_next": true,
+          "has_prev": false
+        },
+        "message": "Items retrieved successfully"
+      }
+    },
+    {
+      "case": "missing_auth",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit",
+        "test_actor_id": null
+      },
+      "status": 401,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "UNAUTHORIZED",
+          "message": "Unauthorized",
+          "details": {}
+        },
+        "timestamp": "2026-11-14T10:12:38.190445+00:00"
+      }
+    },
+    {
+      "case": "employee_denied",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit/7",
+        "test_actor_id": 3
+      },
+      "status": 403,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "FORBIDDEN",
+          "message": "You do not have permission to perform this action",
+          "details": {}
+        },
+        "timestamp": "2026-11-14T10:12:38.198137+00:00"
+      }
+    },
+    {
+      "case": "missing_record",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit/9999",
+        "test_actor_id": 1
+      },
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "NOT_FOUND",
+          "message": "Resource not found",
+          "details": {}
+        },
+        "timestamp": "2026-11-14T10:12:38.206233+00:00"
+      }
+    },
+    {
+      "case": "invalid_sort",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/audit?sort_by=du_lieu_sau",
+        "test_actor_id": 1
+      },
+      "status": 422,
+      "body": {
+        "success": false,
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "Input validation failed",
+          "details": [
+            {
+              "type": "literal_error",
+              "loc": [
+                "query",
+                "sort_by"
+              ],
+              "msg": "Input should be 'id' or 'created_at'",
+              "input": "du_lieu_sau",
+              "ctx": {
+                "expected": "'id' or 'created_at'"
+              }
+            }
+          ]
+        },
+        "timestamp": "2026-11-14T10:12:38.212963+00:00"
+      }
+    },
+    {
+      "case": "write_not_supported",
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v1/audit/7",
+        "test_actor_id": 1
+      },
+      "status": 405,
+      "body": {
+        "detail": "Method Not Allowed"
+      }
+    }
+  ]
+}

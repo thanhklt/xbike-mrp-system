@@ -1,8 +1,8 @@
 """Issue queries stay in the caller's session; no independent commit."""
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timedelta
 
-from sqlalchemy import DateTime, delete, exists, func, literal, or_, select, text, update
+from sqlalchemy import DateTime, delete, func, literal, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictException, NotFoundException
@@ -10,12 +10,10 @@ from app.modules.mat_hang.models import MatHang
 from app.modules.phieu_xuat.models import ChiTietPhieuXuat, PhieuXuat
 from app.modules.phieu_xuat.ports import IssuePart, IssueSource, PhieuXuatSnapshot
 from app.modules.phieu_xuat.schemas import (
-    ChiTietPhieuXuatCreate,
     PhieuXuatCreate,
     PhieuXuatQuery,
     PhieuXuatRead,
 )
-from app.modules.san_xuat.models import ChiTietLenhSanXuat, LenhSanXuat, YeuCauSanXuat
 from app.shared.records import RecordPage
 
 
@@ -65,23 +63,13 @@ class SqlAlchemyPhieuXuatRepository:
         lines = await self._lines([record.id], lock=lock)
         return self._build(record, lines[record.id])
 
-    @staticmethod
-    def _scope(employee_id: int):
-        return or_(
-            exists().where(
-                LenhSanXuat.id == PhieuXuat.lenh_san_xuat_id,
-                LenhSanXuat.nhan_vien_id == employee_id,
-            ),
-            exists().where(
-                YeuCauSanXuat.id == PhieuXuat.yeu_cau_san_xuat_id,
-                YeuCauSanXuat.nhan_vien_duoc_giao_id == employee_id,
-            ),
-        )
-
     async def assigned_to(self, record: PhieuXuatRead, employee_id: int) -> bool:
         return bool(
             await self.session.scalar(
-                select(exists().where(PhieuXuat.id == record.id, self._scope(employee_id)))
+                text(
+                    'SELECT EXISTS (SELECT 1 FROM "YeuCauSanXuat" WHERE id=:id AND nhan_vien_duoc_giao_id=:employee)'
+                ),
+                {"id": record.yeu_cau_san_xuat_id, "employee": employee_id},
             )
         )
 
@@ -89,15 +77,12 @@ class SqlAlchemyPhieuXuatRepository:
         self, params: PhieuXuatQuery, employee_id: int | None
     ) -> RecordPage[PhieuXuatRead]:
         query = select(PhieuXuat)
-        if employee_id is not None:
-            query = query.where(self._scope(employee_id))
         if params.q:
             query = query.where(PhieuXuat.ma_phieu_xuat.icontains(params.q, autoescape=True))
         for name in (
             "loai_phieu",
             "trang_thai",
             "nhan_vien_id",
-            "lenh_san_xuat_id",
             "yeu_cau_san_xuat_id",
         ):
             if (value := getattr(params, name)) is not None:
@@ -137,58 +122,58 @@ class SqlAlchemyPhieuXuatRepository:
         record = await self.session.scalar(query)
         return await self._resource(record, lock=lock) if record is not None else None
 
-    async def lock_source(
-        self, kind: str, order_id: int | None, request_id: int | None
-    ) -> IssueSource:
-        if kind == "xuat_vat_tu":
-            request_id = await self.session.scalar(
-                select(LenhSanXuat.yeu_cau_san_xuat_id).where(LenhSanXuat.id == order_id)
+    async def lock_source(self, kind: str, request_id: int) -> IssueSource:
+        # Shared ordering with cancellation: source request, issue, items, reservations.
+        row = (
+            (
+                await self.session.execute(
+                    text('SELECT * FROM "YeuCauSanXuat" WHERE id=:id FOR UPDATE'),
+                    {"id": request_id},
+                )
             )
-        if request_id is None:
-            raise NotFoundException(message="Source not found")
-        # Same ordering as production cancellation: request, order, issue, items.
-        request = await self.session.scalar(
-            select(YeuCauSanXuat)
-            .where(YeuCauSanXuat.id == request_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
+            .mappings()
+            .one_or_none()
         )
-        if request is None:
+        if row is None:
             raise NotFoundException(message="Source request not found")
-        if kind == "xuat_thanh_pham":
-            return IssueSource(
-                request.trang_thai,
-                request.nhan_vien_duoc_giao_id,
-                request.id,
-                request.trang_thai,
-                {request.mat_hang_id: request.so_luong},
+        demand = {row["mat_hang_id"]: row["so_luong"]}
+        if kind == "xuat_linh_kien":
+            demand = dict(
+                (
+                    await self.session.execute(
+                        text(
+                            'SELECT mat_hang_id, so_luong_can FROM "NhuCauLinhKien" WHERE yeu_cau_san_xuat_id=:id ORDER BY mat_hang_id'
+                        ),
+                        {"id": request_id},
+                    )
+                ).all()
             )
-        order = await self.session.scalar(
-            select(LenhSanXuat)
-            .where(LenhSanXuat.id == order_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        if order is None or order.yeu_cau_san_xuat_id != request.id:
-            raise ConflictException(message="Source order changed")
-        rows = (
+        completion = (
             await self.session.execute(
-                select(ChiTietLenhSanXuat.mat_hang_id, ChiTietLenhSanXuat.so_luong_can)
-                .where(ChiTietLenhSanXuat.lenh_san_xuat_id == order.id)
-                .order_by(ChiTietLenhSanXuat.id)
-                .with_for_update(read=True)
+                text(
+                    'SELECT id, trang_thai FROM "ChungTuHoanThanhSx" WHERE yeu_cau_san_xuat_id=:id'
+                ),
+                {"id": request_id},
             )
-        ).all()
+        ).one_or_none()
         return IssueSource(
-            order.trang_thai, order.nhan_vien_id, request.id, request.trang_thai, dict(rows)
+            row["trang_thai"],
+            row["nhan_vien_duoc_giao_id"],
+            request_id,
+            demand,
+            row["loai_yeu_cau"],
+            row["so_luong_can_san_xuat"],
+            completion.id if completion else None,
+            completion.trang_thai if completion else None,
+            dict(row),
         )
 
     async def lock_context(self, issue_id: int) -> tuple[PhieuXuatRead, IssueSource] | None:
         peek = (
             await self.session.execute(
-                select(
-                    PhieuXuat.loai_phieu, PhieuXuat.lenh_san_xuat_id, PhieuXuat.yeu_cau_san_xuat_id
-                ).where(PhieuXuat.id == issue_id)
+                select(PhieuXuat.loai_phieu, PhieuXuat.yeu_cau_san_xuat_id).where(
+                    PhieuXuat.id == issue_id
+                )
             )
         ).one_or_none()
         if peek is None:
@@ -200,7 +185,24 @@ class SqlAlchemyPhieuXuatRepository:
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        return (await self._resource(record), source) if record is not None else None
+        if record is None:
+            return None
+        resource = await self._resource(record)
+        if source.completion_id is not None:
+            await self.session.execute(
+                text('SELECT id FROM "ChungTuHoanThanhSx" WHERE id=:id FOR SHARE'),
+                {"id": source.completion_id},
+            )
+        return resource, source
+
+    async def exists_for_source(self, request_id: int, kind: str) -> bool:
+        return (
+            await self.session.scalar(
+                select(PhieuXuat.id)
+                .where(PhieuXuat.yeu_cau_san_xuat_id == request_id, PhieuXuat.loai_phieu == kind)
+                .limit(1)
+            )
+        ) is not None
 
     async def lock_parts(self, item_ids: list[int], *, posting: bool) -> list[IssuePart]:
         records = (
@@ -239,9 +241,11 @@ class SqlAlchemyPhieuXuatRepository:
             raise ConflictException(message="Monthly issue number range exhausted")
         return f"{prefix}{serial + 1:06d}"
 
-    async def add(self, payload: PhieuXuatCreate, actor_id: int) -> PhieuXuatRead:
+    async def add(
+        self, payload: PhieuXuatCreate, actor_id: int, demand: dict[int, int]
+    ) -> PhieuXuatRead:
         record = PhieuXuat(
-            **payload.model_dump(exclude={"chi_tiet"}),
+            **payload.model_dump(),
             ma_phieu_xuat=await self._next_code(),
             nhan_vien_id=actor_id,
         )
@@ -249,67 +253,41 @@ class SqlAlchemyPhieuXuatRepository:
         await self.session.flush()
         self.session.add_all(
             [
-                ChiTietPhieuXuat(phieu_xuat_id=record.id, **line.model_dump())
-                for line in payload.chi_tiet
+                ChiTietPhieuXuat(phieu_xuat_id=record.id, mat_hang_id=item_id, so_luong=quantity)
+                for item_id, quantity in sorted(demand.items())
             ]
         )
         await self.session.flush()
         return await self._resource(record)
 
-    async def replace_lines(
-        self, issue_id: int, lines: list[ChiTietPhieuXuatCreate]
+    async def change_state(
+        self, issue_id: int, state: str, actor_id: int, at: datetime, reason: str | None = None
     ) -> PhieuXuatRead:
+        values = dict(trang_thai=state, updated_at=at, phien_ban=PhieuXuat.phien_ban + 1)
+        if state == "cho_duyet":
+            values.update(gui_at=at, nguoi_xu_ly_id=None, xu_ly_at=None, ly_do_tu_choi=None)
+        else:
+            values.update(nguoi_xu_ly_id=actor_id, xu_ly_at=at, ly_do_tu_choi=reason)
         await self.session.execute(
-            delete(ChiTietPhieuXuat).where(ChiTietPhieuXuat.phieu_xuat_id == issue_id)
+            update(PhieuXuat).where(PhieuXuat.id == issue_id).values(**values)
         )
-        self.session.add_all(
-            [ChiTietPhieuXuat(phieu_xuat_id=issue_id, **line.model_dump()) for line in lines]
-        )
-        await self.session.execute(
-            update(PhieuXuat).where(PhieuXuat.id == issue_id).values(tong_tien=None)
-        )
-        await self.session.flush()
-        return await self.get_issue(issue_id)
+        resource = await self.get_issue(issue_id)
+        if resource is None:
+            raise NotFoundException()
+        return resource
 
-    async def change_state(self, issue_id: int, state: str) -> PhieuXuatRead:
-        await self.session.execute(
-            update(PhieuXuat).where(PhieuXuat.id == issue_id).values(trang_thai=state)
+    async def postings(self, issue_id: int) -> list[dict]:
+        rows = await self.session.execute(
+            text(
+                'SELECT g.id, g.chi_tiet_phieu_xuat_id, g.mat_hang_id, g.loai_giao_dich, g.so_luong_bien_dong FROM "GiaoDichKho" g JOIN "ChiTietPhieuXuat" c ON c.id=g.chi_tiet_phieu_xuat_id WHERE c.phieu_xuat_id=:id ORDER BY g.id'
+            ),
+            {"id": issue_id},
         )
-        return await self.get_issue(issue_id)
+        return [dict(row) for row in rows.mappings()]
 
-    async def approved_quantities(self, record: PhieuXuatRead) -> dict[int, int]:
-        source = (
-            PhieuXuat.lenh_san_xuat_id == record.lenh_san_xuat_id
-            if record.loai_phieu == "xuat_vat_tu"
-            else PhieuXuat.yeu_cau_san_xuat_id == record.yeu_cau_san_xuat_id
-        )
-        rows = (
-            await self.session.execute(
-                select(ChiTietPhieuXuat.mat_hang_id, func.sum(ChiTietPhieuXuat.so_luong))
-                .join(PhieuXuat, PhieuXuat.id == ChiTietPhieuXuat.phieu_xuat_id)
-                .where(
-                    source,
-                    PhieuXuat.loai_phieu == record.loai_phieu,
-                    PhieuXuat.trang_thai == "da_duyet",
-                )
-                .group_by(ChiTietPhieuXuat.mat_hang_id)
-            )
-        ).all()
-        return dict(rows)
-
-    async def postings(self, issue_id: int) -> list[int]:
-        return list(
-            (
-                await self.session.scalars(
-                    text(
-                        'SELECT g.id FROM "GiaoDichKho" g JOIN "ChiTietPhieuXuat" c ON c.id=g.chi_tiet_phieu_xuat_id WHERE c.phieu_xuat_id=:id ORDER BY g.id'
-                    ),
-                    {"id": issue_id},
-                )
-            ).all()
-        )
-
-    async def freeze_prices(self, record: PhieuXuatRead, prices: dict[int, int]) -> PhieuXuatRead:
+    async def freeze_prices(
+        self, record: PhieuXuatRead, prices: dict[int, int], actor_id: int, at: datetime
+    ) -> PhieuXuatRead:
         total = 0
         for line in record.chi_tiet:
             price = prices[line.mat_hang_id]
@@ -323,19 +301,35 @@ class SqlAlchemyPhieuXuatRepository:
         await self.session.execute(
             update(PhieuXuat)
             .where(PhieuXuat.id == record.id)
-            .values(tong_tien=total, trang_thai="da_duyet")
-        )
-        return await self.get_issue(record.id)
-
-    async def update_progress(self, request_id: int, total: int, required: int) -> None:
-        await self.session.execute(
-            update(YeuCauSanXuat)
-            .where(YeuCauSanXuat.id == request_id)
             .values(
-                trang_thai="hoan_thanh" if total == required else "dang_thuc_hien",
-                completed_at=datetime.now(timezone.utc) if total == required else None,
+                tong_tien=total,
+                trang_thai="da_duyet",
+                nguoi_xu_ly_id=actor_id,
+                xu_ly_at=at,
+                updated_at=at,
+                ly_do_tu_choi=None,
+                phien_ban=PhieuXuat.phien_ban + 1,
             )
         )
+        resource = await self.get_issue(record.id)
+        if resource is None:
+            raise NotFoundException()
+        return resource
+
+    async def update_progress(self, request_id: int, at: datetime) -> dict:
+        row = (
+            (
+                await self.session.execute(
+                    text(
+                        """UPDATE "YeuCauSanXuat" SET trang_thai='hoan_thanh', completed_at=:at, updated_at=:at, phien_ban=phien_ban+1 WHERE id=:id RETURNING *"""
+                    ),
+                    {"id": request_id, "at": at},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return dict(row)
 
     async def tong_da_xuat_thanh_pham(self, yeu_cau_ids: list[int]) -> dict[int, int]:
         rows = await self.session.execute(
@@ -354,18 +348,21 @@ class SqlAlchemyPhieuXuatRepository:
         resource = await self._resource(issue)
         return PhieuXuatSnapshot(issue.id, issue.trang_thai, resource.model_dump(mode="json"))
 
-    async def lock_by_sources(
-        self, yeu_cau_id: int, lenh_ids: list[int]
-    ) -> list[PhieuXuatSnapshot]:
+    # UC-28 Hủy yêu cầu sản xuất — D4 đọc phiếu của yêu cầu không khóa (specs/use_cases/production/UC-28.md)
+    async def phieu_cua_yeu_cau(self, yeu_cau_id: int) -> list[dict]:
+        rows = await self.session.execute(
+            select(PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai)
+            .where(PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id)
+            .order_by(PhieuXuat.id)
+        )
+        return [dict(row) for row in rows.mappings()]
+
+    # UC-28 Hủy yêu cầu sản xuất — A4 khóa phiếu sau khóa yêu cầu (specs/use_cases/production/UC-28.md)
+    async def lock_by_sources(self, yeu_cau_id: int) -> list[PhieuXuatSnapshot]:
         issues = (
             await self.session.scalars(
                 select(PhieuXuat)
-                .where(
-                    or_(
-                        PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id,
-                        PhieuXuat.lenh_san_xuat_id.in_(lenh_ids),
-                    )
-                )
+                .where(PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id)
                 .order_by(PhieuXuat.id)
                 .with_for_update()
                 .execution_options(populate_existing=True)
@@ -373,14 +370,14 @@ class SqlAlchemyPhieuXuatRepository:
         ).all()
         return [await self._snapshot(issue) for issue in issues]
 
+    # UC-28 Hủy yêu cầu sản xuất — R4 bỏ phiếu nháp cùng chi tiết (specs/use_cases/production/UC-28.md)
     async def delete_draft(self, issue_id: int) -> None:
         await self.session.execute(
             delete(ChiTietPhieuXuat).where(ChiTietPhieuXuat.phieu_xuat_id == issue_id)
         )
         await self.session.execute(delete(PhieuXuat).where(PhieuXuat.id == issue_id))
 
-    async def reject(self, issue_id: int) -> PhieuXuatSnapshot:
-        issue = await self.session.get(PhieuXuat, issue_id)
-        issue.trang_thai = "tu_choi"
-        await self.session.flush()
-        return await self._snapshot(issue)
+    # UC-28 Hủy yêu cầu sản xuất — R4 từ chối phiếu chờ duyệt (specs/use_cases/production/UC-28.md)
+    async def reject(self, issue_id: int, actor_id: int, at: datetime) -> PhieuXuatSnapshot:
+        resource = await self.change_state(issue_id, "tu_choi", actor_id, at, "Yêu cầu đã hủy")
+        return PhieuXuatSnapshot(resource.id, resource.trang_thai, resource.model_dump(mode="json"))

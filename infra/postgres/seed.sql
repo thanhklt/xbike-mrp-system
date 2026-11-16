@@ -6,14 +6,14 @@
 --
 -- Tồn kho chỉ dựng qua chứng từ đã ghi nhận + GiaoDichKho (data model v4 mục 3.7):
 --   PN-202611-000001 hoàn tất -> cộng linh kiện.
---   YCSX-202611-000001 (đáp ứng, 5 Mountain Pro): chạy trọn luồng; chứng từ hoàn thành bị từ chối 1 lần
+--   YCSX-202611-000001 (xuất giao, 5 Mountain Pro): chạy trọn luồng; chứng từ hoàn thành bị từ chối 1 lần
 --     rồi gửi lại; xuất thành phẩm -> Hoàn thành.
---   YCSX-202611-000002 (sản xuất cho kho, 3 Mountain Pro): xuất linh kiện, sản xuất, duyệt chứng từ hoàn thành
+--   YCSX-202611-000002 (sản xuất nhập kho, 3 Mountain Pro): xuất linh kiện, sản xuất, duyệt chứng từ hoàn thành
 --     -> cộng 3 xe vào kho, không giữ -> Hoàn thành. Đây là nguồn tồn thành phẩm còn dùng được.
 --   YCSX-202611-000003 (4 City Ride, công thức v2): Đang thực hiện, giữ linh kiện; phiếu xuất linh kiện
 --     bị từ chối 1 lần, đã gửi lại, đang chờ duyệt.
 --   YCSX-202611-000004 (2 City Ride): đã kiểm tra và giữ linh kiện, sau đó bị hủy -> trả hàng.
---   YCSX-202611-000005 (đáp ứng, 10 Mountain Pro): kịch bản BR-008 "Tồn 3 xe, cần 10" -> dùng 3 xe có sẵn,
+--   YCSX-202611-000005 (xuất giao, 10 Mountain Pro): kịch bản BR-008 "Tồn 3 xe, cần 10" -> dùng 3 xe có sẵn,
 --     sản xuất 7; Đang thực hiện, giữ 3 xe và linh kiện cho 7 xe.
 --   YCSX-202611-000006 (10 Speed Sport): Chờ bổ sung linh kiện, thiếu 4 khung xe.
 --   YCSX-202611-000007 (3 Kids Fun): Đã gửi, chưa kiểm tra.
@@ -75,11 +75,12 @@ INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro, mo_ta) VALUES
   (2, 'quan_ly', 'Quản lý kho', 'Quản lý mặt hàng, nhà cung cấp, công thức; nhập kho; lập, gửi, hủy yêu cầu sản xuất; duyệt phiếu xuất và chứng từ hoàn thành; xem báo cáo và lịch sử thao tác.'),
   (3, 'nhan_vien', 'Nhân viên', 'Xử lý yêu cầu sản xuất được giao: kiểm tra và giữ hàng, lập phiếu xuất linh kiện, bắt đầu sản xuất, lập chứng từ hoàn thành, lập phiếu xuất thành phẩm.');
 
-INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai, phien_ban_dang_nhap, created_at) VALUES
-  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong', 0, '2026-11-01 07:00:00+07'),
-  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong', 0, '2026-11-01 08:00:00+07'),
-  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong', 0, '2026-11-01 08:01:00+07'),
-  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000004', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07');
+-- Mã NV- do trigger cấp từ id, seed không truyền mã (id 1–4 vẫn nhận NV-000001–NV-000004).
+INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai, phien_ban_dang_nhap, created_at) VALUES
+  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong', 0, '2026-11-01 07:00:00+07'),
+  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong', 0, '2026-11-01 08:00:00+07'),
+  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong', 0, '2026-11-01 08:01:00+07'),
+  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07');
 
 -- ---------------------------------------------------------------------
 -- catalog — mã MH-/NCC- do trigger cấp từ id, seed không truyền mã.
@@ -160,21 +161,21 @@ FROM (SELECT * FROM public."ChiTietPhieuNhap" WHERE phieu_nhap_id = 1 ORDER BY i
 
 INSERT INTO public."YeuCauSanXuat" (id, ma_yeu_cau_san_xuat, loai_yeu_cau, mat_hang_id, so_luong, han_hoan_thanh, nhan_vien_id, nhan_vien_duoc_giao_id, bom_id, trang_thai,
   so_luong_dung_thanh_pham, so_luong_can_san_xuat, created_at, updated_at, gui_at, kiem_tra_lan_dau_at, started_at, completed_at, huy_at, nguoi_huy_id, ly_do_huy, phien_ban) VALUES
-  (1, 'YCSX-202611-000001', 'dap_ung', 1, 5, '2026-11-10', 2, 3, 1, 'hoan_thanh', 0, 5,
+  (1, 'YCSX-202611-000001', 'xuat_giao', 1, 5, '2026-11-10', 2, 3, 1, 'hoan_thanh', 0, 5,
    '2026-11-03 08:00:00+07', '2026-11-06 15:00:00+07', '2026-11-03 08:10:00+07', '2026-11-03 09:00:00+07', '2026-11-04 10:00:00+07', '2026-11-06 15:00:00+07', NULL, NULL, NULL, 5),
-  (2, 'YCSX-202611-000002', 'cho_kho', 1, 3, '2026-11-08', 2, 4, 1, 'hoan_thanh', 0, 3,
+  (2, 'YCSX-202611-000002', 'nhap_kho', 1, 3, '2026-11-08', 2, 4, 1, 'hoan_thanh', 0, 3,
    '2026-11-04 11:00:00+07', '2026-11-05 17:00:00+07', '2026-11-04 11:05:00+07', '2026-11-04 13:00:00+07', '2026-11-05 08:00:00+07', '2026-11-05 17:00:00+07', NULL, NULL, NULL, 5),
-  (3, 'YCSX-202611-000003', 'dap_ung', 2, 4, '2026-11-15', 2, 3, 3, 'dang_thuc_hien', 0, 4,
+  (3, 'YCSX-202611-000003', 'xuat_giao', 2, 4, '2026-11-15', 2, 3, 3, 'dang_thuc_hien', 0, 4,
    '2026-11-07 08:00:00+07', '2026-11-07 09:00:00+07', '2026-11-07 08:10:00+07', '2026-11-07 09:00:00+07', NULL, NULL, NULL, NULL, NULL, 3),
-  (4, 'YCSX-202611-000004', 'dap_ung', 2, 2, '2026-11-12', 2, 4, 3, 'da_huy', 0, 2,
+  (4, 'YCSX-202611-000004', 'xuat_giao', 2, 2, '2026-11-12', 2, 4, 3, 'da_huy', 0, 2,
    '2026-11-07 08:15:00+07', '2026-11-10 08:30:00+07', '2026-11-07 08:20:00+07', '2026-11-08 09:00:00+07', NULL, NULL, '2026-11-10 08:30:00+07', 2, 'Khách hủy đơn, không còn nhu cầu.', 4),
-  (5, 'YCSX-202611-000005', 'dap_ung', 1, 10, '2026-11-20', 2, 3, 1, 'dang_thuc_hien', 3, 7,
+  (5, 'YCSX-202611-000005', 'xuat_giao', 1, 10, '2026-11-20', 2, 3, 1, 'dang_thuc_hien', 3, 7,
    '2026-11-09 09:00:00+07', '2026-11-09 10:00:00+07', '2026-11-09 09:10:00+07', '2026-11-09 10:00:00+07', NULL, NULL, NULL, NULL, NULL, 3),
-  (6, 'YCSX-202611-000006', 'dap_ung', 3, 10, '2026-11-22', 2, 4, 4, 'cho_bo_sung_linh_kien', 0, 10,
+  (6, 'YCSX-202611-000006', 'xuat_giao', 3, 10, '2026-11-22', 2, 4, 4, 'cho_bo_sung_linh_kien', 0, 10,
    '2026-11-10 08:50:00+07', '2026-11-10 10:00:00+07', '2026-11-10 09:00:00+07', '2026-11-10 10:00:00+07', NULL, NULL, NULL, NULL, NULL, 3),
-  (7, 'YCSX-202611-000007', 'dap_ung', 4, 3, '2026-11-25', 2, 4, 5, 'da_gui', NULL, NULL,
+  (7, 'YCSX-202611-000007', 'xuat_giao', 4, 3, '2026-11-25', 2, 4, 5, 'da_gui', NULL, NULL,
    '2026-11-11 07:50:00+07', '2026-11-11 08:00:00+07', '2026-11-11 08:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, 2),
-  (8, 'YCSX-202611-000008', 'dap_ung', 1, 2, '2026-11-30', 2, 3, NULL, 'nhap', NULL, NULL,
+  (8, 'YCSX-202611-000008', 'xuat_giao', 1, 2, '2026-11-30', 2, 3, NULL, 'nhap', NULL, NULL,
    '2026-11-12 08:00:00+07', '2026-11-12 08:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1);
 
 -- Nhu cầu linh kiện = định mức của công thức đã chốt × số cần sản xuất.
@@ -207,11 +208,11 @@ WHERE p.loai_phieu = 'xuat_thanh_pham' ORDER BY p.id;
 
 -- 04/11 09:30: duyệt PX 1 (linh kiện 5 Mountain Pro cho YCSX 1).
 SELECT pg_temp.duyet_phieu_xuat(1, 2, '2026-11-04 09:30:00+07', 3);
--- 04/11 15:00: duyệt PX 2 (linh kiện 3 Mountain Pro cho YCSX 2, sản xuất cho kho).
+-- 04/11 15:00: duyệt PX 2 (linh kiện 3 Mountain Pro cho YCSX 2, sản xuất nhập kho).
 SELECT pg_temp.duyet_phieu_xuat(2, 2, '2026-11-04 15:00:00+07', 3);
 
--- 05/11 17:00: duyệt HTSX 2 của YCSX 2 (cho kho) -> +3 Mountain Pro, không giữ, yêu cầu Hoàn thành.
--- 06/11 14:00: duyệt HTSX 1 của YCSX 1 (đáp ứng; bị từ chối 05/11 11:00, gửi lại 16:00) -> +5, giữ cho YCSX 1.
+-- 05/11 17:00: duyệt HTSX 2 của YCSX 2 (nhập kho) -> +3 Mountain Pro, không giữ, yêu cầu Hoàn thành.
+-- 06/11 14:00: duyệt HTSX 1 của YCSX 1 (xuất giao; bị từ chối 05/11 11:00, gửi lại 16:00) -> +5, giữ cho YCSX 1.
 INSERT INTO public."ChungTuHoanThanhSx" (id, ma_phieu, yeu_cau_san_xuat_id, so_luong_hoan_thanh, nhan_vien_id, trang_thai, finish_time, created_at, updated_at, nguoi_xu_ly_id, xu_ly_at, phien_ban) VALUES
   (1, 'HTSX-202611-000001', 1, 5, 3, 'da_duyet', '2026-11-05 16:00:00+07', '2026-11-05 10:00:00+07', '2026-11-06 14:00:00+07', 2, '2026-11-06 14:00:00+07', 5),
   (2, 'HTSX-202611-000002', 2, 3, 4, 'da_duyet', '2026-11-05 15:00:00+07', '2026-11-05 14:55:00+07', '2026-11-05 17:00:00+07', 2, '2026-11-05 17:00:00+07', 3);
@@ -232,7 +233,7 @@ FROM public."NhuCauLinhKien" n
 JOIN public."YeuCauSanXuat" y ON y.id = n.yeu_cau_san_xuat_id
 JOIN public."PhieuXuat" p ON p.yeu_cau_san_xuat_id = y.id AND p.loai_phieu = 'xuat_linh_kien' AND p.trang_thai = 'da_duyet'
 ORDER BY n.yeu_cau_san_xuat_id, n.mat_hang_id;
--- YCSX 1: 5 xe vừa làm giữ khi duyệt HTSX 1, kết thúc khi duyệt PX 3. YCSX 2 (cho kho) không giữ thành phẩm.
+-- YCSX 1: 5 xe vừa làm giữ khi duyệt HTSX 1, kết thúc khi duyệt PX 3. YCSX 2 (nhập kho) không giữ thành phẩm.
 INSERT INTO public."GiuHang" (yeu_cau_san_xuat_id, mat_hang_id, loai_giu, so_luong, trang_thai, chung_tu_hoan_thanh_sx_id, phieu_xuat_id, created_at, ket_thuc_at) VALUES
   (1, 1, 'thanh_pham_san_xuat', 5, 'da_xuat', 1, 3, '2026-11-06 14:00:00+07', '2026-11-06 15:00:00+07');
 -- YCSX 3: đủ linh kiện, đang giữ (phiếu xuất linh kiện đang chờ duyệt).
@@ -289,8 +290,8 @@ INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, 
   (2, 'nha_cung_cap', 2, 'sua', NULL, NULL, '{"so_dien_thoai": "0240000021"}', '{"so_dien_thoai": "0240000022"}', NULL, '2026-11-01 10:30:00+07'),
   (2, 'phieu_nhap', 1, 'tao', NULL, 'nhap', NULL, '{"so_dong": 10}', NULL, '2026-11-02 08:30:00+07'),
   (2, 'phieu_nhap', 1, 'hoan_tat', 'nhap', 'hoan_thanh', NULL, '{"so_dong": 10}', NULL, '2026-11-02 09:00:00+07'),
-  -- YCSX 1 (đáp ứng)
-  (2, 'yeu_cau_san_xuat', 1, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 1, "so_luong": 5, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-03 08:00:00+07'),
+  -- YCSX 1 (xuất giao)
+  (2, 'yeu_cau_san_xuat', 1, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 1, "so_luong": 5, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-03 08:00:00+07'),
   (2, 'yeu_cau_san_xuat', 1, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 1}', NULL, '2026-11-03 08:10:00+07'),
   (3, 'nhan_vien', 3, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-03 08:55:00+07'),
   (3, 'yeu_cau_san_xuat', 1, 'kiem_tra', 'da_gui', 'dang_thuc_hien', NULL, '{"so_luong_dung_thanh_pham": 0, "so_luong_can_san_xuat": 5, "giu_linh_kien": true}', NULL, '2026-11-03 09:00:00+07'),
@@ -298,8 +299,8 @@ INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, 
   (3, 'phieu_xuat', 1, 'gui', 'nhap', 'cho_duyet', NULL, NULL, NULL, '2026-11-04 08:05:00+07'),
   (2, 'phieu_xuat', 1, 'duyet', 'cho_duyet', 'da_duyet', NULL, '{"tong_tien": 27950000}', NULL, '2026-11-04 09:30:00+07'),
   (3, 'yeu_cau_san_xuat', 1, 'bat_dau', 'dang_thuc_hien', 'dang_thuc_hien', NULL, '{"started_at": "2026-11-04T10:00:00+07:00"}', NULL, '2026-11-04 10:00:00+07'),
-  -- YCSX 2 (sản xuất cho kho)
-  (2, 'yeu_cau_san_xuat', 2, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "cho_kho", "mat_hang_id": 1, "so_luong": 3, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-04 11:00:00+07'),
+  -- YCSX 2 (sản xuất nhập kho)
+  (2, 'yeu_cau_san_xuat', 2, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "nhap_kho", "mat_hang_id": 1, "so_luong": 3, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-04 11:00:00+07'),
   (2, 'yeu_cau_san_xuat', 2, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 1}', NULL, '2026-11-04 11:05:00+07'),
   (4, 'nhan_vien', 4, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-04 12:55:00+07'),
   (4, 'yeu_cau_san_xuat', 2, 'kiem_tra', 'da_gui', 'dang_thuc_hien', NULL, '{"so_luong_dung_thanh_pham": 0, "so_luong_can_san_xuat": 3, "giu_linh_kien": true}', NULL, '2026-11-04 13:00:00+07'),
@@ -320,9 +321,9 @@ INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, 
   (3, 'phieu_xuat', 3, 'gui', 'nhap', 'cho_duyet', NULL, NULL, NULL, '2026-11-06 14:35:00+07'),
   (2, 'phieu_xuat', 3, 'duyet', 'cho_duyet', 'da_duyet', NULL, '{"tong_tien": 62500000, "yeu_cau_san_xuat_trang_thai": "hoan_thanh"}', NULL, '2026-11-06 15:00:00+07'),
   -- YCSX 3 và 4
-  (2, 'yeu_cau_san_xuat', 3, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 2, "so_luong": 4, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-07 08:00:00+07'),
+  (2, 'yeu_cau_san_xuat', 3, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 2, "so_luong": 4, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-07 08:00:00+07'),
   (2, 'yeu_cau_san_xuat', 3, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 3}', NULL, '2026-11-07 08:10:00+07'),
-  (2, 'yeu_cau_san_xuat', 4, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 2, "so_luong": 2, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-07 08:15:00+07'),
+  (2, 'yeu_cau_san_xuat', 4, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 2, "so_luong": 2, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-07 08:15:00+07'),
   (2, 'yeu_cau_san_xuat', 4, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 3}', NULL, '2026-11-07 08:20:00+07'),
   (3, 'yeu_cau_san_xuat', 3, 'kiem_tra', 'da_gui', 'dang_thuc_hien', NULL, '{"so_luong_dung_thanh_pham": 0, "so_luong_can_san_xuat": 4, "giu_linh_kien": true}', NULL, '2026-11-07 09:00:00+07'),
   (4, 'yeu_cau_san_xuat', 4, 'kiem_tra', 'da_gui', 'dang_thuc_hien', NULL, '{"so_luong_dung_thanh_pham": 0, "so_luong_can_san_xuat": 2, "giu_linh_kien": true}', NULL, '2026-11-08 09:00:00+07'),
@@ -331,20 +332,20 @@ INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, 
   (2, 'phieu_xuat', 4, 'tu_choi', 'cho_duyet', 'tu_choi', NULL, NULL, 'Kho đang kiểm đếm khu linh kiện, gửi lại sau 8h ngày 09/11.', '2026-11-08 14:00:00+07'),
   (3, 'phieu_xuat', 4, 'gui_lai', 'tu_choi', 'cho_duyet', NULL, NULL, NULL, '2026-11-09 08:00:00+07'),
   -- YCSX 5: dùng 3 xe có sẵn, sản xuất 7 (BR-008)
-  (2, 'yeu_cau_san_xuat', 5, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 1, "so_luong": 10, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-09 09:00:00+07'),
+  (2, 'yeu_cau_san_xuat', 5, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 1, "so_luong": 10, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-09 09:00:00+07'),
   (2, 'yeu_cau_san_xuat', 5, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 1}', NULL, '2026-11-09 09:10:00+07'),
   (3, 'yeu_cau_san_xuat', 5, 'kiem_tra', 'da_gui', 'dang_thuc_hien', NULL, '{"so_luong_dung_thanh_pham": 3, "so_luong_can_san_xuat": 7, "giu_thanh_pham": 3, "giu_linh_kien": true}', NULL, '2026-11-09 10:00:00+07'),
   (2, 'yeu_cau_san_xuat', 4, 'huy', 'dang_thuc_hien', 'da_huy', NULL, '{"tra_giu_hang": true}', 'Khách hủy đơn, không còn nhu cầu.', '2026-11-10 08:30:00+07'),
   -- YCSX 6: thiếu khung, lưu danh sách thiếu tại thời điểm kiểm tra.
-  (2, 'yeu_cau_san_xuat', 6, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 3, "so_luong": 10, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-10 08:50:00+07'),
+  (2, 'yeu_cau_san_xuat', 6, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 3, "so_luong": 10, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-10 08:50:00+07'),
   (2, 'yeu_cau_san_xuat', 6, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 4}', NULL, '2026-11-10 09:00:00+07'),
   (4, 'yeu_cau_san_xuat', 6, 'kiem_tra', 'da_gui', 'cho_bo_sung_linh_kien', NULL,
    '{"so_luong_dung_thanh_pham": 0, "so_luong_can_san_xuat": 10, "giu_linh_kien": false, "danh_sach_thieu": [{"mat_hang_id": 5, "ma_mat_hang": "MH-000005", "ten_mat_hang": "Khung xe", "don_vi_tinh": "chiec", "so_luong_can": 10, "so_luong_con_dung": 6, "so_luong_thieu": 4}]}',
    NULL, '2026-11-10 10:00:00+07'),
   -- YCSX 7, 8 và phiếu nhập nháp
-  (2, 'yeu_cau_san_xuat', 7, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 4, "so_luong": 3, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-11 07:50:00+07'),
+  (2, 'yeu_cau_san_xuat', 7, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 4, "so_luong": 3, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-11 07:50:00+07'),
   (2, 'yeu_cau_san_xuat', 7, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 5}', NULL, '2026-11-11 08:00:00+07'),
-  (2, 'yeu_cau_san_xuat', 8, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "dap_ung", "mat_hang_id": 1, "so_luong": 2, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-12 08:00:00+07'),
+  (2, 'yeu_cau_san_xuat', 8, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 1, "so_luong": 2, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-12 08:00:00+07'),
   (2, 'phieu_nhap', 2, 'tao', NULL, 'nhap', NULL, '{"so_dong": 1}', NULL, '2026-11-12 09:00:00+07');
 
 -- ---------------------------------------------------------------------
@@ -408,13 +409,13 @@ BEGIN
   IF (SELECT row(so_luong_ton, so_luong_dang_giu, so_luong_con_dung) FROM public."MatHang" WHERE id = 5) IS DISTINCT FROM row(17, 11, 6) THEN
     RAISE EXCEPTION 'Khung xe phải là tồn 17, đang giữ 11, còn dùng được 6'; END IF;
   IF (SELECT row(so_luong_ton, so_luong_dang_giu, so_luong_con_dung) FROM public."MatHang" WHERE id = 1) IS DISTINCT FROM row(3, 3, 0) THEN
-    RAISE EXCEPTION 'Mountain Pro: +3 cho kho, +5 -5 của YCSX 1 -> tồn 3, giữ 3 cho YCSX 5'; END IF;
-  IF (SELECT row(loai_yeu_cau, trang_thai) FROM public."YeuCauSanXuat" WHERE id = 2) IS DISTINCT FROM row('cho_kho'::varchar, 'hoan_thanh'::varchar)
+    RAISE EXCEPTION 'Mountain Pro: +3 nhập kho, +5 -5 của YCSX 1 -> tồn 3, giữ 3 cho YCSX 5'; END IF;
+  IF (SELECT row(loai_yeu_cau, trang_thai) FROM public."YeuCauSanXuat" WHERE id = 2) IS DISTINCT FROM row('nhap_kho'::varchar, 'hoan_thanh'::varchar)
      OR EXISTS (SELECT 1 FROM public."PhieuXuat" p JOIN public."YeuCauSanXuat" y ON y.id = p.yeu_cau_san_xuat_id
-                WHERE y.loai_yeu_cau = 'cho_kho' AND p.loai_phieu = 'xuat_thanh_pham')
+                WHERE y.loai_yeu_cau = 'nhap_kho' AND p.loai_phieu = 'xuat_thanh_pham')
      OR EXISTS (SELECT 1 FROM public."GiuHang" g JOIN public."YeuCauSanXuat" y ON y.id = g.yeu_cau_san_xuat_id
-                WHERE y.loai_yeu_cau = 'cho_kho' AND g.loai_giu <> 'linh_kien') THEN
-    RAISE EXCEPTION 'Yêu cầu cho kho: Hoàn thành khi duyệt chứng từ, không phiếu xuất/giữ thành phẩm'; END IF;
+                WHERE y.loai_yeu_cau = 'nhap_kho' AND g.loai_giu <> 'linh_kien') THEN
+    RAISE EXCEPTION 'Yêu cầu nhập kho: Hoàn thành khi duyệt chứng từ, không phiếu xuất/giữ thành phẩm'; END IF;
   IF (SELECT row(so_luong_dung_thanh_pham, so_luong_can_san_xuat) FROM public."YeuCauSanXuat" WHERE id = 5) IS DISTINCT FROM row(3, 7) THEN
     RAISE EXCEPTION 'YCSX 5 phải dùng 3 xe có sẵn, sản xuất 7 (BR-008)'; END IF;
   IF (SELECT n.so_luong_can - m.so_luong_con_dung FROM public."NhuCauLinhKien" n JOIN public."MatHang" m ON m.id = n.mat_hang_id

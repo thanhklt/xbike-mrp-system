@@ -5,10 +5,12 @@ from datetime import datetime, timezone
 from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictException, InsufficientStock
+from app.core.errors import ConflictException
 from app.core.persistence import select_page
 from app.modules.inventory.models import StockLevel, StockMovement
 from app.modules.inventory.ports import (
+    IssueReservation,
+    IssueStockContext,
     StockAdjustmentLine,
     StockIssueLine,
     StockReceiptLine,
@@ -24,57 +26,136 @@ class SqlAlchemyInventoryRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def issue_stock(
-        self, lines: list[StockIssueLine], kind: str, actor_id: int, posted_at: datetime
-    ) -> list[int]:
-        ids = sorted(line.mat_hang_id for line in lines)
-        stocks = {
-            item.id: item
-            for item in (
-                await self.session.scalars(
-                    select(MatHang)
-                    .where(MatHang.id.in_(ids))
-                    .order_by(MatHang.id)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 cộng thành phẩm và ghi sổ sau duyệt (specs/use_cases/production/UC-31.md)
+    async def receive_production(
+        self, item_id: int, quantity: int, completion_id: int, actor_id: int,
+        posted_at: datetime, *, hold: bool,
+    ) -> tuple[int, int]:
+        stock_after = await self.session.scalar(
+            text('''UPDATE "MatHang" SET so_luong_ton=so_luong_ton+:quantity,
+                so_luong_dang_giu=so_luong_dang_giu+:held,
+                ton_kho_updated_at=:at WHERE id=:id RETURNING so_luong_ton'''),
+            {"id": item_id, "quantity": quantity, "held": quantity if hold else 0, "at": posted_at},
+        )
+        movement_id = await self.session.scalar(
+            text('''INSERT INTO "GiaoDichKho" (mat_hang_id,loai_giao_dich,
+                so_luong_bien_dong,so_luong_ton_sau,chung_tu_hoan_thanh_sx_id,
+                nhan_vien_id,posted_at) VALUES (:item,'nhap_san_pham_san_xuat',
+                :quantity,:stock,:source,:actor,:time) RETURNING id'''),
+            {"item": item_id, "quantity": quantity, "stock": stock_after,
+             "source": completion_id, "actor": actor_id, "time": posted_at},
+        )
+        await self.session.flush()
+        return movement_id, stock_after
+
+    async def lock_issue_stock(
+        self, request_id: int, item_ids: list[int]
+    ) -> list[IssueStockContext]:
+        if not item_ids:
+            return []
+        items = (
+            (
+                await self.session.execute(
+                    text(
+                        """SELECT id, loai_mat_hang, don_gia, so_luong_ton, so_luong_dang_giu FROM "MatHang" WHERE id IN :ids ORDER BY id FOR UPDATE"""
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": sorted(set(item_ids))},
                 )
-            ).all()
-        }
-        balances = dict(
+            )
+            .mappings()
+            .all()
+        )
+        reservations = (
+            (
+                await self.session.execute(
+                    text(
+                        """SELECT id, yeu_cau_san_xuat_id, mat_hang_id, loai_giu, so_luong, chung_tu_hoan_thanh_sx_id FROM "GiuHang" WHERE mat_hang_id IN :ids AND trang_thai='dang_giu' ORDER BY mat_hang_id, id FOR UPDATE"""
+                    ).bindparams(bindparam("ids", expanding=True)),
+                    {"ids": sorted(set(item_ids))},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        balances: dict[int, int] = dict(
             (
                 await self.session.execute(
                     text(
                         'SELECT mat_hang_id, sum(so_luong_bien_dong) FROM "GiaoDichKho" WHERE mat_hang_id IN :ids GROUP BY mat_hang_id'
                     ).bindparams(bindparam("ids", expanding=True)),
-                    {"ids": ids},
+                    {"ids": item_ids},
                 )
             ).all()
         )
+        return [
+            IssueStockContext(
+                item["id"],
+                item["loai_mat_hang"],
+                item["don_gia"],
+                item["so_luong_ton"],
+                item["so_luong_dang_giu"],
+                int(balances.get(item["id"], 0)),
+                tuple(
+                    IssueReservation(
+                        row["id"],
+                        row["yeu_cau_san_xuat_id"],
+                        row["mat_hang_id"],
+                        row["loai_giu"],
+                        row["so_luong"],
+                        row["chung_tu_hoan_thanh_sx_id"],
+                    )
+                    for row in reservations
+                    if row["mat_hang_id"] == item["id"]
+                ),
+            )
+            for item in items
+        ]
+
+    async def issue_stock(
+        self,
+        lines: list[StockIssueLine],
+        kind: str,
+        actor_id: int,
+        posted_at: datetime,
+        *,
+        issue_id: int,
+        reservations: list[IssueReservation],
+    ) -> list[int]:
+        # Policy and ordered locks belong to the use case; persist only validated changes.
         movements = []
         for line in sorted(lines, key=lambda item: item.mat_hang_id):
-            stock = stocks.get(line.mat_hang_id)
-            if stock is None or stock.so_luong_ton != balances.get(line.mat_hang_id, 0):
-                raise ConflictException(message="Stock balance differs from ledger")
-            if stock.so_luong_ton < line.so_luong:
-                raise InsufficientStock(line.mat_hang_id, line.so_luong, stock.so_luong_ton)
-            stock.so_luong_ton -= line.so_luong
-            stock.ton_kho_updated_at = posted_at
-            movement_id = await self.session.scalar(
-                text("""INSERT INTO "GiaoDichKho"
-                (mat_hang_id,loai_giao_dich,so_luong_bien_dong,chi_tiet_phieu_xuat_id,nhan_vien_id,posted_at)
-                VALUES (:item,:kind,:quantity,:source,:actor,:time) RETURNING id"""),
-                {
-                    "item": line.mat_hang_id,
-                    "kind": kind,
-                    "quantity": -line.so_luong,
-                    "source": line.chi_tiet_phieu_xuat_id,
-                    "actor": actor_id,
-                    "time": posted_at,
-                },
+            stock_after = await self.session.scalar(
+                text(
+                    """UPDATE "MatHang" SET so_luong_ton=so_luong_ton-:quantity, so_luong_dang_giu=so_luong_dang_giu-:quantity, ton_kho_updated_at=:at WHERE id=:id RETURNING so_luong_ton"""
+                ),
+                {"quantity": line.so_luong, "at": posted_at, "id": line.mat_hang_id},
             )
-            movements.append(movement_id)
+            for reservation in reservations:
+                if reservation.item_id == line.mat_hang_id:
+                    await self.session.execute(
+                        text(
+                            """UPDATE "GiuHang" SET trang_thai='da_xuat', phieu_xuat_id=:issue, ket_thuc_at=:at WHERE id=:id"""
+                        ),
+                        {"id": reservation.id, "issue": issue_id, "at": posted_at},
+                    )
+            movements.append(
+                await self.session.scalar(
+                    text(
+                        """INSERT INTO "GiaoDichKho" (mat_hang_id,loai_giao_dich,so_luong_bien_dong,so_luong_ton_sau,chi_tiet_phieu_xuat_id,nhan_vien_id,posted_at) VALUES (:item,:kind,:quantity,:stock,:source,:actor,:time) RETURNING id"""
+                    ),
+                    {
+                        "item": line.mat_hang_id,
+                        "kind": kind,
+                        "quantity": -line.so_luong,
+                        "stock": stock_after,
+                        "source": line.chi_tiet_phieu_xuat_id,
+                        "actor": actor_id,
+                        "time": posted_at,
+                    },
+                )
+            )
         await self.session.flush()
-        return movements
+        return sorted(movements)
 
     async def lock_balances(self, item_ids: list[int]) -> dict[int, int]:
         stocks = (

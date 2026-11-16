@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   Activity,
   ArrowLeft,
+  ArrowUpDown,
   Ban,
   Calendar,
   CirclePercent,
@@ -36,6 +37,20 @@ import {
   nullable,
 } from "../../lib/format.js";
 import { useAuth } from "./AuthProvider.jsx";
+import { PASSWORD_MIN_LENGTH, buildCreateAccountBody, creatableRoles } from "./accountForm.js";
+import { canChangeAccountState, lockRequestBody, stateConfirmOptions } from "./accountState.js";
+import { endsOwnSession, roleChangeBody, roleOptions } from "./accountRole.js";
+import {
+  endsOwnSessionAfterPasswordReset,
+  passwordResetBody,
+  passwordTooShort,
+} from "./accountPassword.js";
+import {
+  ACCOUNT_SEARCH_LABEL,
+  ACCOUNT_SORT_OPTIONS,
+  DEFAULT_ACCOUNT_SORT,
+  accountMetaLine,
+} from "./accountList.js";
 import { AdminPagination } from "../../components/DataTable.jsx";
 import { RecordPanel } from "../../components/RecordPanel.jsx";
 import { AdminRoleBadge, AdminStatusBadge } from "../../components/Badge.jsx";
@@ -75,11 +90,9 @@ function isProfileChanged(record, values) {
   });
 }
 
+// UC-05 Khóa tài khoản — Main 2–3, 5; A1, A3: xác nhận lý do tùy chọn và gửi thao tác khóa (specs/use_cases/identity_access/UC-05.md)
 function promptAccountStateChange({ record, etag, currentUserId, confirm, notify, queryClient, onError }) {
-  if (!record) return;
-  if (record.ma_vai_tro === "quan_tri_vien" || record.id === currentUserId) {
-    return;
-  }
+  if (!canChangeAccountState(record)) return;
   if (!etag) {
     onError?.(
       new ApiError("Chưa tải được phiên bản dữ liệu để xác nhận. Vui lòng tải lại.", {
@@ -90,26 +103,32 @@ function promptAccountStateChange({ record, etag, currentUserId, confirm, notify
     return;
   }
   const unlock = record.trang_thai === "bi_khoa";
+  const options = stateConfirmOptions(record);
   confirm({
-    title: unlock ? "Mở khóa tài khoản" : "Khóa tài khoản",
+    title: options.title,
     description: `${record.ma_nhan_vien} · ${record.ho_ten || record.ten_dang_nhap}`,
     reason: true,
-    danger: !unlock,
+    reasonOptional: options.reasonOptional,
+    danger: options.danger,
     impact:
       "Bảo toàn hồ sơ, công việc và chứng từ đã lập. Khóa tài khoản chặn mọi request tiếp theo.",
     onConfirm: async (reason) => {
       await writeResource({
-        path: `${API.employees}/${record.id}${unlock ? "/mo_khoa" : ""}`,
-        method: unlock ? "post" : "delete",
-        body: { ly_do: reason },
+        path: `${API.employees}/${record.id}${options.pathSuffix}`,
+        method: options.method,
+        body: lockRequestBody(reason),
         etag,
       });
+      if (!unlock && record.id === currentUserId) {
+        await queryClient.invalidateQueries({ queryKey: ["session"] });
+      }
       await queryClient.invalidateQueries({ queryKey: ["resources"] });
       notify(unlock ? "Đã mở khóa tài khoản." : "Đã khóa tài khoản.");
     },
   });
 }
 
+// UC-03 Xem danh sách tài khoản — Main 1: mở chức năng quản trị tài khoản (specs/use_cases/identity_access/UC-03.md)
 export function UsersPage() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -133,11 +152,12 @@ export function UsersPage() {
   return <AccountListView id={id} roles={roles} />;
 }
 
+// UC-03 Xem danh sách tài khoản — Main 1–5; R3, A1, A2: danh sách, tiêu chí và phân trang (specs/use_cases/identity_access/UC-03.md)
 function AccountListView({ id, roles }) {
   const { user } = useAuth();
   const { confirm, notify } = useFeedback();
   const queryClient = useQueryClient();
-  const collection = useCollection(API.employees, { page: 1, page_size: 10, sort: "id" });
+  const collection = useCollection(API.employees, { page: 1, page_size: 10, sort: DEFAULT_ACCOUNT_SORT });
   const detail = useDetail(API.employees, id);
   const [searchDraft, setSearchDraft] = useState(collection.params.q || "");
   const [selectedIds, setSelectedIds] = useState([]);
@@ -161,6 +181,7 @@ function AccountListView({ id, roles }) {
     collection.params.q,
     collection.params.vai_tro_id,
     collection.params.trang_thai,
+    collection.params.sort,
   ]);
 
   function toggleAll(checked) {
@@ -173,6 +194,7 @@ function AccountListView({ id, roles }) {
     );
   }
 
+  // UC-05 Khóa tài khoản — Main 1–2: đọc phiên bản hiện tại và mở xác nhận trên dòng (specs/use_cases/identity_access/UC-05.md)
   async function handleRowStateAction(row) {
     if (loadingRowId !== null) return;
     setRowError(null);
@@ -180,10 +202,6 @@ function AccountListView({ id, roles }) {
     try {
       const snapshot = await readResource(`${API.employees}/${row.id}`);
       const freshRecord = snapshot?.data || row;
-      if (freshRecord.ma_vai_tro === "quan_tri_vien" || freshRecord.id === user.id) {
-        await queryClient.invalidateQueries({ queryKey: ["resources"] });
-        return;
-      }
       promptAccountStateChange({
         record: freshRecord,
         etag: snapshot?.etag,
@@ -218,8 +236,8 @@ function AccountListView({ id, roles }) {
             <Search size={18} aria-hidden="true" />
             <input
               type="search"
-              aria-label="Tìm tài khoản"
-              placeholder="Tìm tài khoản"
+              aria-label={ACCOUNT_SEARCH_LABEL}
+              placeholder={ACCOUNT_SEARCH_LABEL}
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
             />
@@ -252,6 +270,20 @@ function AccountListView({ id, roles }) {
               {["hoat_dong", "bi_khoa"].map((value) => (
                 <option key={value} value={value}>
                   {STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="admin-select-shell">
+            <ArrowUpDown size={18} aria-hidden="true" />
+            <select
+              aria-label="Sắp xếp"
+              value={collection.params.sort}
+              onChange={(event) => collection.filter({ sort: event.target.value })}
+            >
+              {ACCOUNT_SORT_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -299,8 +331,7 @@ function AccountListView({ id, roles }) {
                   rows.map((row, index) => {
                     const stt = String((page - 1) * pageSize + index + 1).padStart(2, "0");
                     const displayName = row.ho_ten || "Chưa có họ tên";
-                    const lockedAdmin = row.ma_vai_tro === "quan_tri_vien";
-                    const canChangeState = !lockedAdmin && row.id !== user.id;
+                    const canChangeState = canChangeAccountState(row);
                     const isLocked = row.trang_thai === "bi_khoa";
                     return (
                       <tr key={row.id}>
@@ -320,7 +351,7 @@ function AccountListView({ id, roles }) {
                             </span>
                             <div className="admin-user-meta">
                               <strong>{displayName}</strong>
-                              <small>{row.ma_nhan_vien}</small>
+                              <small>{accountMetaLine(row)}</small>
                             </div>
                           </div>
                         </td>
@@ -404,7 +435,7 @@ function AccountListView({ id, roles }) {
 }
 
 function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) {
-  const { user, login, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { confirm, notify, showSuccess } = useFeedback();
   const queryClient = useQueryClient();
   const detail = useDetail(API.employees, id);
@@ -428,12 +459,12 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }
 
   const activeBaselineRecord = editBaselineRef.current?.data || record;
-  const lockedAdmin = activeBaselineRecord?.ma_vai_tro === "quan_tri_vien";
-  const canChangeState = activeBaselineRecord && !lockedAdmin && activeBaselineRecord.id !== user.id;
+  const canChangeState = canChangeAccountState(activeBaselineRecord);
   const isLocked = activeBaselineRecord?.trang_thai === "bi_khoa";
 
   const [values, setValues] = useState(() => extractProfileDraft(activeBaselineRecord));
   const [roleId, setRoleId] = useState(() => String(activeBaselineRecord?.vai_tro_id ?? ""));
+  const [roleReason, setRoleReason] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -447,6 +478,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setRoleReason("");
       setSaveError(null);
       return;
     }
@@ -456,11 +488,13 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       setPasswordVisible(false);
       setValues(extractProfileDraft(activeBaselineRecord));
       setRoleId(String(activeBaselineRecord.vai_tro_id ?? ""));
+      setRoleReason("");
       setSaveError(null);
     }
   }, [isEditing, activeBaselineRecord, id]);
 
   function handleStartEdit() {
+    setRoleReason("");
     setNewPassword("");
     setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
@@ -474,6 +508,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
   }
 
   function handleCancelEdit() {
+    setRoleReason("");
     setNewPassword("");
     setPasswordVisible(false);
     const base = editBaselineRef.current?.data || record;
@@ -514,8 +549,8 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
 
     const profileDirty = isProfileChanged(baseRecord, values);
     const passwordDirty = newPassword.length > 0;
-    if (passwordDirty && newPassword.length < 8) {
-      setSaveError(new ApiError("Mật khẩu mới phải có từ 8 đến 1024 ký tự.", {
+    if (passwordDirty && passwordTooShort(newPassword)) {
+      setSaveError(new ApiError(`Mật khẩu mới phải có từ ${PASSWORD_MIN_LENGTH} đến 1024 ký tự.`, {
         status: 422,
         code: "VALIDATION_ERROR",
       }));
@@ -523,7 +558,6 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     }
     const parsedRoleId = Number(roleId);
     const roleDirty =
-      !lockedAdmin &&
       Boolean(roleId) &&
       !Number.isNaN(parsedRoleId) &&
       parsedRoleId !== Number(baseRecord.vai_tro_id);
@@ -541,6 +575,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
       baselineRecord: baseRecord,
       values: { ...values },
       targetRoleId: parsedRoleId,
+      roleReason,
       needProfileWrite: profileDirty,
       needRoleWrite: roleDirty,
       needPasswordWrite: passwordDirty,
@@ -612,6 +647,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             submission.baselineRecord = workingRecord;
           }
 
+          // UC-07 Đổi vai trò — Main 3, 5; R2, A5: gửi lý do và dừng lưu khi tự đổi vai trò (specs/use_cases/identity_access/UC-07.md)
           if (submission.needRoleWrite) {
             failedStep = "cập nhật vai trò";
             if (!currentEtag) {
@@ -623,9 +659,13 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             const roleRes = await writeResource({
               path: `${API.employees}/${submission.id}/vai_tro`,
               method: "put",
-              body: { vai_tro_id: submission.targetRoleId },
+              body: roleChangeBody(submission.targetRoleId, submission.roleReason),
               etag: currentEtag,
             });
+            if (endsOwnSession(submission.id, user.id)) {
+              logout("Đã đổi vai trò. Vui lòng đăng nhập lại.");
+              return;
+            }
             const matchedRole = (roles.data || []).find(
               (item) => Number(item.id) === submission.targetRoleId,
             );
@@ -651,28 +691,21 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
             submission.baselineRecord = workingRecord;
           }
 
+          // UC-08 Đổi mật khẩu tài khoản — Main 5–6; A2, A6: lưu mật khẩu mới và đăng xuất khi tự đổi (specs/use_cases/identity_access/UC-08.md)
           if (submission.needPasswordWrite) {
             failedStep = "đặt lại mật khẩu";
             const passwordRes = await writeResource({
               path: `${API.employees}/${submission.id}/dat_lai_mat_khau`,
               method: "post",
-              body: { mat_khau_moi: submission.newPassword },
+              body: passwordResetBody(submission.newPassword),
               etag: currentEtag,
             });
-            // Renew our own token before any cache update can trigger a refetch.
-            if (submission.id === user.id) {
-              try {
-                await login({
-                  ten_dang_nhap: user.ten_dang_nhap,
-                  mat_khau: submission.newPassword,
-                });
-              } catch {
-                submission.newPassword = "";
-                setNewPassword("");
-                setPasswordVisible(false);
-                logout("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
-                return;
-              }
+            if (endsOwnSessionAfterPasswordReset(submission.id, user.id)) {
+              submission.newPassword = "";
+              setNewPassword("");
+              setPasswordVisible(false);
+              logout("Đã đổi mật khẩu. Vui lòng đăng nhập lại.");
+              return;
             }
             workingRecord = { ...workingRecord, ...(passwordRes?.data || {}) };
             currentEtag = passwordRes?.etag || currentEtag;
@@ -727,9 +760,7 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     });
   }
 
-  const roleChoices = (roles.data || []).filter(
-    (role) => role.ma_vai_tro !== "quan_tri_vien" || lockedAdmin,
-  );
+  const roleChoices = roleOptions(roles.data || [], activeBaselineRecord?.vai_tro_id);
 
   return (
     <div className="admin-screen">
@@ -902,21 +933,34 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
                         className="admin-inline-select"
                         value={roleId}
                         onChange={(event) => setRoleId(event.target.value)}
-                        disabled={lockedAdmin || busy || roles.isLoading}
+                        disabled={busy || roles.isLoading}
                       >
                         {roleChoices.length ? (
                           roleChoices.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {ROLE_LABELS[role.ma_vai_tro] || role.ten_vai_tro}
+                            <option key={role.id} value={role.id} disabled={role.disabled}>
+                              {role.label}
                             </option>
                           ))
                         ) : (
-                          <option value={activeBaselineRecord.vai_tro_id ?? ""}>
-                            {ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"}
+                          <option value={activeBaselineRecord.vai_tro_id ?? ""} disabled>
+                            {ROLE_LABELS[activeBaselineRecord.ma_vai_tro] || activeBaselineRecord.ma_vai_tro || "—"} (hiện tại)
                           </option>
                         )}
                       </select>
                     </InlineEditRow>
+                    {Number(roleId) !== Number(activeBaselineRecord.vai_tro_id) && (
+                      <InlineEditRow icon={Info} label="Lý do đổi vai trò" htmlFor="inline-ly-do-vai-tro">
+                        <textarea
+                          id="inline-ly-do-vai-tro"
+                          className="admin-inline-input"
+                          rows={2}
+                          maxLength={1000}
+                          value={roleReason}
+                          onChange={(event) => setRoleReason(event.target.value)}
+                          disabled={busy}
+                        />
+                      </InlineEditRow>
+                    )}
                     <InlineEditRow
                       icon={Calendar}
                       label="Ngày vào làm"
@@ -1036,6 +1080,7 @@ function InlineEditRow({ icon, label, htmlFor, children }) {
   );
 }
 
+// UC-04 Thêm tài khoản — Main 1–4; A5: nhập thông tin hoặc hủy trước khi lưu (specs/use_cases/identity_access/UC-04.md)
 function EmployeeForm({ snapshot, roles }) {
   const navigate = useNavigate();
   const { save, busy, error } = useSave();
@@ -1047,28 +1092,20 @@ function EmployeeForm({ snapshot, roles }) {
     ngay_vao_lam: "",
     he_so_luong: "",
     ten_dang_nhap: "",
-    ma_nhan_vien: "",
     mat_khau: "",
     vai_tro_id: "",
+    ly_do: "",
   });
-  const editableRoles = roles.filter((role) => role.ma_vai_tro !== "quan_tri_vien");
+  const editableRoles = creatableRoles(roles);
   const field = (name) => ({
     value: values[name],
     onChange: (event) => setValues({ ...values, [name]: event.target.value }),
   });
 
+  // UC-04 Thêm tài khoản — Main 4–6: gửi tạo tài khoản và mở chi tiết (specs/use_cases/identity_access/UC-04.md)
   function submit(event) {
     event.preventDefault();
-    const profile = Object.fromEntries(
-      PROFILE_FIELDS.map((name) => [name, nullable(String(values[name]))]),
-    );
-    const body = {
-      ...profile,
-      ten_dang_nhap: values.ten_dang_nhap.trim(),
-      ma_nhan_vien: values.ma_nhan_vien.trim(),
-      mat_khau: values.mat_khau,
-      vai_tro_id: Number(values.vai_tro_id),
-    };
+    const body = buildCreateAccountBody(values, PROFILE_FIELDS);
     save(
       {
         path: API.employees,
@@ -1094,16 +1131,9 @@ function EmployeeForm({ snapshot, roles }) {
             {...field("ten_dang_nhap")}
           />
           <Field
-            label="Mã nhân viên"
-            placeholder="NV-000001"
-            pattern="NV-[0-9]{6}"
-            required
-            {...field("ma_nhan_vien")}
-          />
-          <Field
             label="Mật khẩu ban đầu"
             type="password"
-            minLength={8}
+            minLength={PASSWORD_MIN_LENGTH}
             maxLength={1024}
             required
             autoComplete="new-password"
@@ -1133,6 +1163,7 @@ function EmployeeForm({ snapshot, roles }) {
             {...field("he_so_luong")}
           />
         </div>
+        <Field as="textarea" rows={3} label="Lý do" maxLength={1000} {...field("ly_do")} />
         <div className="actions actions-end">
           <Link to={base}>Hủy</Link>
           <Button type="submit" disabled={busy}>

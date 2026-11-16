@@ -1,0 +1,186 @@
+{
+  "uc": [
+    "UC-34",
+    "UC-35"
+  ],
+  "create": {
+    "request": {
+      "loai_phieu": "xuat_linh_kien",
+      "yeu_cau_san_xuat_id": 2
+    },
+    "status": 201,
+    "location": "/api/v1/phieu_xuat/1",
+    "etag": "\"952b6f585ce3339cac2255e28f412f8b9334191f079718d1521ce1f7283734b8\"",
+    "response": {
+      "data": {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 2,
+        "tong_tien": null,
+        "trang_thai": "nhap",
+        "created_at": "2026-11-14T15:51:00.364918Z",
+        "updated_at": "2026-11-14T15:51:00.364918Z",
+        "gui_at": null,
+        "nguoi_xu_ly_id": null,
+        "xu_ly_at": null,
+        "ly_do_tu_choi": null,
+        "phien_ban": 1,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 1,
+            "so_luong": 7,
+            "id": 1,
+            "don_gia_thuc": null,
+            "tong_gia": null
+          },
+          {
+            "mat_hang_id": 2,
+            "so_luong": 14,
+            "id": 2,
+            "don_gia_thuc": null,
+            "tong_gia": null
+          }
+        ]
+      },
+      "meta": {
+        "request_id": "fde397c7-8aff-4278-950d-d120f8698de7"
+      }
+    }
+  },
+  "submit": {
+    "request": {},
+    "status": 200,
+    "etag": "\"aa55d63ce49252ad3e4c5c59dc21767fb907be37c998edac89d18aa18ae6f95a\"",
+    "response": {
+      "data": {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 2,
+        "tong_tien": null,
+        "trang_thai": "cho_duyet",
+        "created_at": "2026-11-14T15:51:00.364918Z",
+        "updated_at": "2026-11-14T15:51:00.420712Z",
+        "gui_at": "2026-11-14T15:51:00.420712Z",
+        "nguoi_xu_ly_id": null,
+        "xu_ly_at": null,
+        "ly_do_tu_choi": null,
+        "phien_ban": 2,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 1,
+            "so_luong": 7,
+            "id": 1,
+            "don_gia_thuc": null,
+            "tong_gia": null
+          },
+          {
+            "mat_hang_id": 2,
+            "so_luong": 14,
+            "id": 2,
+            "don_gia_thuc": null,
+            "tong_gia": null
+          }
+        ]
+      },
+      "meta": {
+        "request_id": "853e9902-51d1-481d-8195-c7b8beb8bf67"
+      }
+    }
+  },
+  "approve": {
+    "request": {},
+    "status": 200,
+    "etag": "\"7b641c621976105956fd8a90497f18df7f07cfe0296e8f4b80aad4fdc046a727\"",
+    "response": {
+      "data": {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 2,
+        "tong_tien": 210000,
+        "trang_thai": "da_duyet",
+        "created_at": "2026-11-14T15:51:00.364918Z",
+        "updated_at": "2026-11-14T15:51:00.463603Z",
+        "gui_at": "2026-11-14T15:51:00.420712Z",
+        "nguoi_xu_ly_id": 1,
+        "xu_ly_at": "2026-11-14T15:51:00.463603Z",
+        "ly_do_tu_choi": null,
+        "phien_ban": 3,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 1,
+            "so_luong": 7,
+            "id": 1,
+            "don_gia_thuc": 20000,
+            "tong_gia": 140000
+          },
+          {
+            "mat_hang_id": 2,
+            "so_luong": 14,
+            "id": 2,
+            "don_gia_thuc": 5000,
+            "tong_gia": 70000
+          }
+        ],
+        "giao_dich_kho_ids": [
+          4,
+          5
+        ],
+        "da_ghi_so_truoc_do": false
+      },
+      "meta": {
+        "request_id": "55fd9430-e28a-4450-8f64-af15bc6ad297"
+      }
+    }
+  },
+  "replay": {
+    "status": 200,
+    "response": {
+      "data": {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 2,
+        "tong_tien": 210000,
+        "trang_thai": "da_duyet",
+        "created_at": "2026-11-14T15:51:00.364918Z",
+        "updated_at": "2026-11-14T15:51:00.463603Z",
+        "gui_at": "2026-11-14T15:51:00.420712Z",
+        "nguoi_xu_ly_id": 1,
+        "xu_ly_at": "2026-11-14T15:51:00.463603Z",
+        "ly_do_tu_choi": null,
+        "phien_ban": 3,
+        "chi_tiet": [
+          {
+            "mat_hang_id": 1,
+            "so_luong": 7,
+            "id": 1,
+            "don_gia_thuc": 20000,
+            "tong_gia": 140000
+          },
+          {
+            "mat_hang_id": 2,
+            "so_luong": 14,
+            "id": 2,
+            "don_gia_thuc": 5000,
+            "tong_gia": 70000
+          }
+        ],
+        "giao_dich_kho_ids": [
+          4,
+          5
+        ],
+        "da_ghi_so_truoc_do": true
+      },
+      "meta": {
+        "request_id": "3cb04a85-9ec7-4c67-86b9-66ac5211329a"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 from collections.abc import Iterable
 
-from sqlalchemy import column, exists, func, select, table, text, update
+from sqlalchemy import exists, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.bom.models import Bom, ChiTietBom
@@ -10,11 +10,10 @@ from app.modules.bom.ports import ActiveBom, BomContext
 from app.modules.bom.schemas import BomListQuery, BomRead, ChiTietBomInput, ChiTietBomRead
 from app.modules.mat_hang.models import MatHang
 from app.modules.mat_hang.schemas import MatHangRead
+from app.modules.san_xuat.models import YeuCauSanXuat
 from app.shared.records import RecordPage
 
-# Read the v4 request reference without importing legacy production ORM.
-_requests = table("YeuCauSanXuat", column("bom_id"))
-_used = exists().where(_requests.c.bom_id == Bom.id)
+_used = exists().where(YeuCauSanXuat.bom_id == Bom.id)
 
 
 def _to_read(bom: Bom, used: bool) -> BomRead:

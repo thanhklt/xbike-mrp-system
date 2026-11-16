@@ -53,15 +53,12 @@ class MatHang(Base):
     don_gia: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     so_luong_ton: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    so_luong_dang_giu: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    so_luong_con_dung: Mapped[int] = mapped_column(
+        Integer, Computed("so_luong_ton - so_luong_dang_giu", persisted=True)
+    )
     ton_kho_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
-    )
-
-    so_luong_dang_giu: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
-    so_luong_con_dung: Mapped[int] = mapped_column(
-        Integer, Computed("so_luong_ton - so_luong_dang_giu", persisted=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

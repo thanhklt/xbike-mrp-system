@@ -1,343 +1,149 @@
-"""Production completion persistence; the service owns commit and rollback."""
+"""Completion persistence; transaction boundaries belong to the service."""
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import DateTime, delete, func, literal, select, text
+from sqlalchemy import false, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import lazyload
 
-from app.core.errors import ConflictException
-from app.modules.san_xuat.models import (
-    ChiTietLenhSanXuat,
-    ChungTuHoanThanhSx,
-    LenhSanXuat,
-    YeuCauSanXuat,
-)
-from app.modules.san_xuat.ports import (
-    HoanThanhContext,
-    HoanThanhOrder,
-    HoanThanhOutput,
-    HoanThanhPosting,
-)
-from app.modules.san_xuat.repository.yeu_cau_san_xuat import SqlAlchemyYeuCauSanXuatRepository
-from app.modules.san_xuat.schemas import (
-    ChungTuRead,
-    HoanThanhCreate,
-    HoanThanhQuery,
-    HoanThanhRead,
-    LenhRead,
-)
+from app.core.errors import ConflictException, InvalidWorkflowState
+from app.modules.san_xuat.models import ChungTuHoanThanhSx, YeuCauSanXuat
+from app.modules.san_xuat.schemas import ChungTuListItem, ChungTuListQuery, ChungTuRead
 from app.shared.records import RecordPage
 
 
-class SqlAlchemyHoanThanhRepository:
+class SqlAlchemyChungTuHoanThanhRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    @staticmethod
-    def _order_context(order: LenhSanXuat) -> HoanThanhOrder:
-        return HoanThanhOrder(
-            order.id,
-            order.yeu_cau_san_xuat_id,
-            order.mat_hang_id,
-            order.so_luong,
-            order.trang_thai,
-            order.nhan_vien_id,
-            order.started_at,
-        )
-
-    @staticmethod
-    def _document(record: ChungTuHoanThanhSx, item_id: int) -> HoanThanhRead:
-        return HoanThanhRead.model_validate(
-            {
-                **ChungTuRead.model_validate(record).model_dump(),
-                "mat_hang_id": item_id,
-            }
-        )
-
-    async def list_entries(
-        self, params: HoanThanhQuery, actor_id: int | None
-    ) -> RecordPage[HoanThanhRead]:
-        query = select(ChungTuHoanThanhSx, LenhSanXuat.mat_hang_id).join(
-            LenhSanXuat,
-            LenhSanXuat.id == ChungTuHoanThanhSx.lenh_san_xuat_id,
-        )
-        if actor_id is not None:
-            query = query.where(
-                ChungTuHoanThanhSx.nhan_vien_id == actor_id,
-                LenhSanXuat.nhan_vien_id == actor_id,
-            )
-        for name in ("lenh_san_xuat_id", "nhan_vien_id", "trang_thai"):
-            value = getattr(params, name)
+    # UC-33 Xem danh sách chứng từ hoàn thành sản xuất — Main 2–4; R2 lọc AND, D4 loại Nháp, D6 thứ tự (specs/use_cases/production/UC-33.md)
+    async def list_entries(self, params: ChungTuListQuery) -> RecordPage[ChungTuListItem]:
+        query = select(
+            ChungTuHoanThanhSx,
+            YeuCauSanXuat.ma_yeu_cau_san_xuat,
+            YeuCauSanXuat.mat_hang_id,
+            YeuCauSanXuat.loai_yeu_cau,
+        ).join(
+            YeuCauSanXuat, ChungTuHoanThanhSx.yeu_cau_san_xuat_id == YeuCauSanXuat.id,
+        ).where(ChungTuHoanThanhSx.trang_thai != "nhap")
+        for column, value in (
+            (YeuCauSanXuat.mat_hang_id, params.mat_hang_id),
+            (ChungTuHoanThanhSx.nhan_vien_id, params.nhan_vien_id),
+            (ChungTuHoanThanhSx.trang_thai, params.trang_thai),
+            (YeuCauSanXuat.loai_yeu_cau, params.loai_yeu_cau),
+        ):
             if value is not None:
-                query = query.where(getattr(ChungTuHoanThanhSx, name) == value)
-        if params.mat_hang_id is not None:
-            query = query.where(LenhSanXuat.mat_hang_id == params.mat_hang_id)
-        if params.q:
-            query = query.where(ChungTuHoanThanhSx.ma_phieu.icontains(params.q, autoescape=True))
+                query = query.where(
+                    false() if isinstance(value, int) and value > 2**31 - 1 else column == value
+                )
+        local_zone = ZoneInfo("Asia/Ho_Chi_Minh")
         if params.tu_ngay:
-            start = func.timezone(
-                "Asia/Ho_Chi_Minh",
-                literal(
-                    datetime.combine(params.tu_ngay, time.min),
-                    type_=DateTime(),
-                ),
-            )
+            start = datetime.combine(params.tu_ngay, time.min, local_zone).astimezone(timezone.utc)
             query = query.where(ChungTuHoanThanhSx.finish_time >= start)
         if params.den_ngay:
-            end = func.timezone(
-                "Asia/Ho_Chi_Minh",
-                literal(
-                    datetime.combine(params.den_ngay + timedelta(days=1), time.min),
-                    type_=DateTime(),
-                ),
-            )
+            end = datetime.combine(params.den_ngay, time.min, local_zone).astimezone(
+                timezone.utc
+            ) + timedelta(days=1)
             query = query.where(ChungTuHoanThanhSx.finish_time < end)
         total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         offset = (params.page - 1) * params.page_size
         if offset >= total:
             return RecordPage([], total)
-        column = getattr(ChungTuHoanThanhSx, params.sort.removeprefix("-"))
-        ordering = column.desc() if params.sort.startswith("-") else column.asc()
-        rows = (
-            await self.session.execute(
-                query.order_by(ordering.nulls_last(), ChungTuHoanThanhSx.id)
-                .offset(offset)
-                .limit(params.page_size)
-                .execution_options(populate_existing=True)
-            )
-        ).all()
-        return RecordPage([self._document(record, item_id) for record, item_id in rows], total)
+        rows = (await self.session.execute(query.order_by(
+            ChungTuHoanThanhSx.finish_time.desc(), ChungTuHoanThanhSx.id.desc(),
+        ).offset(offset).limit(params.page_size))).all()
+        return RecordPage([
+            ChungTuListItem(
+                **ChungTuRead.model_validate(record).model_dump(),
+                ma_yeu_cau_san_xuat=code, mat_hang_id=item_id, loai_yeu_cau=kind,
+            ) for record, code, item_id, kind in rows
+        ], total)
 
-    async def get_by_id(self, document_id: int) -> HoanThanhContext | None:
-        row = (
-            await self.session.execute(
-                select(ChungTuHoanThanhSx, LenhSanXuat)
-                .join(LenhSanXuat, LenhSanXuat.id == ChungTuHoanThanhSx.lenh_san_xuat_id)
-                .where(ChungTuHoanThanhSx.id == document_id)
-                .options(lazyload("*"))
-                .execution_options(populate_existing=True)
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        record, order = row
-        return HoanThanhContext(
-            self._document(record, order.mat_hang_id), self._order_context(order)
+    async def lock_product(self, item_id: int) -> None:
+        item = await self.session.scalar(
+            text('SELECT id FROM "MatHang" WHERE id=:id FOR UPDATE'), {"id": item_id},
         )
+        if item is None:
+            raise ConflictException(message="Thành phẩm không còn tồn tại")
 
-    async def lock_for_create(self, order_id: int) -> HoanThanhOrder | None:
-        request_id = await self.session.scalar(
-            select(LenhSanXuat.yeu_cau_san_xuat_id).where(LenhSanXuat.id == order_id)
-        )
-        if request_id is None:
-            return None
-        request = await self.session.scalar(
-            select(YeuCauSanXuat)
-            .where(YeuCauSanXuat.id == request_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        order = await self.session.scalar(
-            select(LenhSanXuat)
-            .where(LenhSanXuat.id == order_id)
-            .options(lazyload("*"))
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-        if request is None or order is None:
-            return None
-        if order.yeu_cau_san_xuat_id != request_id:
-            raise ConflictException(message="Nguồn lệnh sản xuất đã thay đổi")
-        return self._order_context(order)
-
-    async def lock_context(self, document_id: int) -> HoanThanhContext | None:
-        order_id = await self.session.scalar(
-            select(ChungTuHoanThanhSx.lenh_san_xuat_id).where(ChungTuHoanThanhSx.id == document_id)
-        )
-        if order_id is None:
-            return None
-        order = await self.lock_for_create(order_id)
-        if order is None:
-            return None
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 chốt duyệt trước khi ghi sổ (specs/use_cases/production/UC-31.md)
+    async def approve(
+        self, resource_id: int, version: int, actor_id: int, at: datetime,
+    ) -> ChungTuRead:
         record = await self.session.scalar(
-            select(ChungTuHoanThanhSx)
-            .where(ChungTuHoanThanhSx.id == document_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
+            update(ChungTuHoanThanhSx).where(
+                ChungTuHoanThanhSx.id == resource_id,
+                ChungTuHoanThanhSx.trang_thai == "cho_duyet",
+                ChungTuHoanThanhSx.phien_ban == version,
+            ).values(
+                trang_thai="da_duyet", nguoi_xu_ly_id=actor_id, xu_ly_at=at,
+                phien_ban=ChungTuHoanThanhSx.phien_ban + 1, updated_at=at,
+            ).returning(ChungTuHoanThanhSx).execution_options(populate_existing=True)
         )
         if record is None:
-            return None
-        if record.lenh_san_xuat_id != order.id:
-            raise ConflictException(message="Nguồn chứng từ hoàn thành đã thay đổi")
-        return HoanThanhContext(self._document(record, order.mat_hang_id), order)
+            raise InvalidWorkflowState(message="Chứng từ đã thay đổi")
+        await self.session.flush()
+        return ChungTuRead.model_validate(record)
 
-    async def next_hoan_thanh_code(self) -> tuple[int, str]:
-        record_id, month = (
-            await self.session.execute(
-                text("""
-            SELECT nextval(pg_get_serial_sequence('"ChungTuHoanThanhSx"', 'id')),
-                   to_char(now() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYYMM')
-        """)
-            )
-        ).one()
-        if record_id > 999999:
-            raise ConflictException(message="Hết dải mã chứng từ hoàn thành")
-        return record_id, f"HTSX-{month}-{record_id:06d}"
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 giữ thành phẩm cho yêu cầu xuất giao (specs/use_cases/production/UC-31.md)
+    async def hold_production(
+        self, request_id: int, item_id: int, quantity: int, completion_id: int, at: datetime,
+    ) -> None:
+        await self.session.execute(
+            text('''INSERT INTO "GiuHang" (yeu_cau_san_xuat_id,mat_hang_id,loai_giu,
+                so_luong,trang_thai,chung_tu_hoan_thanh_sx_id,created_at)
+                VALUES (:request,:item,'thanh_pham_san_xuat',:quantity,'dang_giu',:source,:at)'''),
+            {"request": request_id, "item": item_id, "quantity": quantity,
+             "source": completion_id, "at": at},
+        )
+        await self.session.flush()
 
-    async def add(self, payload: HoanThanhCreate, actor_id: int) -> HoanThanhRead:
-        record_id, code = await self.next_hoan_thanh_code()
+    async def next_code(self) -> tuple[int, str]:
+        row = (await self.session.execute(
+            text(
+                "SELECT nextval(pg_get_serial_sequence(:table_name, 'id')), "
+                "to_char(now() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYYMM')"
+            ),
+            {"table_name": '"ChungTuHoanThanhSx"'},
+        )).one()
+        return row[0], f"HTSX-{row[1]}-{row[0]:06d}"
+
+    async def get_by_id(self, resource_id: int) -> ChungTuRead | None:
+        record = await self.session.get(ChungTuHoanThanhSx, resource_id, populate_existing=True)
+        return ChungTuRead.model_validate(record) if record else None
+
+    async def get_by_request(self, request_id: int) -> ChungTuRead | None:
+        record = await self.session.scalar(
+            select(ChungTuHoanThanhSx).where(ChungTuHoanThanhSx.yeu_cau_san_xuat_id == request_id)
+            .execution_options(populate_existing=True)
+        )
+        return ChungTuRead.model_validate(record) if record else None
+
+    # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 9 khóa sau yêu cầu (specs/use_cases/production/UC-30.md)
+    async def get_for_update(self, resource_id: int) -> ChungTuRead | None:
+        record = await self.session.scalar(
+            select(ChungTuHoanThanhSx).where(ChungTuHoanThanhSx.id == resource_id)
+            .with_for_update().execution_options(populate_existing=True)
+        )
+        return ChungTuRead.model_validate(record) if record else None
+
+    # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 5 lưu Nháp, mã từ id (specs/use_cases/production/UC-30.md)
+    async def add(self, request_id: int, quantity: int, actor_id: int) -> ChungTuRead:
+        resource_id, code = await self.next_code()
         record = ChungTuHoanThanhSx(
-            id=record_id,
-            ma_phieu=code,
-            nhan_vien_id=actor_id,
-            trang_thai="nhap",
-            **payload.model_dump(),
+            id=resource_id, ma_phieu=code, yeu_cau_san_xuat_id=request_id,
+            so_luong_hoan_thanh=quantity, nhan_vien_id=actor_id,
         )
         self.session.add(record)
         await self.session.flush()
-        return (await self.get_by_id(record_id)).document
+        return ChungTuRead.model_validate(record)
 
-    async def update(self, document_id: int, changes: dict[str, object]) -> HoanThanhRead:
-        record = await self.session.get(ChungTuHoanThanhSx, document_id)
+    # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 9; A3 tăng phiên bản (specs/use_cases/production/UC-30.md)
+    async def update(self, resource_id: int, changes: dict[str, object]) -> ChungTuRead:
+        record = await self.session.get(ChungTuHoanThanhSx, resource_id)
         for name, value in changes.items():
             setattr(record, name, value)
-        # The ledger's source trigger requires da_duyet to be visible before INSERT.
+        record.phien_ban += 1
+        record.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
-        return (await self.get_by_id(document_id)).document
-
-    async def delete(self, document_id: int) -> None:
-        await self.session.execute(
-            delete(ChungTuHoanThanhSx).where(ChungTuHoanThanhSx.id == document_id)
-        )
-
-    async def postings(self, document_id: int) -> list[HoanThanhPosting]:
-        rows = (
-            await self.session.execute(
-                text("""
-            SELECT id, mat_hang_id, so_luong_bien_dong, loai_giao_dich, chung_tu_hoan_thanh_sx_id
-            FROM "GiaoDichKho" WHERE chung_tu_hoan_thanh_sx_id = :id ORDER BY id
-        """),
-                {"id": document_id},
-            )
-        ).all()
-        return [HoanThanhPosting(*row) for row in rows]
-
-    async def approved_quantity(self, order_id: int) -> int:
-        return int(
-            await self.session.scalar(
-                select(func.coalesce(func.sum(ChungTuHoanThanhSx.so_luong_hoan_thanh), 0)).where(
-                    ChungTuHoanThanhSx.lenh_san_xuat_id == order_id,
-                    ChungTuHoanThanhSx.trang_thai == "da_duyet",
-                )
-            )
-        )
-
-    async def material_quantities(self, order_id: int) -> tuple[dict[int, int], dict[int, int]]:
-        demand = dict(
-            (
-                await self.session.execute(
-                    select(ChiTietLenhSanXuat.mat_hang_id, ChiTietLenhSanXuat.so_luong_can).where(
-                        ChiTietLenhSanXuat.lenh_san_xuat_id == order_id
-                    )
-                )
-            ).all()
-        )
-        supplied = dict(
-            (
-                await self.session.execute(
-                    text("""
-            SELECT g.mat_hang_id, -sum(g.so_luong_bien_dong)
-            FROM "GiaoDichKho" g
-            JOIN "ChiTietPhieuXuat" c ON c.id = g.chi_tiet_phieu_xuat_id
-            JOIN "PhieuXuat" p ON p.id = c.phieu_xuat_id
-            WHERE p.lenh_san_xuat_id = :order_id
-              AND p.loai_phieu = 'xuat_vat_tu' AND p.trang_thai = 'da_duyet'
-              AND g.loai_giao_dich = 'xuat_vat_tu'
-            GROUP BY g.mat_hang_id
-        """),
-                    {"order_id": order_id},
-                )
-            ).all()
-        )
-        return demand, {item_id: int(quantity) for item_id, quantity in supplied.items()}
-
-    async def read_output(self, item_id: int) -> HoanThanhOutput | None:
-        row = (
-            await self.session.execute(
-                text("""
-            SELECT id, is_active, loai_mat_hang, so_luong_ton FROM "MatHang"
-            WHERE id = :id FOR SHARE
-        """),
-                {"id": item_id},
-            )
-        ).one_or_none()
-        return HoanThanhOutput(*row, ledger_total=0) if row else None
-
-    async def lock_output(self, item_id: int) -> HoanThanhOutput | None:
-        row = (
-            await self.session.execute(
-                text("""
-            SELECT id, is_active, loai_mat_hang, so_luong_ton FROM "MatHang"
-            WHERE id = :id FOR UPDATE
-        """),
-                {"id": item_id},
-            )
-        ).one_or_none()
-        if row is None:
-            return None
-        total = await self.session.scalar(
-            text("""
-            SELECT coalesce(sum(so_luong_bien_dong), 0) FROM "GiaoDichKho" WHERE mat_hang_id = :id
-        """),
-            {"id": item_id},
-        )
-        return HoanThanhOutput(*row, ledger_total=int(total))
-
-    async def post_output(self, document: HoanThanhRead, actor_id: int, posted_at: datetime) -> int:
-        params = {
-            "quantity": document.so_luong_hoan_thanh,
-            "posted_at": posted_at,
-            "item_id": document.mat_hang_id,
-            "document_id": document.id,
-            "actor_id": actor_id,
-        }
-        await self.session.execute(
-            text("""
-            UPDATE "MatHang" SET so_luong_ton = so_luong_ton + :quantity,
-                ton_kho_updated_at = :posted_at WHERE id = :item_id
-        """),
-            params,
-        )
-        return await self.session.scalar(
-            text("""
-            INSERT INTO "GiaoDichKho" (mat_hang_id, loai_giao_dich, so_luong_bien_dong,
-                chung_tu_hoan_thanh_sx_id, nhan_vien_id, posted_at)
-            VALUES (:item_id, 'nhap_san_pham_san_xuat', :quantity, :document_id, :actor_id, :posted_at)
-            RETURNING id
-        """),
-            params,
-        )
-
-    async def complete_order(
-        self, order_id: int, completed_at: datetime
-    ) -> tuple[LenhRead, LenhRead]:
-        request_id = await self.session.scalar(
-            select(LenhSanXuat.yeu_cau_san_xuat_id).where(LenhSanXuat.id == order_id)
-        )
-        reader = SqlAlchemyYeuCauSanXuatRepository(self.session)
-        before = next(
-            order
-            for order in await reader.lenh_cua_yeu_cau(request_id, lock=False)
-            if order.id == order_id
-        )
-        order = await self.session.get(LenhSanXuat, order_id)
-        order.trang_thai = "hoan_thanh"
-        order.completed_at = completed_at
-        await self.session.flush()
-        after = next(
-            order
-            for order in await reader.lenh_cua_yeu_cau(request_id, lock=False)
-            if order.id == order_id
-        )
-        return before, after
+        return ChungTuRead.model_validate(record)

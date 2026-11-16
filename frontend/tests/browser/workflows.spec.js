@@ -169,11 +169,10 @@ test("stale approval stays failed without retries or a false success message", a
   await expect(page.locator(".toast")).toHaveCount(0);
 });
 
-test("planning is explicit and submitting the plan requires a confirmation", async ({ page }) => {
+// UC-29 D6: Gửi yêu cầu v4 không còn tính kế hoạch hoặc tạo lệnh v3
+test("sending a draft request requires confirmation and does not create orders", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/kho/yeu-cau/1");
-  await page.getByRole("button", { name: "Tính kế hoạch", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Cây lệnh dự kiến" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "yeu_cau_san_xuat/1/gui")).toBeFalsy();
   await page.getByRole("button", { name: "Gửi yêu cầu cho nhân viên" }).click();
   await page
@@ -182,28 +181,21 @@ test("planning is explicit and submitting the plan requires a confirmation", asy
     .click();
   await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   const send = state.calls.find((call) => call.path === "yeu_cau_san_xuat/1/gui");
-  expect(send.body).toEqual({ ke_hoach_token: "plan-test-token" });
+  expect(send.body).toEqual({});
   expect(send.headers["if-match"]).toBe('"v1"');
-  await expect(page.getByText("plan-test-token", { exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.path.startsWith("lenh_san_xuat"))).toBeFalsy();
 });
 
-test("changing password invalidates the local session and returns to login", async ({ page }) => {
+// UC-08 AC-6: Hồ sơ không còn form tự đổi mật khẩu, không gửi request ghi
+test("profile displays employee information without a password form", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/ho-so");
-  await page.getByLabel("Mật khẩu hiện tại", { exact: true }).fill("old-password");
-  await page.getByLabel("Mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByLabel("Nhập lại mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByRole("button", { name: "Đổi mật khẩu", exact: true }).click();
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Đổi mật khẩu", exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/dang-nhap$/);
-  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-  expect(state.calls.find((call) => call.path === "auth/doi_mat_khau").body).toEqual({
-    mat_khau_hien_tai: "old-password",
-    mat_khau_moi: "new-password",
-  });
+  await expect(page.getByRole("heading", { name: "Hồ sơ", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hồ sơ nhân viên", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mật khẩu hiện tại", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Đổi mật khẩu", exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
 });
 
 test("unsupported supplier actions are disabled with visible reasons", async ({ page }) => {
@@ -266,12 +258,11 @@ const screens = {
     "/kho/phieu-nhap/2",
     "/kho/yeu-cau/moi",
     "/kho/yeu-cau/2",
-    "/kho/lenh-sx",
-    "/kho/lenh-sx/1",
+    "/kho/yeu-cau",
+    "/kho/yeu-cau/1",
     "/kho/phieu-xuat",
     "/kho/phieu-xuat/moi",
     "/kho/phieu-xuat/2",
-    "/kho/duyet-hoan-thanh/2",
     "/kho/dieu-chinh",
     "/kho/dieu-chinh/moi",
     "/kho/dieu-chinh/1",
@@ -284,12 +275,9 @@ const screens = {
   nhan_vien: [
     "/nv",
     "/nv/yeu-cau/2",
-    "/nv/lenh-sx/1",
+    "/nv/yeu-cau",
     "/nv/xuat-nvl",
     "/nv/xuat-tp/2",
-    "/nv/hoan-thanh",
-    "/nv/hoan-thanh/moi",
-    "/nv/hoan-thanh/1",
     "/nv/phieu",
     "/nv/ton-kho/1",
     "/ho-so",

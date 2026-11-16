@@ -1,5 +1,6 @@
 """Inventory queries, receipt posting and warehouse adjustment contracts."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, Protocol
 
@@ -38,9 +39,41 @@ class StockIssueLine(NamedTuple):
     so_luong: int
 
 
+@dataclass(frozen=True)
+class IssueReservation:
+    id: int
+    request_id: int
+    item_id: int
+    kind: str
+    quantity: int
+    completion_id: int | None
+
+
+@dataclass(frozen=True)
+class IssueStockContext:
+    item_id: int
+    kind: str
+    price: int
+    stock: int
+    held: int
+    ledger_balance: int
+    reservations: tuple[IssueReservation, ...]
+
+
 class InventoryIssueWriter(Protocol):
+    async def lock_issue_stock(
+        self, request_id: int, item_ids: list[int]
+    ) -> list[IssueStockContext]: ...
+
     async def issue_stock(
-        self, lines: list[StockIssueLine], kind: str, actor_id: int, posted_at: datetime
+        self,
+        lines: list[StockIssueLine],
+        kind: str,
+        actor_id: int,
+        posted_at: datetime,
+        *,
+        issue_id: int,
+        reservations: list[IssueReservation],
     ) -> list[int]: ...
 
 
@@ -55,3 +88,11 @@ class StockShortage(Exception):
         super().__init__("Không đủ tồn để điều chỉnh")
         self.lines = lines
         self.balances = balances
+
+
+class InventoryProductionWriter(Protocol):
+    # UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 5 cộng tồn và ghi sổ (specs/use_cases/production/UC-31.md)
+    async def receive_production(
+        self, item_id: int, quantity: int, completion_id: int, actor_id: int,
+        posted_at: datetime, *, hold: bool,
+    ) -> tuple[int, int]: ...
