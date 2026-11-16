@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
+import { readResource } from "../../lib/api/client.js";
 import {
   useCatalog,
   useChoices,
@@ -10,7 +11,7 @@ import {
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { itemName, dateTime, number } from "../../lib/format.js";
+import { itemName, formatDate, number } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -22,17 +23,50 @@ import { DataTable } from "../../components/DataTable.jsx";
 import {
   ItemSelect,
   EmployeeSelect,
-  statusFilter,
-  dateFilters,
 } from "../../components/ResourceFields.jsx";
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
+import {
+  REQUEST_TYPES,
+  CHECK_COLUMNS,
+  CANCEL_HOLD_COLUMNS,
+  CANCEL_ISSUE_COLUMNS,
+  cancelConfirmEntries,
+  canCheckRequest,
+  canStartProduction,
+  checkConfirmEntries,
+  checkLines,
+  checkImpact,
+  REQUEST_TYPE_LABELS,
+  initialRequestValues,
+  canEditRequest,
+  canCancelRequest,
+  requestDetailEntries,
+  requestListFilters,
+  requestCreateBody,
+  sendConfirmEntries,
+} from "./requestForm.js";
+import {
+  canApproveCompletion,
+  approveConfirmEntries,
+  approveImpact,
+  canCreateCompletion,
+  canSendCompletion,
+  completionEntries,
+  completionConfirmEntries,
+  completionSendLabel,
+} from "./completionForm.js";
+
+// UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
   const { id } = useParams();
+  // RecordPanel remounts the editor when ETag changes after confirmation.
+  const [checkResult, setCheckResult] = useState(null);
+  useEffect(() => setCheckResult(null), [id]);
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
   const base = manager ? "/kho/yeu-cau" : "/nv/yeu-cau";
-  const collection = useCollection(API.requests, { sort: "-created_at" });
+  const collection = useCollection(API.requests, {});
   const detail = useDetail(API.requests, id);
   const catalog = useCatalog();
   const employees = useChoices(API.employees, {}, manager);
@@ -40,29 +74,21 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
-        title={manager ? "Yêu cầu thành phẩm" : "Yêu cầu phụ trách"}
-        subtitle="Kiểm tra tồn thành phẩm, lập kế hoạch BOM nhiều cấp và theo dõi lượng đã xuất."
+        title={manager ? "Yêu cầu sản xuất" : "Yêu cầu được giao"}
+        subtitle={manager
+          ? "Lập yêu cầu sản xuất và gửi cho nhân viên được giao."
+          : "Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi."}
         action={
           manager && (
             <Link className="btn btn-primary" to={`${base}/moi`}>
-              Tạo yêu cầu thành phẩm
+              Tạo yêu cầu sản xuất
             </Link>
           )
         }
       />
       <Collection
         collection={collection}
-        filters={[
-          statusFilter([
-            "nhap",
-            "da_gui",
-            "cho_bo_sung_linh_kien",
-            "dang_thuc_hien",
-            "hoan_thanh",
-            "da_huy",
-          ]),
-          ...dateFilters,
-        ]}
+        filters={requestListFilters(manager)}
         columns={[
           {
             key: "ma_yeu_cau_san_xuat",
@@ -74,8 +100,17 @@ export function RequestsPage() {
             label: "Thành phẩm",
             render: (row) => itemName(items, row.mat_hang_id),
           },
-          { key: "so_luong", label: "Nhu cầu", numeric: true },
-          { key: "so_luong_da_xuat", label: "Đã xuất", numeric: true },
+          {
+            key: "loai_yeu_cau",
+            label: "Loại yêu cầu",
+            render: (row) => REQUEST_TYPE_LABELS[row.loai_yeu_cau],
+          },
+          {
+            key: "han_hoan_thanh",
+            label: "Hạn hoàn thành",
+            render: (row) => formatDate(row.han_hoan_thanh),
+          },
+          { key: "so_luong", label: "Số lượng cần", numeric: true },
           {
             key: "trang_thai",
             label: "Trạng thái",
@@ -92,7 +127,7 @@ export function RequestsPage() {
         id={id}
         query={detail}
         base={base}
-        title={id === "moi" ? "Tạo yêu cầu thành phẩm" : "Chi tiết yêu cầu"}
+        title={id === "moi" ? "Tạo yêu cầu sản xuất" : "Chi tiết yêu cầu"}
       >
         {(snapshot) => (
           <QueryState query={catalog}>
@@ -102,6 +137,9 @@ export function RequestsPage() {
               employees={employees}
               manager={manager}
               base={base}
+              userId={user.id}
+              checkResult={checkResult}
+              onCheckResult={setCheckResult}
             />
           </QueryState>
         )}
@@ -109,111 +147,192 @@ export function RequestsPage() {
     </>
   );
 }
-function RequestEditor({ snapshot, items, employees, manager, base }) {
+function RequestEditor({ snapshot, items, employees, manager, base, userId, checkResult, onCheckResult }) {
   const record = snapshot?.data;
-  const initial = {
-    mat_hang_id: String(record?.mat_hang_id || ""),
-    so_luong: String(record?.so_luong || ""),
-    nhan_vien_duoc_giao_id: String(record?.nhan_vien_duoc_giao_id || ""),
-  };
+  const initial = initialRequestValues(record);
   const [values, setValues] = useState(initial);
-  const [preview, setPreview] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [checkError, setCheckError] = useState(null);
+  const [startError, setStartError] = useState(null);
+  const [checkPending, setCheckPending] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [cancelPending, setCancelPending] = useState(false);
   const mutation = useWrite();
+  // Lỗi xác nhận kiểm tra chỉ hiện trong hộp xác nhận, không lặp lại ở chi tiết.
+  const checkMutation = useWrite();
+  const cancelMutation = useWrite();
+  const startMutation = useWrite();
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
-  const editable = manager && (!record || record.trang_thai === "nhap");
-  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
-  const frozen = useResource(
-    `${API.requests}/${record?.id}/ke_hoach`,
-    {},
-    Boolean(record && record.trang_thai !== "nhap"),
-  );
+  const editable = canEditRequest(record, manager);
+  const showForm = manager && (!record || (editable && editing));
   const field = (name) => ({
     value: values[name],
     onChange: (event) => {
       setValues({ ...values, [name]: event.target.value });
-      setPreview(null);
     },
   });
+  // UC-29 Bắt đầu sản xuất — Main 2–5; A1 ghi ngay với ETag và báo lỗi riêng (specs/use_cases/production/UC-29.md)
+  async function start() {
+    setStartError(null);
+    try {
+      await startMutation.mutateAsync({
+        path: `${API.requests}/${record.id}/bat_dau`,
+        body: {},
+        etag: snapshot.etag,
+      });
+      notify("Đã ghi nhận bắt đầu sản xuất.");
+    } catch (failure) {
+      setStartError(failure);
+    }
+  }
+  // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–8; A5 xem trước rồi xác nhận (specs/use_cases/production/UC-26.md)
+  async function openCheck() {
+    setCheckError(null);
+    setCheckPending(true);
+    const etag = snapshot.etag;
+    try {
+      const { data: ketQua } = await readResource(`${API.requests}/${record.id}/kiem_tra`);
+      confirm({
+        title: ketQua.lan_dau ? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất",
+        description: record.ma_yeu_cau_san_xuat,
+        content: <>
+          <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
+          <DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} />
+        </>,
+        impact: checkImpact(ketQua),
+        onConfirm: async () => {
+          const result = await checkMutation.mutateAsync({
+            path: `${API.requests}/${record.id}/kiem_tra`,
+            body: {},
+            etag,
+          });
+          const actual = result.data.ket_qua;
+          onCheckResult(actual);
+          notify(actual.du_linh_kien ? "Yêu cầu Đang thực hiện."
+            : actual.lan_dau ? "Yêu cầu Chờ bổ sung linh kiện." : "Vẫn thiếu linh kiện.");
+        },
+      });
+    } catch (failure) {
+      setCheckError(failure);
+    } finally {
+      setCheckPending(false);
+    }
+  }
+  // UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1, A2 (specs/use_cases/production/UC-23.md)
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 lưu đủ thông tin, về chế độ xem (specs/use_cases/production/UC-24.md)
   function submit(event) {
     event.preventDefault();
     save(
       {
         path: record ? `${API.requests}/${record.id}` : API.requests,
         method: record ? "patch" : "post",
-        body: {
-          mat_hang_id: Number(values.mat_hang_id),
-          so_luong: Number(values.so_luong),
-          nhan_vien_duoc_giao_id: values.nhan_vien_duoc_giao_id
-            ? Number(values.nhan_vien_duoc_giao_id)
-            : null,
-        },
+        body: requestCreateBody(values),
         etag: snapshot?.etag,
         versioned: Boolean(record),
       },
       (result) => {
-        setPreview(null);
+        if (record) setEditing(false);
         navigate(`${base}/${result.data.id}`);
+        if (!record) send(result.data, result.etag);
       },
     );
   }
-  async function calculate() {
-    try {
-      const result = await mutation.mutateAsync({
-        path: `${API.requests}/${record.id}/tinh_ke_hoach`,
-        versioned: false,
-      });
-      setPreview(result.data);
-    } catch {
-      setPreview(null);
-    }
-  }
-  function send() {
+  // UC-23 Lập và gửi yêu cầu sản xuất — Main 6–9; A2, A3 (specs/use_cases/production/UC-23.md)
+  function send(request, etag) {
     confirm({
       title: "Gửi yêu cầu sản xuất",
-      description: `${record.ma_yeu_cau_san_xuat} · ${itemName(items, record.mat_hang_id)} × ${record.so_luong}.`,
-      content: (
-        <InfoGrid
-          entries={[
-            ["Tồn thành phẩm khi tính", preview.ton_thanh_pham],
-            ["Cần sản xuất", preview.so_luong_can_san_xuat],
-            ["Số lệnh dự kiến", preview.lenh_du_kien.length],
-          ]}
-        />
-      ),
-      impact:
-        "Chốt kế hoạch và sinh lệnh nếu cần; chưa thay đổi tồn kho. Kế hoạch có hiệu lực 10 phút và được backend kiểm tra lại khi gửi.",
+      description: request.ma_yeu_cau_san_xuat,
+      content: <InfoGrid entries={sendConfirmEntries(request, items, employees.data || [])} />,
+      impact: "Chưa thay đổi tồn kho và phần đang giữ.",
       onConfirm: async () => {
         await mutation.mutateAsync({
-          path: `${API.requests}/${record.id}/gui`,
-          body: { ke_hoach_token: preview.ke_hoach_token },
-          etag: snapshot.etag,
+          path: `${API.requests}/${request.id}/gui`,
+          body: {},
+          etag,
         });
-        setPreview(null);
-        notify("Đã gửi yêu cầu và chốt kế hoạch.");
+        notify("Đã gửi yêu cầu cho nhân viên.");
       },
     });
   }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A2 xác nhận xóa và về danh sách (specs/use_cases/production/UC-24.md)
+  // UC-28 Hủy yêu cầu sản xuất — Main 2–5; A2, A3 xem trước rồi xác nhận hủy (specs/use_cases/production/UC-28.md)
   function cancel(remove = false) {
-    confirm({
-      title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu thành phẩm",
-      description: record.ma_yeu_cau_san_xuat,
-      reason: !remove,
-      danger: true,
-      onConfirm: async (reason) => {
-        await mutation.mutateAsync({
-          path: `${API.requests}/${record.id}${remove ? "" : "/huy"}`,
-          method: remove ? "delete" : "post",
-          body: remove ? {} : { ly_do: reason },
-          etag: snapshot.etag,
+    if (remove) {
+      confirm({
+        title: remove ? "Xóa yêu cầu nháp" : "Hủy yêu cầu sản xuất",
+        description: record.ma_yeu_cau_san_xuat,
+        reason: !remove,
+        danger: true,
+        onConfirm: async (reason) => {
+          await mutation.mutateAsync({
+            path: `${API.requests}/${record.id}${remove ? "" : "/huy"}`,
+            method: remove ? "delete" : "post",
+            body: remove ? {} : { ly_do: reason },
+            etag: snapshot.etag,
+          });
+          notify("Đã xử lý yêu cầu.");
+          if (remove) navigate(base);
+        },
+      });
+      return;
+    }
+    return (async () => {
+      setCancelError(null);
+      setCancelPending(true);
+      const etag = snapshot.etag;
+      try {
+        const { data: cancellation } = await readResource(`${API.requests}/${record.id}/huy`);
+        if (!cancellation.duoc_huy) {
+          setCancelError(new Error(cancellation.ly_do_khong_huy));
+          return;
+        }
+        const entries = cancelConfirmEntries(cancellation);
+        confirm({
+          title: "Hủy yêu cầu sản xuất",
+          description: record.ma_yeu_cau_san_xuat,
+          reason: true,
+          danger: true,
+          content: <>
+            <h3>Hàng sẽ trả lại</h3>
+            <DataTable rows={entries.hang_tra} columns={CANCEL_HOLD_COLUMNS} empty="Không có hàng đang giữ." />
+            <h3>Phiếu xuất bị ảnh hưởng</h3>
+            <DataTable rows={entries.phieu_xuat} columns={CANCEL_ISSUE_COLUMNS} empty="Không có phiếu xuất chưa duyệt." />
+          </>,
+          impact: "Tồn thực tế không đổi.",
+          onConfirm: async (reason) => {
+            await cancelMutation.mutateAsync({
+              path: `${API.requests}/${record.id}/huy`,
+              body: { ly_do: reason },
+              etag,
+            });
+            notify("Đã hủy yêu cầu.");
+          },
         });
-        notify("Đã xử lý yêu cầu.");
-        if (remove) navigate(base);
-      },
-    });
+      } catch (failure) {
+        setCancelError(failure);
+      } finally {
+        setCancelPending(false);
+      }
+    })();
+  }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 mở form điền sẵn (specs/use_cases/production/UC-24.md)
+  function edit() {
+    setValues(initialRequestValues(record));
+    setEditing(true);
+  }
+  // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — A1 bỏ sửa, khôi phục giá trị và chế độ xem (specs/use_cases/production/UC-24.md)
+  function discardEdit() {
+    setValues(initialRequestValues(record));
+    setEditing(false);
   }
   if (!record && !manager) return <Notice>Bạn chỉ có thể xem yêu cầu được giao.</Notice>;
+  const submitButton = (
+    <Button type="submit" disabled={busy}>
+      {record ? "Lưu nháp" : "Tạo"}
+    </Button>
+  );
   return (
     <div className="stack">
       {record && (
@@ -222,24 +341,44 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
             <h3>{record.ma_yeu_cau_san_xuat}</h3>
             <Badge status={record.trang_thai} />
           </div>
-          <InfoGrid
-            entries={[
-              [
-                "Đã xuất / yêu cầu",
-                `${number(record.so_luong_da_xuat)} / ${number(record.so_luong)}`,
-              ],
-              ["Còn phải xuất", number(record.so_luong_con_phai_xuat)],
-              ["Tạo lúc", dateTime(record.created_at)],
-              ["Hoàn thành lúc", dateTime(record.completed_at)],
-            ]}
-          />
+          <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
+          <CompletionSection record={record} items={items} manager={manager} userId={userId} />
         </>
       )}
-      <ErrorNotice error={error || mutation.error} />
-      {editable ? (
+      <ErrorNotice error={(showForm && error) || mutation.error} />
+      <ErrorNotice error={checkError} />
+      <ErrorNotice error={startError} />
+      <ErrorNotice error={cancelError} />
+      {checkResult && !checkResult.du_linh_kien && (
+        <>
+          <Notice tone="warning">Yêu cầu Chờ bổ sung linh kiện.</Notice>
+          <h3>Linh kiện thiếu</h3>
+          <DataTable rows={checkLines(checkResult).filter((line) => line.so_luong_thieu > 0)} columns={CHECK_COLUMNS} />
+        </>
+      )}
+      {canCheckRequest(record, manager, userId) && (
+        <div className="actions actions-end">
+          <Button disabled={checkMutation.isPending || checkPending} onClick={openCheck}>
+            {record.trang_thai === "da_gui" ? "Kiểm tra" : "Kiểm tra lại"}
+          </Button>
+        </div>
+      )}
+      {canStartProduction(record, manager, userId) && (
+        <div className="actions actions-end">
+          <Button disabled={startMutation.isPending} onClick={start}>Bắt đầu sản xuất</Button>
+        </div>
+      )}
+      {showForm && (
         <QueryState query={employees}>
           <form className="stack" onSubmit={submit}>
             <div className="form-grid">
+              <Field as="select" label="Loại yêu cầu" required {...field("loai_yeu_cau")}>
+                {REQUEST_TYPES.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Field>
               <ItemSelect
                 label="Thành phẩm"
                 required
@@ -256,107 +395,43 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
                 max="2147483647"
                 {...field("so_luong")}
               />
+              <Field label="Hạn hoàn thành" type="date" required {...field("han_hoan_thanh")} />
             </div>
-            <EmployeeSelect employees={employees.data} {...field("nhan_vien_duoc_giao_id")} />
-            <Button type="submit" disabled={busy}>
-              Lưu nháp
-            </Button>
+            <EmployeeSelect
+              employees={employees.data}
+              required
+              label="Nhân viên được giao"
+              {...field("nhan_vien_duoc_giao_id")}
+            />
+            {record ? (
+              <div className="actions actions-end">
+                <Button type="button" variant="secondary" onClick={discardEdit} disabled={busy}>
+                  Bỏ sửa
+                </Button>
+                {submitButton}
+              </div>
+            ) : (
+              submitButton
+            )}
           </form>
         </QueryState>
-      ) : (
-        <InfoGrid
-          entries={[
-            ["Thành phẩm", itemName(items, record.mat_hang_id)],
-            [
-              "Người phụ trách",
-              record.nhan_vien_duoc_giao_id
-                ? `Nhân viên #${record.nhan_vien_duoc_giao_id}`
-                : "Chưa giao",
-            ],
-          ]}
-        />
       )}
-      {record && editable && (
-        <div className="actions">
-          <Button
-            variant="secondary"
-            reason={dirty ? "Lưu thay đổi trước khi tính kế hoạch." : undefined}
-            disabled={mutation.isPending}
-            onClick={calculate}
-          >
-            {preview ? "Tính lại" : "Tính kế hoạch"}
+      {editable && !editing && (
+        <div className="actions actions-end">
+          <Button variant="secondary" onClick={edit}>
+            Sửa
           </Button>
-          <Button
-            reason={
-              dirty
-                ? "Lưu thay đổi và tính lại kế hoạch."
-                : !preview
-                  ? "Cần tính kế hoạch trước khi gửi."
-                  : !preview.du_dieu_kien_gui
-                    ? "Chưa đủ điều kiện gửi; kiểm tra BOM và người phụ trách."
-                    : undefined
-            }
-            onClick={send}
-          >
-            Gửi yêu cầu cho nhân viên
-          </Button>
-          <Button
-            variant="secondary"
-            reason={dirty ? "Lưu hoặc tải lại bản nháp trước." : undefined}
-            onClick={() => cancel(true)}
-          >
+          <Button variant="secondary" onClick={() => cancel(true)}>
             Xóa nháp
+          </Button>
+          <Button disabled={mutation.isPending} onClick={() => send(record, snapshot.etag)}>
+            Gửi yêu cầu cho nhân viên
           </Button>
         </div>
       )}
-      {preview && (
-        <>
-          <InfoGrid
-            entries={[
-              ["Tồn thành phẩm", preview.ton_thanh_pham],
-              ["Cần sản xuất", preview.so_luong_can_san_xuat],
-              ["Tính lúc", dateTime(preview.tinh_luc)],
-            ]}
-          />
-          {preview.thieu_vat_tu && (
-            <Notice tone="warning">
-              Kế hoạch có linh kiện thiếu. Gửi yêu cầu sẽ chuyển sang chờ bổ sung linh kiện theo kết
-              quả backend; chưa giữ chỗ hoặc thay đổi kho.
-            </Notice>
-          )}
-          <h3>Vật tư dự kiến</h3>
-          <DataTable
-            rows={preview.vat_tu.map((line) => ({ ...line, id: line.mat_hang_id }))}
-            columns={[
-              { key: "ten_mat_hang", label: "Vật tư" },
-              { key: "so_luong_can_tu_kho", label: "Cần từ kho", numeric: true },
-              { key: "so_luong_hien_co", label: "Hiện có", numeric: true },
-              { key: "so_luong_thieu", label: "Thiếu", numeric: true },
-            ]}
-          />
-          <h3>Cây lệnh dự kiến</h3>
-          <OrderTree orders={preview.lenh_du_kien} items={items} temporary />
-        </>
-      )}
-      {record && record.trang_thai !== "nhap" && (
-        <>
-          <h3>Kế hoạch đã chốt</h3>
-          <QueryState query={frozen}>
-            <OrderTree
-              orders={frozen.data?.data.lenh || []}
-              items={items}
-              prefix={manager ? "/kho" : "/nv"}
-            />
-          </QueryState>
-        </>
-      )}
-      {manager && record && !["hoan_thanh", "da_huy"].includes(record.trang_thai) && (
+      {canCancelRequest(record, manager) && (
         <div className="actions">
-          <Button
-            variant="secondary"
-            reason={dirty ? "Lưu hoặc tải lại trước khi hủy." : undefined}
-            onClick={() => cancel()}
-          >
+          <Button variant="secondary" disabled={cancelPending || cancelMutation.isPending} onClick={() => cancel()}>
             Hủy yêu cầu…
           </Button>
           {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (
@@ -372,39 +447,137 @@ function RequestEditor({ snapshot, items, employees, manager, base }) {
     </div>
   );
 }
-function OrderTree({ orders, items, prefix, temporary = false, parent = null }) {
-  const nodes = orders.filter(
-    (order) => (temporary ? order.ma_cha_tam : order.lenh_san_xuat_cha_id) === parent,
-  );
-  if (!orders.length) return <Notice>Không có lệnh sản xuất trong kế hoạch.</Notice>;
+
+function CompletionSection({ record, items, manager, userId }) {
+  // Chứng từ chỉ có sau khi bắt đầu sản xuất; không đọc với yêu cầu chưa bắt đầu.
+  const query = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {}, Boolean(record.id && record.started_at));
+  const completion = query.data?.data;
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const completionMutation = useWrite();
+  const { confirm, notify } = useFeedback();
+  const canCreate = canCreateCompletion(record, completion, manager, userId);
+  const canSend = canSendCompletion(record, completion, manager, userId);
+  const canApprove = canApproveCompletion(completion, record, manager);
+
+  // UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 2–6; A1 xác nhận mới POST với ETag chứng từ đã xem (specs/use_cases/production/UC-31.md)
+  function approve() {
+    const etag = query.data.etag;
+    confirm({
+      title: "Duyệt chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      content: <InfoGrid entries={approveConfirmEntries(completion, record, items)} />,
+      impact: approveImpact(completion, record),
+      onConfirm: async () => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "duyet"].join("/"),
+          body: {},
+          etag,
+        });
+        notify("Đã duyệt chứng từ hoàn thành.");
+      },
+    });
+  }
+
+  // UC-32 Từ chối chứng từ hoàn thành sản xuất — Main 2–5; A1, A2 (specs/use_cases/production/UC-32.md)
+  function rejectCompletion() {
+    const etag = query.data.etag;
+    confirm({
+      title: "Từ chối chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      reason: true,
+      danger: true,
+      impact: "Tồn không đổi; nhân viên sẽ gửi lại chứng từ.",
+      onConfirm: async (ly_do) => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "tu_choi"].join("/"),
+          body: { ly_do },
+          etag,
+        });
+        notify("Đã từ chối chứng từ hoàn thành.");
+      },
+    });
+  }
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 2–3 mở biểu mẫu chỉ đọc (specs/use_cases/production/UC-30.md)
+  function openCompletion() {
+    setCreateError(null);
+    setCreating(true);
+  }
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 4–5 lưu Nháp (specs/use_cases/production/UC-30.md)
+  async function saveCompletion() {
+    setCreateError(null);
+    try {
+      await completionMutation.mutateAsync({
+        path: API.completions,
+        body: { yeu_cau_san_xuat_id: record.id },
+        versioned: false,
+      });
+      setCreating(false);
+      notify("Đã lưu chứng từ hoàn thành.");
+    } catch (failure) {
+      setCreateError(failure);
+    }
+  }
+
+  // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 6–9; A2, A3 xác nhận mới gửi (specs/use_cases/production/UC-30.md)
+  function sendCompletion() {
+    const etag = query.data.etag;
+    confirm({
+      title: completion.trang_thai === "tu_choi" ? "Gửi lại chứng từ hoàn thành" : "Gửi chứng từ hoàn thành",
+      description: completion.ma_phieu,
+      content: <InfoGrid entries={completionConfirmEntries(completion, record, items)} />,
+      impact: "Chưa cộng tồn thành phẩm.",
+      onConfirm: async () => {
+        await completionMutation.mutateAsync({
+          path: [API.completions, completion.id, "gui"].join("/"),
+          body: {},
+          etag,
+        });
+        notify("Đã gửi chứng từ hoàn thành.");
+      },
+    });
+  }
+
+  if (!record.started_at && !completion) return null;
   return (
-    <ul className="tree">
-      {nodes.map((order) => {
-        const id = temporary ? order.ma_tam : order.id;
-        return (
-          <li key={id}>
-            {temporary ? (
-              <strong>{order.ma_tam}</strong>
-            ) : (
-              <Link to={`${prefix}/lenh-sx/${id}`}>{order.ma_lenh_san_xuat}</Link>
-            )}{" "}
-            · {itemName(items, order.mat_hang_id)} × {order.so_luong} · BOM #
-            {order.bom_id || "chưa có"}
-            {!temporary && <Badge status={order.trang_thai} />}
-            {orders.some(
-              (child) => (temporary ? child.ma_cha_tam : child.lenh_san_xuat_cha_id) === id,
-            ) && (
-              <OrderTree
-                orders={orders}
-                items={items}
-                prefix={prefix}
-                temporary={temporary}
-                parent={id}
-              />
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <section className="stack">
+      <h3>Chứng từ hoàn thành sản xuất</h3>
+      <QueryState query={query}>
+        <ErrorNotice error={createError} />
+        {completion ? (
+          <InfoGrid entries={completionEntries(completion).map(([label, value]) => [
+            label, label === "Trạng thái" ? <Badge status={value} /> : value,
+          ])} />
+        ) : !canCreate ? (
+          <Notice>Chưa có chứng từ hoàn thành.</Notice>
+        ) : (creating ? (
+          <>
+            <InfoGrid entries={[["Số lượng hoàn thành", number(record.so_luong_can_san_xuat)]]} />
+            <Notice>Thời điểm hoàn thành do hệ thống ghi khi bạn xác nhận gửi.</Notice>
+            <div className="actions actions-end">
+              <Button variant="secondary" disabled={completionMutation.isPending} onClick={() => setCreating(false)}>Bỏ</Button>
+              <Button disabled={completionMutation.isPending} onClick={saveCompletion}>Lưu</Button>
+            </div>
+          </>
+        ) : (
+          <div className="actions actions-end">
+            <Button disabled={completionMutation.isPending} onClick={openCompletion}>Lập chứng từ hoàn thành</Button>
+          </div>
+        ))}
+        {canSend && (
+          <div className="actions actions-end">
+            <Button disabled={completionMutation.isPending} onClick={sendCompletion}>{completionSendLabel(completion)}</Button>
+          </div>
+        )}
+        {canApprove && (
+          <div className="actions actions-end">
+            <Button variant="secondary" disabled={completionMutation.isPending} onClick={rejectCompletion}>Từ chối</Button>
+            <Button disabled={completionMutation.isPending} onClick={approve}>Duyệt</Button>
+          </div>
+        )}
+      </QueryState>
+    </section>
   );
 }

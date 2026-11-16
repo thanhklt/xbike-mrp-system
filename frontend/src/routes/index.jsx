@@ -12,9 +12,9 @@ import { SuppliersPage } from "../features/suppliers/SuppliersPage.jsx";
 import { BOMPage } from "../features/bom/BOMPage.jsx";
 import { ReceivingPage } from "../features/receiving/ReceivingPage.jsx";
 import { MaterialIssuingPage } from "../features/material-issuing/MaterialIssuingPage.jsx";
-import { ProductionPage } from "../features/production/ProductionPage.jsx";
 import { RequestsPage } from "../features/production/RequestsPage.jsx";
-import { CompletionsPage } from "../features/production/CompletionsPage.jsx";
+import { CompletionListPage } from "../features/production/CompletionListPage.jsx";
+import { ShortagePage } from "../features/production/ShortagePage.jsx";
 import { MyDocumentsPage } from "../features/production/MyDocumentsPage.jsx";
 import { AdjustmentsPage } from "../features/inventory-adjustments/AdjustmentsPage.jsx";
 import { TicketsPage } from "../features/adjustment-tickets/TicketsPage.jsx";
@@ -113,8 +113,9 @@ export function AppRoutes() {
               <Route path="/kho/phieu-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/duyet-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/yeu-cau/:id?" element={<RequestsPage />} />
-              <Route path="/kho/lenh-sx/:id?" element={<ProductionPage />} />
-              <Route path="/kho/duyet-hoan-thanh/:id?" element={<CompletionsPage />} />
+              <Route path="/kho/nhu-cau-bo-sung" element={<ShortagePage />} />
+              <Route path="/kho/chung-tu-hoan-thanh" element={<CompletionListPage />} />
+              <Route path="/kho/lenh-sx/*" element={<Navigate to="/kho/yeu-cau" replace />} />
               <Route path="/kho/dieu-chinh/:id?" element={<AdjustmentsPage />} />
               <Route path="/kho/ticket/:id?" element={<TicketsPage />} />
               <Route path="/kho/giao-dich" element={<MovementsPage />} />
@@ -124,7 +125,7 @@ export function AppRoutes() {
             <Route element={<RoleGate />}>
               <Route path="/nv" element={<DashboardPage />} />
               <Route path="/nv/yeu-cau/:id?" element={<RequestsPage />} />
-              <Route path="/nv/lenh-sx/:id?" element={<ProductionPage />} />
+              <Route path="/nv/lenh-sx/*" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route
                 path="/nv/xuat-nvl/:id?"
                 element={<MaterialIssuingPage issueType="xuat_vat_tu" />}
@@ -133,7 +134,6 @@ export function AppRoutes() {
                 path="/nv/xuat-tp/:id?"
                 element={<MaterialIssuingPage issueType="xuat_thanh_pham" />}
               />
-              <Route path="/nv/hoan-thanh/:id?" element={<CompletionsPage />} />
               <Route path="/nv/phieu" element={<MyDocumentsPage />} />
               <Route path="/nv/ton-kho/:id?" element={<MaterialsPage readOnly />} />
             </Route>

@@ -151,7 +151,7 @@ erDiagram
   YeuCauSanXuat {
     int id PK "IDENTITY"
     varchar ma_yeu_cau_san_xuat UK "NOT NULL; YCSX-YYYYMM-xxxxxx"
-    varchar loai_yeu_cau "NOT NULL; DEFAULT dap_ung; dap_ung | cho_kho; MOI"
+    varchar loai_yeu_cau "NOT NULL; DEFAULT xuat_giao; xuat_giao | nhap_kho; MOI"
     int mat_hang_id FK "NOT NULL; thanh pham"
     int so_luong "NOT NULL"
     date han_hoan_thanh "NOT NULL; MOI"
@@ -377,12 +377,12 @@ Chỉ ghi ràng buộc và ý nghĩa; kiểu/nullable đã có trong ERD.
 
 ### 3.5. `production`
 
-**`YeuCauSanXuat`** — yêu cầu sản xuất kiêm lệnh sản xuất. Hai loại (chốt 14/11/2026): `dap_ung` (giao một lượng thành phẩm, kết thúc bằng phiếu xuất thành phẩm) và `cho_kho` (sản xuất bổ sung tồn, kết thúc khi duyệt chứng từ hoàn thành).
+**`YeuCauSanXuat`** — yêu cầu sản xuất kiêm lệnh sản xuất. Hai loại (chốt 14/11/2026): `xuat_giao` (giao một lượng thành phẩm, kết thúc bằng phiếu xuất thành phẩm) và `nhap_kho` (sản xuất bổ sung tồn, kết thúc khi duyệt chứng từ hoàn thành).
 
 | Ràng buộc | Nội dung | Nguồn |
 |---|---|---|
-| `loai_yeu_cau` | `CHECK IN ('dap_ung','cho_kho')`, mặc định `dap_ung`; không đổi sau khi gửi | BR-007, UC-23 R1, UC-24 R8 |
-| `ck_ycsx_cho_kho` | `loai_yeu_cau = 'dap_ung' OR COALESCE(so_luong_dung_thanh_pham, 0) = 0`: yêu cầu cho kho không dùng thành phẩm có sẵn, số cần sản xuất = số lượng | BR-008, UC-26 R2 |
+| `loai_yeu_cau` | `CHECK IN ('xuat_giao','nhap_kho')`, mặc định `xuat_giao`; không đổi sau khi gửi | BR-007, UC-23 R1, UC-24 R8 |
+| `ck_ycsx_nhap_kho` | `loai_yeu_cau = 'xuat_giao' OR COALESCE(so_luong_dung_thanh_pham, 0) = 0`: yêu cầu nhập kho không dùng thành phẩm có sẵn, số cần sản xuất = số lượng | BR-008, UC-26 R2 |
 | `trang_thai` | `CHECK IN ('nhap','da_gui','cho_bo_sung_linh_kien','dang_thuc_hien','hoan_thanh','da_huy')` | BR-007 |
 | Bắt buộc khi tạo | `mat_hang_id`, `so_luong > 0`, `han_hoan_thanh`, `nhan_vien_duoc_giao_id` đều NOT NULL | UC-23 R2, UC-24 R2 |
 | `ck_ycsx_bom_chot` | `trang_thai = 'nhap' OR (bom_id IS NOT NULL AND gui_at IS NOT NULL)` | BR-005, BR-007, UC-23 R7 |
@@ -424,8 +424,8 @@ Vòng đời giữ hàng:
 | Kiểm tra (đầu hoặc lại), đủ toàn bộ linh kiện | Tạo một dòng `linh_kien` cho mỗi `NhuCauLinhKien` |
 | Kiểm tra, thiếu linh kiện | Không tạo dòng `linh_kien` nào (BR-008) |
 | Duyệt phiếu xuất linh kiện | Các dòng `linh_kien` → `da_xuat`; trừ `so_luong_ton` và `so_luong_dang_giu` |
-| Duyệt chứng từ hoàn thành, yêu cầu `dap_ung` | Tạo dòng `thanh_pham_san_xuat`; cộng `so_luong_ton` và `so_luong_dang_giu` |
-| Duyệt chứng từ hoàn thành, yêu cầu `cho_kho` | Không tạo dòng giữ; chỉ cộng `so_luong_ton`, phần còn dùng được tăng theo |
+| Duyệt chứng từ hoàn thành, yêu cầu `xuat_giao` | Tạo dòng `thanh_pham_san_xuat`; cộng `so_luong_ton` và `so_luong_dang_giu` |
+| Duyệt chứng từ hoàn thành, yêu cầu `nhap_kho` | Không tạo dòng giữ; chỉ cộng `so_luong_ton`, phần còn dùng được tăng theo |
 | Duyệt phiếu xuất thành phẩm | Các dòng thành phẩm → `da_xuat`; trừ `so_luong_ton` và `so_luong_dang_giu` |
 | Hủy yêu cầu | Mọi dòng `dang_giu` → `da_tra`; trừ `so_luong_dang_giu`, tồn thực tế giữ nguyên |
 | Từ chối phiếu xuất | Không đổi (hàng vẫn giữ) |
@@ -442,7 +442,7 @@ Chống tính trùng (BR-008 `double_counted_stock = 0`): thao tác kiểm tra k
 | `ck_htsx_finish_time` | `trang_thai = 'nhap' OR finish_time IS NOT NULL`; ghi lại mỗi lần xác nhận gửi | UC-30 R3 |
 | `ck_htsx_xu_ly` | `trang_thai NOT IN ('da_duyet','tu_choi') OR (nguoi_xu_ly_id IS NOT NULL AND xu_ly_at IS NOT NULL)` | UC-31, UC-32 |
 | `ck_htsx_ly_do` | `trang_thai <> 'tu_choi' OR btrim(ly_do_tu_choi) <> ''` | UC-32 R1 |
-| Duyệt | `UPDATE … WHERE trang_thai = 'cho_duyet' AND phien_ban = ?`; cùng transaction: `GiaoDichKho` (`nhap_san_pham_san_xuat`), cộng tồn. Yêu cầu `dap_ung`: tạo `GiuHang` `thanh_pham_san_xuat`. Yêu cầu `cho_kho`: không giữ, yêu cầu → `hoan_thanh` | BR-011, UC-31 R2, R4 |
+| Duyệt | `UPDATE … WHERE trang_thai = 'cho_duyet' AND phien_ban = ?`; cùng transaction: `GiaoDichKho` (`nhap_san_pham_san_xuat`), cộng tồn. Yêu cầu `xuat_giao`: tạo `GiuHang` `thanh_pham_san_xuat`. Yêu cầu `nhap_kho`: không giữ, yêu cầu → `hoan_thanh` | BR-011, UC-31 R2, R4 |
 | Index | `(trang_thai, finish_time)`, `(nhan_vien_id)` cho UC-33 | UC-33 R2 |
 
 ### 3.6. `goods_issue`
@@ -459,8 +459,8 @@ Chống tính trùng (BR-008 `double_counted_stock = 0`): thao tác kiểm tra k
 | `ck_px_xu_ly` | `trang_thai NOT IN ('da_duyet','tu_choi') OR (nguoi_xu_ly_id IS NOT NULL AND xu_ly_at IS NOT NULL)` | |
 | `ck_px_ly_do` | `trang_thai <> 'tu_choi' OR btrim(ly_do_tu_choi) <> ''`; hủy yêu cầu ghi `'Yêu cầu đã hủy'` | BR-010, BR-013 |
 | `ck_px_tien` | `trang_thai <> 'da_duyet' OR tong_tien IS NOT NULL`; `tong_tien >= 0` | BR-010 |
-| Điều kiện lập (service) | Linh kiện: yêu cầu `dang_thuc_hien` và `so_luong_can_san_xuat > 0`. Thành phẩm: chỉ yêu cầu `dap_ung`, khi `so_luong_can_san_xuat = 0` hoặc `ChungTuHoanThanhSx` `da_duyet` | UC-34 R1, UC-37 R1, R6 |
-| Trigger `trg_px_thanh_pham_dap_ung` | Chặn `xuat_thanh_pham` cho yêu cầu `cho_kho` | BR-012, UC-37 R6 |
+| Điều kiện lập (service) | Linh kiện: yêu cầu `dang_thuc_hien` và `so_luong_can_san_xuat > 0`. Thành phẩm: chỉ yêu cầu `xuat_giao`, khi `so_luong_can_san_xuat = 0` hoặc `ChungTuHoanThanhSx` `da_duyet` | UC-34 R1, UC-37 R1, R6 |
+| Trigger `trg_px_thanh_pham_xuat_giao` | Chặn `xuat_thanh_pham` cho yêu cầu `nhap_kho` | BR-012, UC-37 R6 |
 | Duyệt | `UPDATE … WHERE trang_thai = 'cho_duyet' AND phien_ban = ?`; cùng transaction: ghi giá theo `MatHang.don_gia`, tạo `GiaoDichKho`, trừ tồn, kết thúc giữ; phiếu thành phẩm thì yêu cầu → `hoan_thanh` | BR-010, BR-012, UC-35, UC-38 |
 | Index | `(trang_thai, loai_phieu, created_at)`, `(yeu_cau_san_xuat_id)` cho UC-40 | UC-40 |
 
@@ -509,7 +509,7 @@ stateDiagram-v2
   da_gui --> dang_thuc_hien : NV kiểm tra — đủ TP hoặc đủ linh kiện, giữ hàng
   da_gui --> cho_bo_sung_linh_kien : NV kiểm tra — thiếu linh kiện, chỉ giữ TP có sẵn
   cho_bo_sung_linh_kien --> dang_thuc_hien : NV kiểm tra lại — đủ, giữ linh kiện
-  dang_thuc_hien --> hoan_thanh : dap_ung — QLK duyệt phiếu xuất thành phẩm; cho_kho — QLK duyệt chứng từ hoàn thành
+  dang_thuc_hien --> hoan_thanh : xuat_giao — QLK duyệt phiếu xuất thành phẩm; nhap_kho — QLK duyệt chứng từ hoàn thành
   da_gui --> da_huy : QLK hủy
   cho_bo_sung_linh_kien --> da_huy : QLK hủy
   dang_thuc_hien --> da_huy : QLK hủy (chưa có phiếu xuất được duyệt)
@@ -577,8 +577,9 @@ stateDiagram-v2
 | 13 | Lý do khi khóa, mở khóa, đổi vai trò (14/11/2026) | Không bắt buộc; nếu nhập thì lưu vào `LichSuThaoTac.ly_do`. BR-002, UC-05 R1, UC-06 R1, UC-07 R2 đã sửa |
 | 14 | Thông tin nhà cung cấp (14/11/2026) | `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh` đều bắt buộc, NOT NULL; địa chỉ là thuộc tính của `NhaCungCap`. BR-004, UC-13, UC-14 R1 đã sửa |
 | 15 | Sửa nhà cung cấp (14/11/2026) | QLK sửa được mọi thông tin trừ `ma_ncc`; ghi lịch sử kèm giá trị trước/sau; lưu không thay đổi thì không ghi lịch sử; phiếu nhập luôn hiện thông tin nhà cung cấp hiện tại, không chụp lại. Thêm UC-44; BR-004, BR-016, UC-14 R4, UC-43 R2 đã sửa |
-| 16 | Yêu cầu sản xuất cho kho (14/11/2026) | `YeuCauSanXuat.loai_yeu_cau` = `dap_ung` / `cho_kho`. Yêu cầu cho kho bắt buộc hạn và nhân viên được giao như loại đáp ứng; không dùng thành phẩm có sẵn; duyệt chứng từ hoàn thành thì cộng tồn, không giữ, yêu cầu Hoàn thành; không có phiếu xuất thành phẩm. Là nguồn duy nhất tạo tồn thành phẩm còn dùng được. BR-007, BR-008, BR-011, BR-012, UC-23 – UC-26, UC-31, UC-33, UC-37, UC-38 đã sửa |
+| 16 | Yêu cầu sản xuất nhập kho (14/11/2026) | `YeuCauSanXuat.loai_yeu_cau` = `xuat_giao` / `nhap_kho`. Yêu cầu nhập kho bắt buộc hạn và nhân viên được giao như loại xuất giao; không dùng thành phẩm có sẵn; duyệt chứng từ hoàn thành thì cộng tồn, không giữ, yêu cầu Hoàn thành; không có phiếu xuất thành phẩm. Là nguồn duy nhất tạo tồn thành phẩm còn dùng được. BR-007, BR-008, BR-011, BR-012, UC-23 – UC-26, UC-31, UC-33, UC-37, UC-38 đã sửa |
 | 17 | Ai cấp mã nhân viên (15/11/2026) | `ma_nhan_vien` do trigger `cap_ma_nhan_vien()` cấp từ `id` (`NV-` + 6 chữ số), không sửa mã hoặc `id` sau tạo, giống #12; thay cho cấp `max + 1` ở ứng dụng. `id > 999999` báo hết dải. UC-04 R6, A4 |
+| 18 | Đổi mã loại yêu cầu sản xuất (16/11/2026) | `dap_ung` → `xuat_giao` ("Sản xuất để xuất giao": kết thúc bằng phiếu xuất thành phẩm), `cho_kho` → `nhap_kho` ("Sản xuất nhập kho": kết thúc khi duyệt chứng từ hoàn thành, hàng nhập kho). Mặc định `xuat_giao`. Đổi tên theo: `ck_ycsx_cho_kho` → `ck_ycsx_nhap_kho`; hàm `kiem_tra_yeu_cau_dap_ung` → `kiem_tra_yeu_cau_xuat_giao`; trigger `trg_px_thanh_pham_dap_ung` → `trg_px_thanh_pham_xuat_giao`, `trg_giu_thanh_pham_dap_ung` → `trg_giu_thanh_pham_xuat_giao`. Nghiệp vụ không đổi. Tên nghiệp vụ trong BR-007 và các UC đổi theo: "Đáp ứng yêu cầu" → "Sản xuất để xuất giao", "Sản xuất cho kho" → "Sản xuất nhập kho" |
 
 ## 7. Việc tiếp theo (chưa làm)
 
