@@ -2,11 +2,11 @@
 
 Đối chiếu `inventory/{router,service,repository,ports,models}.py`, `dependencies.py`,
 `core/persistence.py`, [phiếu xuất](phieu_xuat.md) và [sản xuất](san_xuat.md).
-Đường ghi xuất và nhập thành phẩm sản xuất UC-31 đã nâng v4.
+Đường ghi xuất, nhập thành phẩm sản xuất UC-31 và nhập linh kiện UC-21 đã nâng v4.
 Các endpoint đọc còn dùng ORM `StockLevel`/`StockMovement` của bảng legacy lowercase
 `ton_kho`/`giao_dich_kho`, không tồn tại trong bootstrap v4; trên DB v4 chúng có thể
-trả 500. Không mô tả chúng như API tồn v4 đã nghiệm thu. Luồng nhập/điều chỉnh tồn
-cũ cũng chưa nâng trong tác vụ này.
+trả 500. Không mô tả chúng như API tồn v4 đã nghiệm thu. Luồng điều chỉnh tồn
+legacy chưa nâng trong tác vụ này.
 
 ## GET /api/v1/inventory/stock
 
@@ -157,3 +157,45 @@ so_luong_ton_sau)` cho audit chứng từ; không tự mở transaction hay comm
 Đường `issue_stock` và các đường legacy giữ nguyên. Kiểm chứng UC-31 không dùng DB:
 ASGI/service với trạng thái giả và câu SQL thật, kiểm thứ tự UPDATE/INSERT,
 tham số số dư/nguồn/người/thời điểm, khóa và rollback; không chạy tranh chấp PostgreSQL thật.
+
+
+## Port nhận hàng nội bộ — không phải endpoint
+
+`PhieuNhapService` nhận `SqlAlchemyInventoryRepository` qua hợp đồng
+`InventoryWriter`; đây là port, không phải một tầng thực thi riêng.
+Service đã khóa phiếu/chi tiết trước khi gọi lock_receipt_stock. Repository khóa
+MatHang tăng dần ID, đọc tồn/đang giữ/loại/active và SUM ledger, trả ReceiptStock frozen
+detached. Service quyết định loại đúng/số dư khớp/giới hạn INTEGER. receive_receipt chỉ
+ghi dữ liệu đã kiểm tra dưới cùng khóa: tăng tồn + timestamp, lấy tồn sau, INSERT
+nhap_linh_kien với line FK duy nhất/actor/time/so_luong_ton_sau. Không đổi held/GiuHang,
+giá danh mục hoặc nguồn sản xuất. Không commit riêng, không đọc/ghi cache trong TX.
+Xem sequence hoàn tất để theo dõi AuditService và một commit/rollback toàn luồng.
+
+```mermaid
+sequenceDiagram
+    participant S as PhieuNhapService
+    participant I as SqlAlchemyInventoryRepository
+    participant DB as PostgreSQL
+    Note over S,DB: Cùng transaction với trạng thái phiếu và audit, đã khóa phiếu và chi tiết
+    S->>I: lock_receipt_stock(item IDs)
+    I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
+    I->>DB: SELECT SUM GiaoDichKho theo mặt hàng
+    I-->>S: ReceiptStock snapshots
+    S->>S: Kiểm tra linh kiện active, đủ mặt hàng, tồn khớp ledger và không tràn INTEGER
+    break Phụ thuộc không hợp lệ hoặc số dư không hợp lệ
+        S-->>S: 409, caller rollback
+    end
+    Note over S,DB: Caller mark_completed có điều kiện trước khi ghi ledger
+    S->>I: receive_receipt(lines, actor_id, posted_at)
+    loop Từng dòng theo mat_hang_id tăng dần
+        I->>DB: UPDATE MatHang tăng tồn và timestamp RETURNING so_luong_ton
+        break UPDATE không có dòng
+            I-->>S: ConflictException (409), caller rollback toàn bộ
+        end
+        I->>DB: INSERT GiaoDichKho nhap_linh_kien với so_luong_ton_sau, source, actor, posted_at
+        DB-->>I: RETURNING id
+    end
+    I->>DB: flush, không commit
+    I-->>S: Sorted movement IDs
+    Note over S,DB: Caller audit và commit, lỗi ở bất kỳ bước nào rollback toàn bộ
+```

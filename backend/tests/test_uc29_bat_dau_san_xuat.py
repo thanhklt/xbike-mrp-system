@@ -365,6 +365,8 @@ async def test_item_reference_sql_excludes_order_tables():
     assert session.execute.call_args.args[1] == {"id": 5}
     assert "LenhSanXuat" not in sql and "ChiTietLenhSanXuat" not in sql
     assert set(re.findall(r'FROM "(\w+)"', sql)) == {
+        # v4 init.sql: điều chỉnh kho v3 đã gỡ; giữ hàng và nhu cầu linh kiện là tham chiếu mới.
+        # PR-10 D2: Bom của chính thành phẩm không tính là tham chiếu công thức.
         "ChiTietBom", "ChiTietPhieuNhap", "ChiTietPhieuXuat",
         "GiaoDichKho", "YeuCauSanXuat", "GiuHang", "NhuCauLinhKien", "MatHang",
     }

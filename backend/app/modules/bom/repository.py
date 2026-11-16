@@ -73,6 +73,35 @@ class SqlAlchemyBomRepository:
             select(Bom.id).where(Bom.mat_hang_id == item_id).order_by(Bom.id).with_for_update()
         )
 
+    async def bom_ref(self, bom_id: int) -> tuple[int, tuple[int, ...]] | None:
+        """Output item and component ids of one immutable version (lock planning)."""
+        row = (
+            await self.session.execute(
+                select(Bom.mat_hang_id, func.array_agg(ChiTietBom.mat_hang_id))
+                .outerjoin(ChiTietBom, ChiTietBom.bom_id == Bom.id)
+                .where(Bom.id == bom_id)
+                .group_by(Bom.mat_hang_id)
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return row[0], tuple(item for item in row[1] if item is not None)
+
+    async def reuse_lines(self, item_id: int) -> tuple[int, ...]:
+        """Component ids of the version UC-12 would reuse (latest activation)."""
+        latest = (
+            select(Bom.id)
+            .where(Bom.mat_hang_id == item_id)
+            .order_by(Bom.kich_hoat_gan_nhat_at.desc(), Bom.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        return tuple(
+            await self.session.scalars(
+                select(ChiTietBom.mat_hang_id).where(ChiTietBom.bom_id == latest)
+            )
+        )
+
     async def lock_bom_graph(self) -> None:
         await self.session.execute(text("SELECT pg_advisory_xact_lock(20261020, 2)"))
 

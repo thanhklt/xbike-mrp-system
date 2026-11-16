@@ -17,6 +17,8 @@ from app.modules.bom.schemas import BomFormula
 
 ItemType = Literal["linh_kien", "thanh_pham"]
 ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+# Same rule for create and patch: surrounding spaces stripped, blank rejected.
+Sku = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Money = Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
 SnakeCode = Annotated[str, StringConstraints(pattern=r"^[a-z]+(_[a-z]+)*$")]
 
@@ -54,7 +56,7 @@ class MatHangRead(BaseModel):
 class MatHangCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sku: str = Field(min_length=1)
+    sku: Sku
     ten_mat_hang: ItemName
     loai_mat_hang: ItemType
     don_vi_tinh: SnakeCode
@@ -69,18 +71,11 @@ class MatHangCreate(BaseModel):
             raise ValueError("Thành phẩm phải có công thức; linh kiện không có công thức")
         return self
 
-    @field_validator("sku")
-    @classmethod
-    def validate_ma(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("SKU không được rỗng")
-        return value
-
 
 class MatHangPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    sku: str | None = Field(default=None, min_length=1)
+    sku: Sku | None = None
     ten_mat_hang: ItemName | None = None
     don_vi_tinh: SnakeCode | None = None
     mau_sac: SnakeCode | None = None

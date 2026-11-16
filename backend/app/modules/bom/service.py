@@ -1,5 +1,7 @@
 """UC-15–19: specs/use_cases/bom; caller-owned catalog/audit transactions."""
 
+from collections.abc import Iterable
+
 from app.core.errors import (
     ConflictException,
     ForbiddenException,
@@ -112,8 +114,8 @@ class BomService:
 
     async def get_cau_truc(self, bom_id: int, actor: dict, request_id: str) -> BomTreeResponse:
         """UC-15: historical version has only leaves, never a current child graph."""
-        result, _ = await self.get_bom(bom_id, actor, request_id)
-        record = result.data
+        _require_role(actor, {"quan_ly", "nhan_vien"})
+        record = _version(await self._context(bom_id), bom_id)
         return BomTreeResponse(
             data=BomTreeRead(
                 bom_id=record.id,
@@ -129,7 +131,7 @@ class BomService:
                     for line in record.chi_tiet
                 ],
             ),
-            meta=result.meta,
+            meta=ResponseMeta(request_id=request_id),
         )
 
     async def item_detail(self, item_id: int) -> tuple[MatHangRead, str]:
@@ -150,16 +152,37 @@ class BomService:
         self.mutation.require_active()
         await self.repository.lock_bom_graph()
 
-    async def lock_item_versions(self, item_id: int) -> None:
-        """Catalog collaborator; caller holds graph/item locks in that order."""
-        self.mutation.require_active()
-        await self.repository.lock_versions(item_id)
+    async def _lock_rows(self, item_id: int, components: Iterable[int]) -> bool:
+        """Output item and components in one ascending-id pass, then its versions.
 
-    async def _locked(self, bom_id: int) -> BomContext:
+        Stock and production paths lock MatHang rows by ascending id; locking the
+        output first and components later could deadlock against them.
+        """
+        rows = await self.items.lock_items({item_id, *components}, exclusive=True)
+        if item_id not in {row.id for row in rows}:
+            return False
+        await self.repository.lock_versions(item_id)
+        return True
+
+    async def lock_item(self, item_id: int, *, reuse: bool) -> tuple[MatHangRead, str] | None:
+        """Catalog collaborator (UC-11/12): caller holds lock_catalog(); None if missing.
+
+        reuse=True also locks the components UC-12 would reactivate.
+        """
+        self.mutation.require_active()
+        components = await self.repository.reuse_lines(item_id) if reuse else ()
+        if not await self._lock_rows(item_id, components):
+            return None
+        return await self.item_detail(item_id)
+
+    async def _locked(self, bom_id: int, components: Iterable[int] = ()) -> BomContext:
+        """Lock graph, then rows; `components` adds lines a new version will use."""
         await self.lock_catalog()
-        context = await self._context(bom_id)
-        await self.items.get_for_update(context.item.id)
-        await self.repository.lock_versions(context.item.id)
+        ref = await self.repository.bom_ref(bom_id) if 0 < bom_id <= 2**31 - 1 else None
+        if ref is None:
+            raise NotFoundException()
+        item_id, lines = ref
+        await self._lock_rows(item_id, {*lines, *components})
         return await self._context(bom_id)
 
     async def _validate(self, item: MatHangRead, formula: BomFormula) -> None:
@@ -195,19 +218,29 @@ class BomService:
                 },
             )
         )
-        if before and before.item.is_active != after.item.is_active:
-            await self.audit.append(
-                CreationAudit(
-                    nhan_vien_id=int(actor["sub"]),
-                    loai_doi_tuong="mat_hang",
-                    doi_tuong_id=after.item.id,
-                    thao_tac="dung_lai" if after.item.is_active else "ngung",
-                    trang_thai_truoc="dang_dung" if before.item.is_active else "da_ngung",
-                    trang_thai_sau="dang_dung" if after.item.is_active else "da_ngung",
-                    du_lieu_truoc=before.item.model_dump(mode="json"),
-                    du_lieu_sau=after.item.model_dump(mode="json"),
-                )
+        if before:
+            await self._audit_item(before.item, after.item, actor)
+
+    async def _audit_item(self, before: MatHangRead, after: MatHangRead, actor: dict) -> None:
+        if before.is_active == after.is_active:
+            return
+        await self.audit.append(
+            CreationAudit(
+                nhan_vien_id=int(actor["sub"]),
+                loai_doi_tuong="mat_hang",
+                doi_tuong_id=after.id,
+                thao_tac="dung_lai" if after.is_active else "ngung",
+                trang_thai_truoc="dang_dung" if before.is_active else "da_ngung",
+                trang_thai_sau="dang_dung" if after.is_active else "da_ngung",
+                du_lieu_truoc=before.model_dump(mode="json"),
+                du_lieu_sau=after.model_dump(mode="json"),
             )
+        )
+
+    async def _set_item_active(self, context: BomContext, active: bool, actor: dict) -> None:
+        """Repair a finished item whose flag disagrees with its formula (UC-12 R3)."""
+        after = await self.items.update(context.item.id, {"is_active": active})
+        await self._audit_item(context.item, after, actor)
 
     async def create_initial_formula(
         self, item: MatHangRead, formula: BomFormula, actor: dict
@@ -228,7 +261,7 @@ class BomService:
         """UC-17: immutable version; BOM-AC-04/05/06 transaction and concurrency."""
         require_manager(actor)
         async with self.mutation.scope() as changes:
-            before = await self._locked(bom_id)
+            before = await self._locked(bom_id, (line.mat_hang_id for line in formula.chi_tiet))
             verify_if_match(if_match, _etag(before, bom_id))
             await self._validate(before.item, formula)
             number = max(v.version for v in before.versions) + 1
@@ -237,11 +270,10 @@ class BomService:
             if before.active:
                 await self.repository.deactivate(before.active.id)
             created = await self.repository.add(before.item.id, number, formula.chi_tiet)
-            if not before.item.is_active:
-                await self.items.update(before.item.id, {"is_active": True})
+            item = await self.items.update(before.item.id, {"is_active": True})
             after = await self._context(created.id)
             await self._audit("tao_phien_ban", before, after, created.id, actor)
-            changes.append(after.item)
+            changes.append(item)
             result = _detail(after, created.id, request_id)
         return result
 
@@ -262,8 +294,7 @@ class BomService:
         if before.active:
             await self.repository.deactivate(before.active.id)
         await self.repository.activate(bom_id)
-        if not before.item.is_active:
-            await self.items.update(before.item.id, {"is_active": True})
+        await self.items.update(before.item.id, {"is_active": True})
         after = await self._context(bom_id)
         await self._audit("dung_lai_phien_ban", before, after, bom_id, actor)
         return after
@@ -307,10 +338,10 @@ class BomService:
         context = await self.repository.context(item_id)
         if context is None or not context.versions:
             raise ConflictException(message="Thành phẩm chưa có công thức")
-        if context.item.is_active and context.active is None:
-            raise ConflictException(message="Trạng thái thành phẩm và công thức không khớp")
         if context.active:
             await self._stop(context, context.active.id, actor)
+        elif context.item.is_active:
+            await self._set_item_active(context, False, actor)
 
     async def reuse_last_for_item_in_transaction(self, item_id: int, actor: dict) -> None:
         """UC-12/18: most recently activated version, not greatest version number."""
@@ -319,7 +350,8 @@ class BomService:
         context = await self.repository.context(item_id)
         if context is None or not context.versions:
             raise ConflictException(message="Thành phẩm chưa có công thức")
-        if context.active is not None:
-            raise ConflictException(message="Trạng thái thành phẩm và công thức không khớp")
-        latest = max(context.versions, key=lambda v: (v.kich_hoat_gan_nhat_at, v.id))
-        await self._activate(context, latest.id, actor)
+        if context.active is None:
+            latest = max(context.versions, key=lambda v: (v.kich_hoat_gan_nhat_at, v.id))
+            await self._activate(context, latest.id, actor)
+        elif not context.item.is_active:
+            await self._set_item_active(context, True, actor)

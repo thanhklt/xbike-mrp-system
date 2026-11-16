@@ -100,12 +100,15 @@ class SqlAlchemyMatHangRepository:
         )
         return [MatHangRead.model_validate(record) for record in records]
 
-    async def lock_items(self, item_ids: Iterable[int]) -> list[MatHangRead]:
+    async def lock_items(
+        self, item_ids: Iterable[int], *, exclusive: bool = False
+    ) -> list[MatHangRead]:
+        # Rows are locked in ascending id, the order stock and production paths use.
         records = await self.session.scalars(
             select(MatHang)
             .where(MatHang.id.in_(sorted(set(item_ids))))
             .order_by(MatHang.id)
-            .with_for_update(read=True)
+            .with_for_update(read=not exclusive)
             .execution_options(populate_existing=True)
         )
         return [MatHangRead.model_validate(record) for record in records]

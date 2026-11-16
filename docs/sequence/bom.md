@@ -8,7 +8,12 @@ GET list mặc định page=1/page_size=20 (max 100), lọc AND theo mat_hang_id
 
 Tất cả mutation dùng một session/transaction chung cho MatHang, Bom, ChiTietBom và audit; thứ tự cache lock → advisory lock → item → version. Cache publish sau commit, lỗi commit không chắc chắn làm cache unavailable. Không đổi tồn/giữ hàng/ledger/yêu cầu đã chốt.
 
-Luồng stop/reuse theo mặt hàng nằm trong PATCH/DELETE của [mat_hang](mat_hang.md): stop khi thành phẩm active nhưng không có version active, hoặc reuse khi thành phẩm ngừng nhưng còn version active, trả 409 "Trạng thái thành phẩm và công thức không khớp". Không tự sửa dữ liệu, ghi audit hoặc publish cache. Không có phiên bản nào vẫn trả 409 "Thành phẩm chưa có công thức".
+Rà soát 14/11/2026 theo T04/T06/T07/T09: `MatHangMutation.scope()` dùng
+`@asynccontextmanager` để các service vào/ra transaction đúng bằng `async with`.
+Dependency `get_bom_if_match` chỉ gom mọi giá trị header, kể cả các header vật lý
+lặp tên, rồi chuyển xuống service. `verify_if_match` vẫn so sánh sau khi khóa và đọc
+lại resource: thiếu/rỗng 428, stale/weak/wildcard/nhiều giá trị 412. Không lấy riêng
+header đầu tiên; không đổi cách xử lý header của các module khác.
 
 ## GET /api/v1/bom
 
@@ -189,30 +194,31 @@ sequenceDiagram
     else hợp lệ
         A-->>R: actor
     end
+    R->>R: get_bom_if_match, preserve all header values
     R->>R: Validate path/query/body
     alt input không hợp lệ
         R-->>C: 422, error + meta.request_id
     else input hợp lệ
-        R->>S: create_version(actor, dữ liệu, request_id nếu có)
+        R->>S: create_version(id, formula, actor, if_match, request_id)
         S->>S: Guard quyền nghiệp vụ
-        S->>M: scope()
+        S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
             S-->>R: 404
-        else thiếu / stale / weak / wildcard If-Match
+        else thiếu / stale / weak / wildcard / multiple If-Match
             S-->>R: 428 / 412
         else không hợp lệ về trạng thái / linh kiện
             S-->>R: 409 / 404 / 422
         else điều kiện hợp lệ
-            S->>B: Đóng active cũ, INSERT version và định mức, UPDATE MatHang
-            B->>DB: ghi version / định mức trong transaction
+            S->>B: Đóng active cũ, INSERT version và định mức
+            B->>DB: UPDATE Bom active, INSERT Bom + ChiTietBom
             S->>I: cập nhật trạng thái thành phẩm
             I->>DB: UPDATE MatHang
             S->>AU: append snapshot trước/sau
@@ -268,24 +274,25 @@ sequenceDiagram
     else hợp lệ
         A-->>R: actor
     end
+    R->>R: get_bom_if_match, preserve all header values
     R->>R: Validate path/query/body
     alt input không hợp lệ
         R-->>C: 422, error + meta.request_id
     else input hợp lệ
-        R->>S: activate_bom(actor, dữ liệu, request_id nếu có)
+        R->>S: activate_bom(id, actor, if_match, request_id)
         S->>S: Guard quyền nghiệp vụ
-        S->>M: scope()
+        S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
             S-->>R: 404
-        else thiếu / stale / weak / wildcard If-Match
+        else thiếu / stale / weak / wildcard / multiple If-Match
             S-->>R: 428 / 412
         else không hợp lệ về trạng thái / linh kiện
             S-->>R: 409 / 404 / 422
@@ -347,30 +354,31 @@ sequenceDiagram
     else hợp lệ
         A-->>R: actor
     end
+    R->>R: get_bom_if_match, preserve all header values
     R->>R: Validate path/query/body
     alt input không hợp lệ
         R-->>C: 422, error + meta.request_id
     else input hợp lệ
-        R->>S: delete_bom(actor, dữ liệu, request_id nếu có)
+        R->>S: delete_bom(id, actor, if_match)
         S->>S: Guard quyền nghiệp vụ
-        S->>M: scope()
+        S->>M: scope() via asynccontextmanager
         M->>K: acquire lock, snapshot
         M->>T: transaction caller
-        S->>B: advisory lock, đọc context
-        B->>DB: pg_advisory_xact_lock, SELECT
-        S->>I: get_for_update(item)
-        I->>DB: SELECT FOR UPDATE
+        S->>B: advisory lock, bom_ref(id)
+        B->>DB: pg_advisory_xact_lock, SELECT mat_hang_id + linh kiện
+        S->>I: lock_items(thành phẩm + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         S->>B: lock_versions, đọc lại snapshot
         B->>DB: SELECT FOR UPDATE / context
         alt resource không tồn tại
             S-->>R: 404
-        else thiếu / stale / weak / wildcard If-Match
+        else thiếu / stale / weak / wildcard / multiple If-Match
             S-->>R: 428 / 412
         else không hợp lệ về trạng thái / linh kiện
             S-->>R: 409 / 404 / 422
         else điều kiện hợp lệ
-            S->>B: UPDATE Bom và MatHang inactive, không DELETE
-            B->>DB: ghi version / định mức trong transaction
+            S->>B: deactivate version, không DELETE
+            B->>DB: UPDATE Bom is_active=false, không sửa định mức
             S->>I: cập nhật trạng thái thành phẩm
             I->>DB: UPDATE MatHang
             S->>AU: append snapshot trước/sau

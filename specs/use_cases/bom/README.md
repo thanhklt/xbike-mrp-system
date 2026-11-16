@@ -276,16 +276,16 @@ seed, migration, cấu hình/database ứng dụng, frontend hoặc các service
 
 | Phần | Kết quả thực tế |
 |---|---|
-| `test_bom_service.py` | 22 pass: validation, strong If-Match, guard service |
-| `test_bom_api.py` | 50 pass: real auth/DB roles, khóa tài khoản, query/body/path, HTTP, ETag, lifecycle, safe 500 |
+| `test_bom_service.py` | 23 pass: validation, strong If-Match, guard service, mutation scope hỗ trợ async with và commit trước cache publish |
+| `test_bom_api.py` | 62 pass: real auth/DB roles, khóa tài khoản, query/body/path, HTTP, ETag, lifecycle, safe 500; thêm 12 ca If-Match lặp không ghi dữ liệu/audit/cache |
 | `test_bom_postgres.py` | 16 pass: bootstrap SQL v4 thật, reflection ORM, version, khóa/đồng thời, rollback, trigger và dữ liệu đã chốt |
 | `test_mat_hang_bom.py` | 17 pass: tạo atomic, mã tự cấp/hết dải, rollback/cache, chọn version gần kích hoạt nhất |
-| Toàn bộ suite `python -m pytest tests -q --tb=line` | **105 pass, 8 fail**; cả 8 fail vẫn ở fixture `test_nhan_vien_create_code.py:86` thiếu `VaiTroRead.mo_ta`, giống baseline; không sửa hoặc làm yếu test này |
+| Toàn bộ suite `python -m pytest tests -q --tb=line` | **118 pass, 8 fail**; cả 8 fail vẫn ở fixture `test_nhan_vien_create_code.py:86` thiếu `VaiTroRead.mo_ta`, giống baseline; không sửa hoặc làm yếu test này |
 | Ruff check/format | Đạt trên các file backend/test thuộc phạm vi |
 | mypy | Đạt 25 source files với `--follow-imports=silent --disable-error-code import-untyped`; asyncpg thiếu stubs, không tuyên bố strict typing toàn backend |
 | Mermaid | Render thành công 6 BOM + 6 catalog; PNG đã xuất, kiểm tra ảnh đại diện |
 | Kiểm tra kiến trúc | Map không phát hiện cycle trong phần BOM; đối chiếu imports/lời gọi bằng source. Boundary checker không kết luận vì repository chưa có architecture declaration; không tạo cấu hình giả để làm xanh |
-| Bằng chứng HTTP | [11 request/response thật](../../../docs/examples/bom-http.json), ASGI app thực + PostgreSQL test; không ghi JWT/secret ra artifact |
+| Bằng chứng HTTP | [16 request/response thật](../../../docs/examples/bom-http.json), ASGI app thực + PostgreSQL test; thêm 3 request header lặp trả 412 và 2 request header đơn hợp lệ; không ghi JWT/secret ra artifact |
 
 PostgreSQL chạy trên container test tạm, cổng 55464, tmpfs không volume. Fixture chỉ
 tạo DB ngẫu nhiên `bom_<uuid>_test` trên server test và bootstrap khi xác nhận trống;
@@ -318,10 +318,10 @@ kiểm chứng; các phần UI và sản xuất không được coi là đã đ�
 | BOM-AC-01 | Auth dependency → service guards | `test_bom_ac01_unauthenticated`, `test_bom_ac01_changed_role_and_locked_account_take_effect`, các test role ở trên: đạt theo cơ chế auth hiện tại, không tuyên bố refactor auth v4 |
 | BOM-AC-02 | Schema + `_validate` | Test strict quantity và bad formula/wrong type/missing item: đạt |
 | BOM-AC-03 | Ba GET BOM | `test_uc15_bom_ac03_reads_do_not_write`: đạt, đối chiếu snapshot DB trước/sau |
-| BOM-AC-04 | `MatHangMutation` + AuditService + repositories | Test atomic create failure, rollback version/cache và rollback activate/stop: đạt cho lỗi ghi/audit/commit mô phỏng; chưa thử mất kết nối thật đúng lúc COMMIT |
+| BOM-AC-04 | `MatHangMutation` + AuditService + repositories | `test_bom_ac04_mutation_scope_commits_before_cache_publish` và test atomic create failure, rollback version/cache, rollback activate/stop: đạt async context, commit trước publish, lỗi ghi/audit/commit mô phỏng; chưa thử mất kết nối thật đúng lúc COMMIT |
 | BOM-AC-05 | ETag dưới khóa, advisory + item/version locks | `test_bom_ac05_two_real_sessions_same_etag`, `test_bom_ac05_independent_items_and_two_stops`, `test_bom_ac05_catalog_tag_changes_when_only_formula_changes`: đạt với hai session/cache độc lập |
 | BOM-AC-06 | Mutation BOM không sửa kho/yêu cầu chốt | Test preserves_committed_request_and_balances + trigger_blocks_hard_delete_and_detail_update: đạt phần dữ liệu, không phải E2E sản xuất |
-| BOM-AC-07 | Router/schema/headers/exception handler | Test write_preconditions, bad_query, detail_errors, no_body_endpoints_reject_body, safe_500 và HTTP lifecycle: đạt |
+| BOM-AC-07 | Router/schema/headers/exception handler | `test_bom_ac07_repeated_if_match_rejected_without_writes` (12 ca cho UC-17/18/19), test write_preconditions, bad_query, detail_errors, no_body_endpoints_reject_body, safe_500 và HTTP lifecycle: đạt |
 | BOM-AC-08 | `_activate` / `_stop` kiểm tra trạng thái | HTTP lifecycle + test stale_validators: đạt 409 khi active lặp; tag cũ được 412 trước trạng thái; ngừng version cũ không thể đổi version hiện hành |
 
 ### 8.4. Giới hạn bàn giao
@@ -335,3 +335,22 @@ kiểm chứng; các phần UI và sản xuất không được coi là đã đ�
 - Test không chứng minh mọi tình huống mất mạng/worker chết hoặc thời gian hội tụ
   cache giữa nhiều instance. Có xử lý cache unavailable khi commit không chắc chắn.
 - Không sửa các lỗi nền nhân viên, không commit/push; dev review diff trước khi commit.
+
+### 8.5. Khắc phục sau rà soát nhánh feature/bom
+
+Dev đã yêu cầu đọc lại plan/task và sửa các phần tương ứng. Source ở `b9e1020`
+thiếu decorator mutation: lượt kiểm tra trước sửa có 50 fail/55 pass. Khi thêm
+decorator chỉ trong tiến trình chẩn đoán, 105 test cũ pass nhưng phép thử header lặp
+vẫn cho phép ghi. Đó là kết quả chẩn đoán, không phải bản source đã được sửa.
+
+Bản sửa hiện tại theo T04/T06/T07/T09/T10:
+
+- Khôi phục `@asynccontextmanager` tại MatHangMutation.scope; không đổi ranh giới
+  transaction, audit, thứ tự khóa hoặc cơ chế cache đã duyệt.
+- Router dùng `get_bom_if_match` gom toàn bộ giá trị header. BomService vẫn gọi
+  verify_if_match sau khi khóa/đọc lại resource, trả 412 nếu có nhiều validator,
+  kể cả header trùng nhau hoặc header thứ hai rỗng. Module khác không đổi chính sách.
+- Test hồi quy mới đã được quan sát fail trước bản sửa, rồi pass trên source thật,
+  không còn wrapper/monkeypatch decorator trong lúc chạy suite.
+- UC-16–19/BOM-AC-04/07 đạt phạm vi backend với 118 test pass; các giới hạn frontend,
+  sản xuất v4, E2E và lỗi nền nhân viên ở trên được giữ nguyên.

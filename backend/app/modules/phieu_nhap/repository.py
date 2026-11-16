@@ -7,7 +7,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, selectinload
 
-from app.core.errors import ConflictException
+from app.core.errors import ConflictException, NotFoundException
 from app.modules.mat_hang.models import MatHang
 from app.modules.nha_cung_cap.models import NhaCungCap
 from app.modules.phieu_nhap.errors import ReceiptCodeConflict, ReceiptReferenced
@@ -25,6 +25,14 @@ from app.shared.records import RecordPage
 class SqlAlchemyPhieuNhapRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def begin_read_snapshot(self) -> None:
+        # Authentication only reads in this request. Never call this from a mutation.
+        if self.session.in_transaction():
+            await self.session.rollback()
+        await self.session.connection(
+            execution_options={"isolation_level": "REPEATABLE READ", "postgresql_readonly": True}
+        )
 
     async def _flush(self) -> None:
         try:
@@ -68,8 +76,8 @@ class SqlAlchemyPhieuNhapRepository:
                 query.order_by(ordering, PhieuNhap.id)
                 .offset(offset)
                 .limit(params.page_size)
+                .options(selectinload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
                 .execution_options(populate_existing=True)
-                .with_for_update(read=True)
             )
         ).all()
         return RecordPage([PhieuNhapRead.model_validate(record) for record in records], total)
@@ -79,8 +87,6 @@ class SqlAlchemyPhieuNhapRepository:
             select(PhieuNhap)
             .where(PhieuNhap.id == record_id)
             .options(selectinload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
-            # Keep the header and select-in loaded items at the same version during PATCH.
-            .with_for_update(read=True)
             .execution_options(populate_existing=True)
         )
         return PhieuNhapRead.model_validate(record) if record is not None else None
@@ -89,7 +95,7 @@ class SqlAlchemyPhieuNhapRepository:
         record = await self.session.scalar(
             select(PhieuNhap)
             .where(PhieuNhap.id == record_id)
-            .options(lazyload(PhieuNhap.items))
+            .options(lazyload(PhieuNhap.items), selectinload(PhieuNhap.nha_cung_cap))
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -149,22 +155,41 @@ class SqlAlchemyPhieuNhapRepository:
             self.session.add_all(
                 [ChiTietPhieuNhap(phieu_nhap_id=record_id, **item.model_dump()) for item in items]
             )
-        if changes:
-            await self.session.execute(
-                update(PhieuNhap).where(PhieuNhap.id == record_id).values(**changes)
-            )
+        await self.session.execute(
+            update(PhieuNhap)
+            .where(PhieuNhap.id == record_id)
+            .values(**changes, updated_at=func.clock_timestamp(), phien_ban=PhieuNhap.phien_ban + 1)
+        )
         await self._flush()
-        return await self.get_receipt(record_id)
+        record = await self.get_receipt(record_id)
+        if record is None:
+            raise NotFoundException()
+        return record
 
     async def delete_draft(self, record_id: int) -> None:
         await self._delete_items(record_id)
         await self.session.execute(delete(PhieuNhap).where(PhieuNhap.id == record_id))
 
-    async def mark_completed(self, record_id: int) -> PhieuNhapRead:
-        await self.session.execute(
-            update(PhieuNhap).where(PhieuNhap.id == record_id).values(trang_thai="hoan_thanh")
+    async def mark_completed(
+        self, record_id: int, *, expected_version: int, actor_id: int, completed_at: datetime
+    ) -> PhieuNhapRead | None:
+        updated = await self.session.scalar(
+            update(PhieuNhap)
+            .where(
+                PhieuNhap.id == record_id,
+                PhieuNhap.trang_thai == "nhap",
+                PhieuNhap.phien_ban == expected_version,
+            )
+            .values(
+                trang_thai="hoan_thanh",
+                hoan_thanh_at=completed_at,
+                nguoi_hoan_thanh_id=actor_id,
+                updated_at=completed_at,
+                phien_ban=PhieuNhap.phien_ban + 1,
+            )
+            .returning(PhieuNhap.id)
         )
-        return await self.get_receipt(record_id)
+        return await self.get_receipt(record_id) if updated is not None else None
 
     async def lock_supplier(self, record_id: int) -> bool:
         return (
@@ -223,7 +248,7 @@ class SqlAlchemyPhieuNhapRepository:
         prefix = f"PN-{month}-"
         code = await self._next_code(prefix)
         fields = payload.model_dump(exclude={"items"})
-        fields["ma_phieu_nhap"] = payload.ma_phieu_nhap or code
+        fields["ma_phieu_nhap"] = code
         record = PhieuNhap(**fields, created_at=created_at)
         record.items = [ChiTietPhieuNhap(**item.model_dump()) for item in payload.items]
         self.session.add(record)
@@ -231,7 +256,7 @@ class SqlAlchemyPhieuNhapRepository:
             await self._flush()
         except IntegrityError as exc:
             if (
-                getattr(exc.orig.__cause__, "constraint_name", None)
+                getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None)
                 == "PhieuNhap_ma_phieu_nhap_key"
             ):
                 raise ReceiptCodeConflict() from exc

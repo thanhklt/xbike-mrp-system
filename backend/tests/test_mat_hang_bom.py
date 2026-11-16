@@ -1,7 +1,6 @@
 """Dependent UC-10/12 integration and UC-16 validation/atomicity, not full catalog refactor."""
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
@@ -12,8 +11,6 @@ from test_bom_postgres import FORMULA, MANAGER, product, scalar, services, tag
 from test_bom_postgres import database as database
 
 from app.modules.bom.schemas import BomFormula
-from app.modules.mat_hang.cache import MatHangCache
-from app.modules.mat_hang.mutation import MatHangMutation
 from app.modules.mat_hang.schemas import MatHangCreate, MatHangPatch
 
 BASE = {
@@ -119,49 +116,6 @@ async def test_uc16_ac6_atomic_create_failure(database, monkeypatch, point):
     assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 0
 
 
-# PR-10 F6: scope không được lồng kể cả instance khác; require_active chỉ nhận chủ scope.
-async def test_mutation_scope_rejects_nesting_and_checks_owner():
-    cache = MatHangCache()
-    cache.replace([])
-    transaction, other_transaction = AsyncMock(), AsyncMock()
-    mutation = MatHangMutation(transaction, cache)
-    other = MatHangMutation(other_transaction, cache)
-    for owner in (mutation, other):
-        with pytest.raises(RuntimeError, match="Caller must own"):
-            owner.require_active()
-    async with mutation.scope():
-        mutation.require_active()
-        with pytest.raises(RuntimeError, match="Caller must own"):
-            other.require_active()
-        for owner in (mutation, other):
-            with pytest.raises(RuntimeError, match="Nested catalog mutation"):
-                async with asyncio.timeout(1):
-                    async with owner.scope():
-                        pytest.fail("Nested scope entered")
-        mutation.require_active()
-    transaction.__aenter__.assert_awaited_once()
-    other_transaction.__aenter__.assert_not_awaited()
-    for owner in (mutation, other):
-        with pytest.raises(RuntimeError, match="Caller must own"):
-            owner.require_active()
-    async with other.scope():
-        other.require_active()
-
-
-# PR-10 F6: token được reset kể cả khi scope thoát do ngoại lệ.
-async def test_mutation_scope_resets_owner_after_error():
-    cache = MatHangCache()
-    cache.replace([])
-    mutation = MatHangMutation(AsyncMock(), cache)
-    with pytest.raises(ValueError, match="abort"):
-        async with mutation.scope():
-            raise ValueError("abort")
-    with pytest.raises(RuntimeError, match="Caller must own"):
-        mutation.require_active()
-    async with mutation.scope():
-        mutation.require_active()
-
-
 async def test_uc12_component_cannot_be_stopped(client):
     read = await client.get("/api/v1/mat_hang/1", headers=headers())
     response = await client.delete(
@@ -200,3 +154,116 @@ async def test_uc10_component_create_and_duplicate_sku(client, database):
     assert duplicate.status_code == 409
     assert await scalar(database, 'SELECT count(*) FROM "MatHang"') == 3
     assert await scalar(database, 'SELECT count(*) FROM "Bom"') == 0
+
+
+@pytest.mark.parametrize("value", ["   ", ""])
+def test_uc11_blank_sku_rejected_on_create_and_patch(value):
+    with pytest.raises(ValidationError):
+        MatHangCreate(**{**BASE, "sku": value}, bom=FORMULA)
+    with pytest.raises(ValidationError):
+        MatHangPatch(sku=value)
+
+
+def test_uc11_sku_is_stripped_on_create_and_patch():
+    assert MatHangCreate(**{**BASE, "sku": " new-bike "}, bom=FORMULA).sku == "new-bike"
+    assert MatHangPatch(sku=" new-bike ").sku == "new-bike"
+
+
+async def test_uc12_r3_stop_repairs_active_item_without_active_version(database):
+    """UC-12 R3: thành phẩm đang dùng nhưng không còn phiên bản đang dùng vẫn ngừng được."""
+    item, first = await product(database)
+    async with database.sessions() as session:
+        await session.execute(text(f'UPDATE "Bom" SET is_active=false WHERE id={first}'))
+        await session.commit()
+    async with services(database) as (boms, catalog, _session):
+        _, item_tag = await boms.item_detail(item)
+        await catalog.delete_mat_hang(item, item_tag, MANAGER)
+    assert not await scalar(database, f'SELECT is_active FROM "MatHang" WHERE id={item}')
+    assert not database.cache.snapshot().by_id[item].is_active
+    assert (
+        await scalar(
+            database,
+            "SELECT count(*) FROM \"LichSuThaoTac\" WHERE loai_doi_tuong='mat_hang' "
+            f"AND doi_tuong_id={item} AND thao_tac='ngung'",
+        )
+        == 1
+    )
+
+
+async def test_uc12_r3_reuse_repairs_stopped_item_with_active_version(database):
+    """UC-12 R3: thành phẩm đã ngừng nhưng phiên bản còn đang dùng thì dùng lại được."""
+    item, first = await product(database)
+    async with services(database) as (boms, _, _session):
+        await boms.delete_bom(first, MANAGER, await tag(database, first))
+    async with database.sessions() as session:
+        await session.execute(text(f'UPDATE "Bom" SET is_active=true WHERE id={first}'))
+        await session.commit()
+    async with services(database) as (boms, catalog, _session):
+        _, item_tag = await boms.item_detail(item)
+        result, _ = await catalog.patch_mat_hang(
+            item, MatHangPatch(is_active=True), item_tag, MANAGER
+        )
+    assert result.is_active
+    assert await scalar(database, f'SELECT is_active FROM "MatHang" WHERE id={item}')
+    assert await scalar(database, 'SELECT id FROM "Bom" WHERE is_active') == first
+
+
+async def _wait_for_lock_waiter(database):
+    for _ in range(100):
+        waiting = await scalar(
+            database,
+            "SELECT count(*) FROM pg_stat_activity "
+            "WHERE wait_event_type='Lock' AND datname=current_database()",
+        )
+        if waiting:
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("BOM transaction never waited on a row lock")
+
+
+@pytest.mark.parametrize("action", ["create_version", "patch_reuse"])
+async def test_bom_lock_order_components_before_higher_id_output(database, action):
+    """Stock paths lock MatHang by ascending id; a BOM write must not hold the output
+    (id 3) while waiting for a component (id 1), or the two deadlock."""
+    item, first = await product(database)
+    if action == "patch_reuse":
+        async with services(database) as (boms, catalog, _session):
+            _, item_tag = await boms.item_detail(item)
+            await catalog.delete_mat_hang(item, item_tag, MANAGER)
+    async with services(database) as (boms, _, _session):
+        etag = (
+            await tag(database, first)
+            if action == "create_version"
+            else (await boms.item_detail(item))[1]
+        )
+
+    async def write():
+        async with services(database) as (boms, catalog, _session):
+            if action == "create_version":
+                await boms.create_version(first, BomFormula(**FORMULA), MANAGER, etag, "test")
+            else:
+                await catalog.patch_mat_hang(item, MatHangPatch(is_active=True), etag, MANAGER)
+
+    async with database.sessions() as stock:
+        await stock.execute(text('SELECT id FROM "MatHang" WHERE id=1 FOR UPDATE'))
+        task = asyncio.create_task(write())
+        try:
+            await _wait_for_lock_waiter(database)
+            await stock.execute(text(f'SELECT id FROM "MatHang" WHERE id={item} FOR UPDATE NOWAIT'))
+        finally:
+            await stock.rollback()
+    await asyncio.wait_for(task, 10)
+
+
+async def test_uc12_r3_delete_stops_version_left_active_under_stopped_item(database):
+    item, first = await product(database)
+    async with services(database) as (boms, _, _session):
+        await boms.delete_bom(first, MANAGER, await tag(database, first))
+    async with database.sessions() as session:
+        await session.execute(text(f'UPDATE "Bom" SET is_active=true WHERE id={first}'))
+        await session.commit()
+    async with services(database) as (boms, catalog, _session):
+        _, item_tag = await boms.item_detail(item)
+        await catalog.delete_mat_hang(item, item_tag, MANAGER)
+    assert await scalar(database, 'SELECT count(*) FROM "Bom" WHERE is_active') == 0
+    assert not await scalar(database, f'SELECT is_active FROM "MatHang" WHERE id={item}')

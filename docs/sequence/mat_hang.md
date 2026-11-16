@@ -1,12 +1,12 @@
 # Sequence — mat_hang
 
-Đối chiếu code ngày 14/11/2026 theo [spec Catalog](../../specs/use_cases/catalog/README.md), [plan Catalog](../../specs/use_cases/catalog/PLAN.md) và phần BOM đã có. Đọc QTV/QLK/NV, ghi chỉ QLK; service kiểm tra lại quyền trước I/O. Frontend và E2E sản xuất/duyệt giá xuất chưa thuộc lần kiểm chứng này.
+Đối chiếu code theo [spec Catalog](../../specs/use_cases/catalog/README.md), [plan Catalog](../../specs/use_cases/catalog/PLAN.md) và phần BOM ([plan BOM](../../specs/use_cases/bom/PLAN.md)). Đọc QTV/QLK/NV, ghi chỉ QLK; service kiểm tra lại quyền trước I/O.
 
 Tạo chỉ nhận hai loại thanh_pham/linh_kien; mã do Identity/trigger cấp. Thành phẩm bắt buộc có `bom.chi_tiet`, không nhận mã/trạng thái/số tồn từ client. Linh kiện không có công thức. MatHangRead trả ba số chỉ đọc: so_luong_ton, so_luong_dang_giu, so_luong_con_dung = tồn - giữ.
 
-GET danh mục/list dùng cache hiện tại; list page 1/20, max 100, sort id/ma_mat_hang/ten_mat_hang/don_gia và tiền tố `-`, ID ASC khi giá trị bằng nhau. Query DTO cấm tham số lạ/lặp; mọi GET/DELETE cấm body, detail/write cấm query. q là literal substring mã/tên không phân biệt hoa/thường, không tìm SKU; AND các filter. is_active chỉ áp dụng TP, kết hợp loại LK trả 422. GET detail đọc DB qua BomService.item_detail để body và ETag dùng cùng snapshot; tag TP có ngữ cảnh BOM. PATCH/DELETE dùng tag GET mặt hàng, không dùng tag BOM. Thiếu/blank 428, cũ/weak/wildcard/nhiều tag 412. Cache publish sau commit, no-op không prepare/publish; instance khác theo LISTEN/NOTIFY và reconciliation hiện có.
+GET danh mục/list dùng cache hiện tại; list page 1/20, max 100, sort id/ma_mat_hang/ten_mat_hang/don_gia và tiền tố `-`, ID ASC khi giá trị bằng nhau. Query DTO cấm tham số lạ/lặp; mọi GET/DELETE cấm body, detail/write cấm query. q là literal substring mã/tên không phân biệt hoa/thường, không tìm SKU; AND các filter. is_active chỉ áp dụng TP, kết hợp loại LK trả 422. GET detail đọc DB qua BomService.item_detail để body và ETag dùng cùng snapshot; tag thành phẩm có ngữ cảnh BOM. PATCH/DELETE so sánh tag của GET mặt hàng, không dùng tag BOM. Cache publish sau commit, no-op không prepare/publish; instance khác theo LISTEN/NOTIFY và reconciliation hiện có.
 
-SKU chỉ đổi khi không có tham chiếu hoặc tồn; ĐVT không đổi khi đã có công thức/chứng từ. Mã/loại/số dư bất biến. PATCH không đổi giá trị trả 200 cùng tag, không UPDATE/audit/publish. Ngừng TP đã ngừng với tag hiện tại cũng không ghi lại. Source audit: MatHangService/BomService → AuditService → SqlAlchemyAuditRepository, cùng transaction. UPDATE refresh cột tồn tính toán trước khi dựng DTO để tránh async lazy I/O.
+SKU chỉ đổi khi không có tham chiếu hoặc tồn; ĐVT không đổi khi mặt hàng là thành phần trong công thức (`ChiTietBom`) hoặc đã có chứng từ. `Bom` của chính thành phẩm không tính là tham chiếu (UC-11 AC-1). Mã/loại/số dư bất biến. PATCH không đổi giá trị trả 200 cùng tag, không UPDATE/audit/publish.
 
 ## GET /api/v1/danh_muc_mat_hang/
 
@@ -88,7 +88,7 @@ sequenceDiagram
         R-->>C: 422
     else hợp lệ
         R->>S: list_mat_hang(params, actor)
-        S->>S: Guard, is_active chi TP (LK + active tra 422)
+        S->>S: Guard, is_active chỉ TP (LK + active trả 422)
         S->>K: snapshot, lọc/page/sort nếu là list
         alt cache unavailable
             K-->>C: 503
@@ -102,7 +102,7 @@ sequenceDiagram
 
 ## GET /api/v1/mat_hang/{id}
 
-[PNG](assets/mat_hang/mat-hang-3.png). Quyền QLK/NV.
+[PNG](assets/mat_hang/mat-hang-3.png). UC-09, quyền QTV/QLK/NV.
 
 ```mermaid
 sequenceDiagram
@@ -219,11 +219,11 @@ sequenceDiagram
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            opt Co thay doi thuc te
+            opt Có thay đổi thực tế
                 M->>K: prepare snapshot
             end
             T->>DB: COMMIT một lần
-            opt Co snapshot moi
+            opt Có snapshot mới
                 M->>K: publish
             end
             S-->>R: kết quả
@@ -280,46 +280,39 @@ sequenceDiagram
         S->>BS: lock_catalog
         BS->>B: advisory lock
         B->>DB: pg_advisory_xact_lock
-        S->>I: get_for_update(id)
-        I->>DB: SELECT FOR UPDATE
-        S->>BS: lock_item_versions + item_detail
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         BS->>B: khóa versions / context
         B->>DB: đọc snapshot
         S->>S: so If-Match (428/412)
-        S->>I: get_references neu doi SKU / don_vi_tinh
-        I->>DB: SELECT ChiTietBom/docs/stock references, không tính Bom của chính thành phẩm
-        S->>S: SKU khóa khi có refs/stock, ĐVT khóa khi thuộc ChiTietBom hoặc có chứng từ (409)
         alt không thỏa quyền / dữ liệu / trạng thái
             S-->>R: 403 / 404 / 409 / 422
         else điều kiện hợp lệ
-            Note over S,DB: No-op khong UPDATE/audit/publish, van verify tag
             S->>BS: stop_for_item_in_transaction / reuse_last nếu đổi trạng thái
-            alt stop khi item active nhưng không có version active, hoặc reuse còn version active
-                BS-->>S: ConflictException - Trạng thái thành phẩm và công thức không khớp
-                S-->>R: 409, rollback, không cập nhật/audit/publish
-            else trạng thái khớp hoặc không đổi trạng thái
-                BS->>B: ngừng / dùng version gần kích hoạt nhất
-                B->>DB: UPDATE Bom, không sửa định mức
-                BS->>I: trạng thái thành phẩm đi cùng
-                I->>DB: UPDATE MatHang
-                BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
-                S->>I: update thuộc tính mô tả nếu có, ĐVT đã kiểm tra ChiTietBom/chứng từ
-                I->>DB: UPDATE fields
-                S->>AU: audit sửa nếu có thuộc tính gửi sửa
-                AU->>AR: append
-                AR->>DB: session.add, không commit
-            end
+            BS->>B: ngừng / dùng version gần kích hoạt nhất
+            B->>DB: UPDATE Bom, không sửa định mức
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
+            I->>DB: UPDATE MatHang
+            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+            S->>I: get_references nếu đổi SKU / ĐVT (ChiTietBom, chứng từ, tồn; không tính Bom của chính TP)
+            S->>I: update thuộc tính thực sự đổi; no-op không UPDATE/audit/publish
+            I->>DB: SELECT references / UPDATE fields
+            S->>AU: audit sửa nếu có thuộc tính gửi sửa
+            AU->>AR: append
+            AR->>DB: session.add, không commit
         end
         alt ghi/audit/commit lỗi
             T->>DB: ROLLBACK
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            opt Co thay doi thuc te
+            opt Có thay đổi thực tế
                 M->>K: prepare snapshot
             end
             T->>DB: COMMIT một lần
-            opt Co snapshot moi
+            opt Có snapshot mới
                 M->>K: publish
             end
             S-->>R: kết quả
@@ -376,40 +369,35 @@ sequenceDiagram
         S->>BS: lock_catalog
         BS->>B: advisory lock
         B->>DB: pg_advisory_xact_lock
-        S->>I: get_for_update(id)
-        I->>DB: SELECT FOR UPDATE
-        S->>BS: lock_item_versions + item_detail
+        S->>BS: lock_item(id, reuse nếu PATCH is_active=true)
+        BS->>B: reuse_lines (linh kiện của version sẽ dùng lại)
+        BS->>I: lock_items(mặt hàng + linh kiện, id tăng dần)
+        I->>DB: SELECT MatHang ORDER BY id FOR UPDATE
         BS->>B: khóa versions / context
         B->>DB: đọc snapshot
         S->>S: so If-Match (428/412)
         alt không thỏa quyền / dữ liệu / trạng thái
             S-->>R: 403 / 404 / 409 / 422
         else điều kiện hợp lệ
-            Note over S,DB: No-op khong UPDATE/audit/publish, van verify tag
-            S->>BS: stop_for_item_in_transaction nếu item active
-            alt item active nhưng không có version active
-                BS-->>S: ConflictException - Trạng thái thành phẩm và công thức không khớp
-                S-->>R: 409, rollback, không cập nhật/audit/publish
-            else item active và có version active
-                BS->>B: ngừng version active nếu có
-                B->>DB: UPDATE Bom, không sửa định mức
-                BS->>I: trạng thái thành phẩm đi cùng
-                I->>DB: UPDATE MatHang
-                BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
-                AU->>AR: append
-                AR->>DB: session.add, không commit
-            end
+            S->>BS: stop_for_item_in_transaction (luôn gọi; bỏ qua nếu đã ngừng và khớp công thức)
+            BS->>B: ngừng / dùng version gần kích hoạt nhất
+            B->>DB: UPDATE Bom, không sửa định mức
+            BS->>I: trạng thái thành phẩm đi cùng; sửa cờ nếu lệch với công thức
+            I->>DB: UPDATE MatHang
+            BS->>AU: audit công thức + mặt hàng nếu đổi trạng thái
+            AU->>AR: append
+            AR->>DB: session.add, không commit
         end
         alt ghi/audit/commit lỗi
             T->>DB: ROLLBACK
             M->>K: không publish / unavailable nếu commit chưa rõ
             R-->>C: lỗi nghiệp vụ hoặc 500 an toàn
         else thành công
-            opt Co thay doi thuc te
+            opt Có thay đổi thực tế
                 M->>K: prepare snapshot
             end
             T->>DB: COMMIT một lần
-            opt Co snapshot moi
+            opt Có snapshot mới
                 M->>K: publish
             end
             S-->>R: kết quả

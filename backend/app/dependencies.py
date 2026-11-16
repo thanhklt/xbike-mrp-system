@@ -132,7 +132,7 @@ def get_mat_hang_service(
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
     audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> MatHangService:
-    boms = build_bom_service(db, cache)
+    boms = build_bom_service(db, cache, audit)
     return MatHangService(SqlAlchemyMatHangRepository(db), audit, boms.mutation, boms)
 
 
@@ -140,10 +140,13 @@ def get_mat_hang_availability(db: AsyncSession) -> MatHangAvailabilityService:
     return MatHangAvailabilityService(SqlAlchemyMatHangRepository(db))
 
 
-def build_bom_service(db: AsyncSession, cache: MatHangCache) -> BomService:
+def build_bom_service(
+    db: AsyncSession, cache: MatHangCache, audit: AuditService | None = None
+) -> BomService:
+    """Callers pass the request's AuditService so catalog and formula rows share it."""
     return BomService(
         SqlAlchemyBomRepository(db),
-        AuditService(SqlAlchemyAuditRepository(db)),
+        audit if audit is not None else AuditService(SqlAlchemyAuditRepository(db)),
         MatHangMutation(SqlAlchemyTransaction(db), cache),
         SqlAlchemyMatHangRepository(db),
     )
@@ -152,8 +155,9 @@ def build_bom_service(db: AsyncSession, cache: MatHangCache) -> BomService:
 def get_bom_service(
     db: Annotated[AsyncSession, Depends(get_db)],
     cache: Annotated[MatHangCache, Depends(get_mat_hang_cache)],
+    audit: Annotated[AuditService, Depends(get_audit_service)],
 ) -> BomService:
-    return build_bom_service(db, cache)
+    return build_bom_service(db, cache, audit)
 
 
 def get_receiving_service(

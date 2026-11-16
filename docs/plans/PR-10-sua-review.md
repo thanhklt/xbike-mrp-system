@@ -1,6 +1,8 @@
 # Plan: Sửa các phát hiện review PR 10 (catalog/BOM v4)
 
 > Dev đã duyệt 16/11/2026: đồng ý D1, D2, D3, D5 theo đề xuất. D4 đổi thành **chỉ sửa BE, không sửa FE** (không có Phase 2 FE trong phạm vi này).
+>
+> Cập nhật 16/11/2026: `origin/main` nhận PR 9 (BOM) và PR 8 (phiếu nhập). Dev chốt **theo bản main, bỏ D3**: trạng thái lệch được tự đồng bộ theo UC-12 R3. Xem mục "Merge origin/main lần 2" ở phần Kết quả.
 
 ## Goal
 
@@ -183,3 +185,22 @@ Docs: `docs/sequence/mat_hang.md`, `docs/sequence/bom.md`.
   - Test PostgreSQL và API của BOM/catalog chưa chạy trên DB thật. Fixture dùng `BOM_TEST_DATABASE_URL` hoặc `GOODS_ISSUE_TEST_DATABASE_URL`.
   - FE vẫn lệch API (F2, F3) theo D4.
   - F9 bỏ qua theo D5.
+
+### Merge origin/main lần 2 (16/11/2026)
+
+`origin/main` đã có PR 9 (`feature/bom`, gồm `b3923d6`) và PR 8 (`feature/phieu_nhap`). Dev chốt: theo bản main, bỏ D3.
+
+- **BOM** (`bom/router.py`, `bom/service.py`, `test_bom_service.py`, `test_mat_hang_bom.py`, `docs/sequence/bom.md`): lấy bản main. Các thay đổi D3/F6/F7/F8/F10 của Phase 1 trên các file này bị thay bằng bản PR 9, vốn đã xử lý F6, F7, F8 và đồng bộ trạng thái theo UC-12 R3.
+- **`mat_hang/service.py`, `mat_hang/mutation.py`, `docs/sequence/mat_hang.md`:** lấy bản main, rồi áp lại phần catalog của `e6a1cab` (PR 10):
+  - reader UC-09 có kiểm quyền và `MatHangListQuery`;
+  - PATCH chỉ ghi các trường thực sự đổi, no-op không publish cache;
+  - khóa SKU khi có tham chiếu hoặc tồn; `get_references` gọi tối đa một lần.
+  - Lần giải xung đột đầu lấy nguyên bản main nên làm mất phần này. Lỗi đó đã được phát hiện và sửa trước khi commit.
+- **D2 giữ nguyên** (`has_bom` chỉ xét `ChiTietBom`). `test_uc29` bỏ `"Bom"` khỏi tập bảng.
+- **Phiếu nhập:** giữ thiết kế đọc và khóa của PR 8, ghép phần UC-44 của PR 10: `nha_cung_cap` nạp bằng selectin ở list, detail và lock; audit loại `nha_cung_cap`; docs bổ sung ghi chú NCC.
+- **Test:**
+  - `conftest.py`: fake tạo phiếu thêm NCC (Codex).
+  - `test_bom_service.py`: fixture `MatHangRead` thêm `so_luong_dang_giu` và `so_luong_con_dung`.
+  - `test_uc20...::test_ac5_delete_audits_actor_time_and_draft_state`: so audit với response trừ `nha_cung_cap`, theo thiết kế UC-44.
+  - `test_catalog_service.py`: fixture dùng `boms.lock_item` thay cho cách khóa cũ, giảm số lần `item_detail` kỳ vọng tương ứng; giữ nguyên ý nghiệp vụ.
+- **Kết quả:** toàn backend 906 pass, 323 skip, 0 fail. `ruff` sạch trên các file đã sửa.

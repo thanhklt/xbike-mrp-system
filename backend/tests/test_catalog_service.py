@@ -145,7 +145,8 @@ async def test_uc13_uc14_uc44_cat_ac01_service_guard(method, args):
 def patch_service():
     before = item(loai_mat_hang="thanh_pham")
     repository, audit, boms = AsyncMock(), AsyncMock(), AsyncMock()
-    repository.get_for_update.return_value = before
+    # main (PR 9): _locked_item lấy record và tag qua BomService.lock_item.
+    boms.lock_item.return_value = (before, '"current"')
     repository.find_duplicate.return_value = False
     repository.get_references.return_value = ItemReferences(False, False, False)
     boms.item_detail.return_value = (before, '"current"')
@@ -168,7 +169,7 @@ async def test_finished_item_unit_reference_policy(patch_service, has_bom, has_d
         service.repository.update.assert_not_awaited()
         service.audit.append.assert_not_awaited()
     else:
-        service.boms.item_detail.side_effect = [(before, '"current"'), (after, '"after"')]
+        service.boms.item_detail.return_value = (after, '"after"')
         result, _ = await service.patch_mat_hang(
             1, MatHangPatch(don_vi_tinh="bo"), '"current"', MANAGER
         )
@@ -189,10 +190,10 @@ async def test_patch_reads_only_required_snapshots(patch_service, values, refere
     service, before = patch_service
     after = before.model_copy(update=values)
     service.repository.update.return_value = after
-    service.boms.item_detail.side_effect = [(before, '"current"'), (after, '"after"')]
+    service.boms.item_detail.return_value = (after, '"after"')
     await service.patch_mat_hang(1, MatHangPatch(**values), '"current"', MANAGER)
     assert service.repository.get_references.await_count == reference_calls
-    assert service.boms.item_detail.await_count == 2
+    assert service.boms.item_detail.await_count == 1
     if after != before:
         entry = service.audit.append.call_args.args[0]
         assert entry.du_lieu_truoc == before.model_dump(mode="json")
@@ -223,17 +224,16 @@ async def test_patch_state_and_description_refreshes_previous(patch_service, was
     before = original.model_copy(update={"is_active": was_active})
     previous = before.model_copy(update={"is_active": not was_active})
     after = previous.model_copy(update={"don_gia": 200})
-    service.repository.get_for_update.return_value = before
+    service.boms.lock_item.return_value = (before, '"current"')
     service.repository.update.return_value = after
     service.boms.item_detail.side_effect = [
-        (before, '"current"'),
         (previous, '"state"'),
         (after, '"after"'),
     ]
     await service.patch_mat_hang(
         1, MatHangPatch(is_active=not was_active, don_gia=200), '"current"', MANAGER
     )
-    assert service.boms.item_detail.await_count == 3
+    assert service.boms.item_detail.await_count == 2
     lifecycle = (
         service.boms.stop_for_item_in_transaction
         if was_active

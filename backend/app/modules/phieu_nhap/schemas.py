@@ -2,11 +2,9 @@
 
 import re
 from datetime import date, datetime, timezone
-from decimal import Decimal
 from typing import Annotated, Literal, Self
 
 from pydantic import (
-    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -20,22 +18,11 @@ from app.modules.nha_cung_cap.schemas import NhaCungCapRead
 from app.modules.nhan_vien.schemas import ListResponseMeta, ResponseMeta
 
 INT_MAX = 2**31 - 1
-MONEY_MAX = Decimal("9999999999999999.99")
+MONEY_MAX = 2**63 - 1
 ReceiptId = Annotated[int, Field(strict=True, gt=0, le=INT_MAX)]
 
 
-def exact_money(value: object) -> object:
-    if isinstance(value, (bool, float)):
-        raise ValueError("Money must be an exact decimal string or integer")
-    return value
-
-
-ReceiptMoney = Annotated[
-    Decimal,
-    BeforeValidator(exact_money, json_schema_input_type=int | str),
-    Field(ge=0, max_digits=18, decimal_places=2, allow_inf_nan=False),
-    AfterValidator(lambda value: value.quantize(Decimal("0.01"))),
-]
+ReceiptMoney = Annotated[int, Field(strict=True, ge=0, le=MONEY_MAX)]
 
 
 def receipt_date(value: object) -> object:
@@ -52,8 +39,8 @@ ReceiptDate = Annotated[date, BeforeValidator(receipt_date)]
 def validate_lines(items) -> None:
     if len({item.mat_hang_id for item in items}) != len(items):
         raise ValueError("Items must not contain duplicate mat_hang_id")
-    if sum((item.so_luong * item.don_gia_thuc for item in items), Decimal(0)) > MONEY_MAX:
-        raise ValueError("tong_tien exceeds numeric(18,2) range")
+    if sum(item.so_luong * item.don_gia_thuc for item in items) > MONEY_MAX:
+        raise ValueError("tong_tien exceeds BIGINT range")
 
 
 class ReceiptItemCreate(BaseModel):
@@ -62,14 +49,13 @@ class ReceiptItemCreate(BaseModel):
     mat_hang_id: ReceiptId
     so_luong: ReceiptId
     don_gia_thuc: ReceiptMoney
-    tong_gia: ReceiptMoney | None = None
+    tong_gia: ReceiptMoney
 
 
 class GoodsReceiptNoteCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ma_phieu_nhap: str
-    nhan_vien_id: int | None = None
+    nhan_vien_id: ReceiptId
     ncc_id: ReceiptId
     ngay_nhap: ReceiptDate
     ghi_chu: str | None = None
@@ -143,8 +129,8 @@ class ChiTietPhieuNhapRead(BaseModel):
     id: int
     mat_hang_id: int
     so_luong: int
-    don_gia_thuc: ReceiptMoney | None
-    tong_gia: ReceiptMoney | None
+    don_gia_thuc: ReceiptMoney
+    tong_gia: ReceiptMoney
 
 
 class PhieuNhapRead(BaseModel):
@@ -159,10 +145,14 @@ class PhieuNhapRead(BaseModel):
     ghi_chu: str | None
     tong_tien: ReceiptMoney | None
     trang_thai: Literal["nhap", "hoan_thanh"]
-    created_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    hoan_thanh_at: datetime | None
+    nguoi_hoan_thanh_id: int | None
+    phien_ban: int
     chi_tiet: list[ChiTietPhieuNhapRead] = Field(validation_alias="items")
 
-    @field_validator("created_at")
+    @field_validator("created_at", "updated_at", "hoan_thanh_at")
     @classmethod
     def utc_timestamp(cls, value: datetime | None) -> datetime | None:
         if value is None:
