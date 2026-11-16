@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import IntegrityError
 
-from app.core.errors import DuplicateCodeException, DuplicateUsernameException
+from app.core.errors import DuplicateUsernameException
 from app.core.exceptions import register_exception_handlers
 from app.core.security import (
     decode_access_token,
@@ -57,7 +57,7 @@ async def api(admin_hash):
     async def create(employee):
         record = EmployeeRecord(
             id=9,
-            ma_nhan_vien=employee.ma_nhan_vien,
+            ma_nhan_vien="NV-000009",
             ten_dang_nhap=employee.ten_dang_nhap,
             vai_tro_id=employee.vai_tro_id,
             ma_vai_tro=ROLES[employee.vai_tro_id],
@@ -86,7 +86,6 @@ async def api(admin_hash):
         else None
     )
     repo.find_by_username.side_effect = stored.get
-    repo.next_employee_code.return_value = "NV-000009"
     repo.create.side_effect = create
     repo.list_employees.side_effect = lambda _params: RecordPage(list(stored.values()), len(stored))
     audit_repo.append.side_effect = pending_history.append
@@ -168,7 +167,6 @@ async def test_existing_username_does_not_allocate_or_create(api):
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "ten_dang_nhap_bi_trung"
     assert response.json()["error"]["message"] == "Tên đăng nhập đã tồn tại"
-    api.repo.next_employee_code.assert_not_awaited()
     api.repo.create.assert_not_awaited()
     api.audit.append.assert_not_awaited()
     api.session.rollback.assert_awaited_once()
@@ -239,7 +237,7 @@ async def test_reason_length_limit(api, length, status):
         assert api.history[0].ly_do == "x" * length
 
 
-# UC-04 A1: trường bắt buộc thiếu/rỗng bị chỉ rõ và không truy cập repository
+# UC-04 AC-1: A1, trường bắt buộc thiếu/rỗng bị chỉ rõ và không truy cập repository
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -264,7 +262,7 @@ async def test_missing_or_blank_required_field(api, field, value):
     assert not api.stored and not api.history
 
 
-# UC-04 A6: QLK/NV gọi trực tiếp API tạo bị chặn trước mọi truy cập repository
+# UC-04 AC-1: A6, QLK/NV gọi trực tiếp API tạo bị chặn trước mọi truy cập repository
 @pytest.mark.parametrize("role", ["quan_ly", "nhan_vien"])
 async def test_nonadministrator_cannot_create(api, role):
     api.actor["roles"] = [role]
@@ -275,7 +273,7 @@ async def test_nonadministrator_cannot_create(api, role):
     api.audit.append.assert_not_awaited()
 
 
-# UC-04 A6: claim QTV nhưng DB đã hạ vai trò bị chặn sau lấy khóa
+# UC-04 AC-1: A6, claim QTV nhưng DB đã hạ vai trò bị chặn sau lấy khóa
 async def test_demoted_administrator_cannot_create(api):
     api.current.roles = ["nhan_vien"]
     response = await api.client.post(URL, json=BODY)
@@ -283,13 +281,12 @@ async def test_demoted_administrator_cannot_create(api):
     assert response.json()["error"]["code"] == "khong_co_quyen"
     api.repo.lock_credentials_by_id.assert_awaited_once_with(1)
     api.repo.get_role.assert_not_awaited()
-    api.repo.next_employee_code.assert_not_awaited()
     api.repo.create.assert_not_awaited()
     api.audit.append.assert_not_awaited()
     api.session.rollback.assert_awaited_once()
 
 
-# UC-04 A7: audit hoặc commit thất bại rollback tài khoản và lịch sử, trả 500
+# UC-04 AC-5: A7, audit hoặc commit thất bại rollback tài khoản và lịch sử, trả 500
 @pytest.mark.parametrize("failure", ["audit", "commit"])
 async def test_failed_save_rolls_back_account_and_audit(api, failure):
     target = api.audit.append if failure == "audit" else api.session.commit
@@ -304,22 +301,21 @@ async def test_failed_save_rolls_back_account_and_audit(api, failure):
     assert not api.pending and not api.pending_history
 
 
-# UC-04 A1: vai trò không tồn tại trả 404, không cấp mã hay lưu tài khoản
+# UC-04 AC-1: A1, vai trò không tồn tại trả 404, không cấp mã hay lưu tài khoản
 async def test_unknown_role_does_not_allocate(api):
     response = await api.client.post(URL, json={**BODY, "vai_tro_id": 99})
     assert response.status_code == 404
-    api.repo.next_employee_code.assert_not_awaited()
     api.repo.create.assert_not_awaited()
     api.audit.append.assert_not_awaited()
     api.session.rollback.assert_awaited_once()
 
 
-# UC-04 AC-3: repository phân biệt unique username/mã theo metadata hoặc thông báo DB
+# UC-04 AC-3: repository ánh xạ trùng username; giữ nguyên lỗi unique mã không thuộc cơ chế cấp mã
 @pytest.mark.parametrize(
     "column,error_type",
     [
         ("ten_dang_nhap", DuplicateUsernameException),
-        ("ma_nhan_vien", DuplicateCodeException),
+        ("ma_nhan_vien", IntegrityError),
     ],
 )
 @pytest.mark.parametrize("driver", ["sqlite", "asyncpg", "psycopg"])
@@ -343,18 +339,16 @@ async def test_repository_unique_violation_mapping(column, error_type, driver):
     session.flush.side_effect = IntegrityError("INSERT", {}, original)
     repository = SqlAlchemyNhanVienRepository(session)
     with pytest.raises(error_type) as error:
-        await repository.create(NewEmployee("new", "NV-000009", 1, "hash", {}))
-    expected_message = (
-        "Tên đăng nhập đã tồn tại"
-        if column == "ten_dang_nhap"
-        else "Mã nhân viên vừa được cấp cho tài khoản khác, vui lòng thử lại"
-    )
-    assert error.value.message == expected_message
-    assert error.value.__cause__ is session.flush.side_effect
+        await repository.create(NewEmployee("new", 1, "hash", {}))
+    if column == "ten_dang_nhap":
+        assert error.value.message == "Tên đăng nhập đã tồn tại"
+        assert error.value.__cause__ is session.flush.side_effect
+    else:
+        assert error.value is session.flush.side_effect
     session.refresh.assert_not_awaited()
 
 
-# UC-04 A7: lỗi ràng buộc khác không bị báo nhầm thành trùng tên hoặc mã
+# UC-04 AC-5: A7, lỗi ràng buộc khác không bị báo nhầm thành trùng tên hoặc mã
 async def test_repository_preserves_other_integrity_errors():
     session = AsyncMock()
     session.add = lambda _row: None
@@ -364,6 +358,6 @@ async def test_repository_preserves_other_integrity_errors():
     session.flush.side_effect = error
     with pytest.raises(IntegrityError) as caught:
         await SqlAlchemyNhanVienRepository(session).create(
-            NewEmployee("new", "NV-000009", 1, "hash", {})
+            NewEmployee("new", 1, "hash", {})
         )
     assert caught.value is error

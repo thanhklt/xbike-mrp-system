@@ -73,7 +73,7 @@ erDiagram
     int vai_tro_id FK "NOT NULL"
     varchar ten_dang_nhap UK "NOT NULL"
     varchar mat_khau "NOT NULL; hash"
-    varchar ma_nhan_vien UK "NOT NULL; NV-xxxxxx"
+    varchar ma_nhan_vien UK "NOT NULL; NV-xxxxxx; he thong cap tu id"
     varchar ho_ten "NULL"
     date ngay_sinh "NULL"
     varchar so_dien_thoai "NULL"
@@ -578,6 +578,7 @@ stateDiagram-v2
 | 14 | Thông tin nhà cung cấp (14/11/2026) | `ten_ncc`, `so_dien_thoai`, `dia_chi`, `phuong`, `tinh` đều bắt buộc, NOT NULL; địa chỉ là thuộc tính của `NhaCungCap`. BR-004, UC-13, UC-14 R1 đã sửa |
 | 15 | Sửa nhà cung cấp (14/11/2026) | QLK sửa được mọi thông tin trừ `ma_ncc`; ghi lịch sử kèm giá trị trước/sau; lưu không thay đổi thì không ghi lịch sử; phiếu nhập luôn hiện thông tin nhà cung cấp hiện tại, không chụp lại. Thêm UC-44; BR-004, BR-016, UC-14 R4, UC-43 R2 đã sửa |
 | 16 | Yêu cầu sản xuất cho kho (14/11/2026) | `YeuCauSanXuat.loai_yeu_cau` = `dap_ung` / `cho_kho`. Yêu cầu cho kho bắt buộc hạn và nhân viên được giao như loại đáp ứng; không dùng thành phẩm có sẵn; duyệt chứng từ hoàn thành thì cộng tồn, không giữ, yêu cầu Hoàn thành; không có phiếu xuất thành phẩm. Là nguồn duy nhất tạo tồn thành phẩm còn dùng được. BR-007, BR-008, BR-011, BR-012, UC-23 – UC-26, UC-31, UC-33, UC-37, UC-38 đã sửa |
+| 17 | Ai cấp mã nhân viên (15/11/2026) | `ma_nhan_vien` do trigger `cap_ma_nhan_vien()` cấp từ `id` (`NV-` + 6 chữ số), không sửa mã hoặc `id` sau tạo, giống #12; thay cho cấp `max + 1` ở ứng dụng. `id > 999999` báo hết dải. UC-04 R6, A4 |
 
 ## 7. Việc tiếp theo (chưa làm)
 

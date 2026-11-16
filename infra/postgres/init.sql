@@ -418,6 +418,21 @@ CREATE TRIGGER trg_mat_hang_thay_doi
 AFTER INSERT OR UPDATE OR DELETE ON "MatHang"
 FOR EACH STATEMENT EXECUTE FUNCTION thong_bao_mat_hang_thay_doi();
 
+-- Mã nhân viên do hệ thống cấp từ id (chốt 15/11/2026): NV-NNNNNN; bất biến sau khi tạo.
+CREATE FUNCTION cap_ma_nhan_vien() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.id > 999999 THEN RAISE EXCEPTION 'Hết dải mã nhân viên NV-NNNNNN'; END IF;
+    NEW.ma_nhan_vien := 'NV-' || lpad(NEW.id::text, 6, '0');
+  ELSE
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.ma_nhan_vien IS DISTINCT FROM OLD.ma_nhan_vien THEN
+      RAISE EXCEPTION 'Không được sửa mã nhân viên'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER trg_nhan_vien_ma BEFORE INSERT OR UPDATE ON "NhanVien"
+FOR EACH ROW EXECUTE FUNCTION cap_ma_nhan_vien();
+
 -- Mã mặt hàng do hệ thống cấp từ id (chốt 14/11/2026): MH-NNNNNN. Giá trị client gửi lên bị bỏ qua.
 -- Mã và loại mặt hàng bất biến sau khi tạo.
 CREATE FUNCTION cap_ma_mat_hang() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -633,7 +648,7 @@ COMMENT ON TABLE "NhanVien" IS 'Tài khoản người dùng. Khóa thay cho xóa
 Không đổi vai trò người đang được giao YeuCauSanXuat ở nhap / da_gui / cho_bo_sung_linh_kien / dang_thuc_hien (service).
 Khóa, mở khóa, đổi vai trò không bắt buộc lý do (chốt 14/11/2026).';
 COMMENT ON COLUMN "NhanVien"."mat_khau" IS 'Chỉ lưu hash (bcrypt); tối thiểu 6 ký tự trước khi băm. Không bao giờ ghi vào LichSuThaoTac.';
-COMMENT ON COLUMN "NhanVien"."ma_nhan_vien" IS 'Định dạng: NV-NNNNNN; sinh một lần, không tái sử dụng.';
+COMMENT ON COLUMN "NhanVien"."ma_nhan_vien" IS 'Trigger cấp từ id: NV- + 6 chữ số; không được sửa mã hoặc id sau khi tạo; id > 999999 báo hết dải.';
 COMMENT ON COLUMN "NhanVien"."phien_ban_dang_nhap" IS 'Tăng 1 khi khóa, đổi vai trò, đổi mật khẩu. Token mang giá trị này; lệch hoặc bi_khoa thì từ chối, buộc đăng nhập lại.';
 COMMENT ON COLUMN "NhanVien"."he_so_luong" IS 'Trường nhân sự giữ từ v3.1; BR không dùng.';
 

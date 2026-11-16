@@ -75,11 +75,12 @@ INSERT INTO public."VaiTro" (id, ma_vai_tro, ten_vai_tro, mo_ta) VALUES
   (2, 'quan_ly', 'Quản lý kho', 'Quản lý mặt hàng, nhà cung cấp, công thức; nhập kho; lập, gửi, hủy yêu cầu sản xuất; duyệt phiếu xuất và chứng từ hoàn thành; xem báo cáo và lịch sử thao tác.'),
   (3, 'nhan_vien', 'Nhân viên', 'Xử lý yêu cầu sản xuất được giao: kiểm tra và giữ hàng, lập phiếu xuất linh kiện, bắt đầu sản xuất, lập chứng từ hoàn thành, lập phiếu xuất thành phẩm.');
 
-INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ma_nhan_vien, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai, phien_ban_dang_nhap, created_at) VALUES
-  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000001', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong', 0, '2026-11-01 07:00:00+07'),
-  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000002', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong', 0, '2026-11-01 08:00:00+07'),
-  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000003', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong', 0, '2026-11-01 08:01:00+07'),
-  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'NV-000004', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07');
+-- Mã NV- do trigger cấp từ id, seed không truyền mã (id 1–4 vẫn nhận NV-000001–NV-000004).
+INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong, trang_thai, phien_ban_dang_nhap, created_at) VALUES
+  (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong', 0, '2026-11-01 07:00:00+07'),
+  (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong', 0, '2026-11-01 08:00:00+07'),
+  (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong', 0, '2026-11-01 08:01:00+07'),
+  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07');
 
 -- ---------------------------------------------------------------------
 -- catalog — mã MH-/NCC- do trigger cấp từ id, seed không truyền mã.

@@ -224,7 +224,7 @@ class NhanVienService:
     async def _lock_admin(self, actor: dict) -> dict:
         _require_admin(actor)
         # Lock this actor's row to serialize their writes and refresh credentials
-        # after waiting. Different administrators can still allocate the same code.
+        # after waiting. Employee codes come from the database identity trigger.
         current = await self.repository.lock_credentials_by_id(int(actor["sub"]))
         if current is None:
             raise UnauthorizedException(message="Employee no longer exists")
@@ -282,7 +282,7 @@ class NhanVienService:
             )
         )
 
-    # UC-04 Thêm tài khoản — Main 4–6; R1, R3–R7, A1–A7 (specs/use_cases/identity_access/UC-04.md)
+    # UC-04 Thêm tài khoản — Main 4–6; R6: DB cấp mã từ id khi tạo, ghi lịch sử cùng transaction (specs/use_cases/identity_access/UC-04.md)
     async def create_employee(
         self, params: NhanVienCreate, actor: dict, request_id: str
     ) -> tuple[NhanVienDetailResponse, str]:
@@ -296,11 +296,9 @@ class NhanVienService:
             await self._role(params.vai_tro_id)
             if await self.repository.find_by_username(params.ten_dang_nhap) is not None:
                 raise DuplicateUsernameException()
-            employee_code = await self.repository.next_employee_code()
             employee = await self.repository.create(
                 NewEmployee(
                     params.ten_dang_nhap,
-                    employee_code,
                     params.vai_tro_id,
                     password_hash,
                     profile,

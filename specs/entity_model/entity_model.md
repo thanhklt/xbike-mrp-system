@@ -12,7 +12,7 @@ Tên entity trùng tên bảng (PascalCase), tên thuộc tính snake_case. Ti�
 
 ## NhanVien
 
-- id, ma_nhan_vien (NV-xxxxxx), ten_dang_nhap (duy nhất), mat_khau (hash), vai_tro_id
+- id, ma_nhan_vien (NV-xxxxxx, duy nhất, hệ thống cấp từ id khi tạo, không sửa), ten_dang_nhap (duy nhất), mat_khau (hash), vai_tro_id
 - ho_ten, so_dien_thoai, email, ngay_sinh, ngay_vao_lam, he_so_luong (không bắt buộc; BR không dùng)
 - trang_thai ("hoat_dong" | "bi_khoa"), mặc định "hoat_dong"
 - phien_ban_dang_nhap: tăng 1 khi khóa, đổi vai trò, đổi mật khẩu → mọi phiên đang đăng nhập kết thúc ngay
