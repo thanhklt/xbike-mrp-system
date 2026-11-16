@@ -6,10 +6,11 @@ import {
   AUDIT_OBJECT_OPTIONS,
   AUDIT_SORT_OPTIONS,
   auditFilters,
-  auditActorLabel,
+  auditActorLookup,
   auditDetailEntries,
   auditShortageRows,
 } from "../src/features/reports/auditHistory.js";
+import { dateFilters, dateRangeError } from "../src/components/filterFields.js";
 import {
   auditActionLabel,
   auditObjectLabel,
@@ -27,6 +28,7 @@ const employees = [
   { id: 5, ma_nhan_vien: "NV-000005", ho_ten: "Nguyễn An" },
   { id: 8, ma_nhan_vien: "NV-000008", ho_ten: "Trần Bình" },
 ];
+const actors = auditActorLookup(employees);
 const record = {
   id: 42,
   created_at: "2026-11-15T02:30:00Z",
@@ -71,6 +73,7 @@ test("shortages preserve the stored row including the historical shortage of ten
       so_luong_can: 15,
       so_luong_con_dung: 5,
       so_luong_thieu: 10,
+      id: 0,
     },
   ]);
   assert.deepEqual(record, original);
@@ -81,9 +84,9 @@ test("shortages preserve the stored row including the historical shortage of ten
     { danh_sach_thieu: {} },
     { danh_sach_thieu: "10" },
   ]) {
-    assert.deepEqual(auditShortageRows({ du_lieu_sau: value }), []);
+    assert.equal(auditShortageRows({ du_lieu_sau: value }), null);
   }
-  assert.deepEqual(auditShortageRows({}), []);
+  assert.equal(auditShortageRows({}), null);
   assert.deepEqual(auditShortageRows({ du_lieu_sau: { danh_sach_thieu: [] } }), []);
 });
 
@@ -91,7 +94,14 @@ test("shortages preserve the stored row including the historical shortage of ten
 test("audit presentation has no write or export controls and renders JSON as React text", () => {
   assert.doesNotMatch(
     page,
-    /useWrite|mutateAsync|dangerouslySetInnerHTML|<Button\b|<button\b|<form\b|download=|writeResource/,
+    /useWrite|mutateAsync|dangerouslySetInnerHTML|<button\b|<form\b|download=|writeResource/,
+  );
+  // Nút duy nhất được phép là "Tải lại" danh sách nhân viên (chỉ đọc, gọi refetch).
+  const buttons = page.match(/<Button\b[\s\S]*?<\/Button>/g) || [];
+  assert.equal(buttons.length, 1);
+  assert.match(
+    buttons[0],
+    /onClick=\{\(\) => employees\.refetch\(\)\}[\s\S]*>\s*Tải lại\s*<\/Button>/,
   );
   assert.doesNotMatch(
     history,
@@ -137,7 +147,7 @@ test("password change details use redacted evidence without inventing credential
     du_lieu_sau: { da_doi_mat_khau: true },
   };
   const original = structuredClone(redacted);
-  const entries = auditDetailEntries(redacted, employees);
+  const entries = auditDetailEntries(redacted, actors);
   assert.equal(entries.find(([label]) => label === "Thao tác")[1], "Đổi mật khẩu");
   assert.doesNotMatch(
     JSON.stringify(entries.filter(([label]) => label !== "Thao tác")),
@@ -188,19 +198,37 @@ test("actor select contains all employees by ID with code and name labels", () =
       ],
     },
   );
-  assert.equal(auditActorLabel(employees, "5"), "NV-000005 · Nguyễn An");
-  assert.equal(auditActorLabel(employees, 8), "NV-000008 · Trần Bình");
-  assert.equal(auditActorLabel(employees, 99), "Nhân viên #99");
-  assert.equal(auditActorLabel([], 5), "Nhân viên #5");
+  assert.equal(actors("5"), "NV-000005 · Nguyễn An");
+  assert.equal(actors(8), "NV-000008 · Trần Bình");
+  assert.equal(actors(99), "Nhân viên #99");
+  assert.equal(auditActorLookup([])(5), "Nhân viên #5");
+  assert.equal(auditActorLookup()(5), "Nhân viên #5");
   assert.equal(
-    auditActorLabel([{ id: 5, ma_nhan_vien: "NV-000005", ho_ten: null }], 5),
+    auditActorLookup([{ id: 5, ma_nhan_vien: "NV-000005", ho_ten: null }])(5),
     "NV-000005 · Chưa có họ tên",
   );
   assert.deepEqual(auditFilters().find(({ name }) => name === "nhan_vien_id").options, [
     { value: "", label: "Tất cả" },
   ]);
   assert.match(page, /useChoices\(API\.employees\)/);
-  assert.match(page, /auditActorLabel\(employeeRows, row\.nhan_vien_id\)/);
+  assert.match(page, /useMemo\(\(\) => auditActorLookup\(employeeRows\), \[employeeRows\]\)/);
+  assert.match(page, /render: \(row\) => actorLabel\(row\.nhan_vien_id\)/);
+  // Nhãn dùng chung với EmployeeSelect qua employeeLabel, không tự ghép chuỗi riêng.
+  assert.match(history, /employeeLabel\(employee\)/);
+  assert.doesNotMatch(history, /ma_nhan_vien/);
+  assert.match(source("../src/components/ResourceFields.jsx"), /\{employeeLabel\(employee\)\}/);
+});
+
+// UC-43 AC-6: Lỗi tải danh sách nhân viên được báo, không lặng lẽ hạ cấp
+test("employee list failure shows a warning instead of silently degrading", () => {
+  assert.match(
+    page,
+    /\{employees\.isError && \(\s*<div className="stack">\s*<Notice tone="warning">\s*Không thể tải danh sách nhân viên\./,
+  );
+  assert.match(
+    page,
+    /onClick=\{\(\) => employees\.refetch\(\)\}\s*disabled=\{employees\.isFetching\}/,
+  );
 });
 
 // UC-43 AC-10: Lọc kết hợp người, đối tượng, thao tác và ngày
@@ -219,19 +247,46 @@ test("all six filters use backend names and dates match the shared UI definition
     assert.equal(filter.as, "select");
     assert.deepEqual(filter.options[0], { value: "", label: "Tất cả" });
   }
-  const shared = source("../src/components/ResourceFields.jsx").match(
-    /export const dateFilters = (\[[\s\S]*?\]);/,
-  )?.[1];
-  assert.ok(shared);
-  const expected = [...shared.matchAll(/name: "([^"]+)", label: "([^"]+)", type: "([^"]+)"/g)].map(
-    ([, name, label, type]) => ({ name, label, type }),
+  // Một nguồn duy nhất: auditHistory dùng đúng các object dateFilters mà ResourceFields re-export.
+  const dates = filters.filter(({ name }) => ["tu_ngay", "den_ngay"].includes(name));
+  assert.equal(dates.length, 2);
+  dates.forEach((filter, index) => assert.equal(filter, dateFilters[index]));
+  const resourceFields = source("../src/components/ResourceFields.jsx");
+  assert.match(resourceFields, /export \{ dateFilters \} from "\.\/filterFields\.js";/);
+  assert.doesNotMatch(resourceFields, /export const dateFilters/);
+  assert.doesNotMatch(history, /const dateFilters/);
+  assert.match(page, /useMemo\(\(\) => auditFilters\(employeeRows\), \[employeeRows\]\)/);
+  assert.match(page, /filters=\{filters\}/);
+});
+
+// UC-43 AC-11: Khoảng ngày sai bị chặn ngay trên form, không gửi request
+test("date range is validated on the form before querying", () => {
+  assert.equal(dateRangeError({}), null);
+  assert.equal(dateRangeError(), null);
+  assert.equal(dateRangeError({ tu_ngay: "2026-11-01" }), null);
+  assert.equal(dateRangeError({ den_ngay: "2026-11-01" }), null);
+  assert.equal(dateRangeError({ tu_ngay: "2026-11-10", den_ngay: "2026-11-10" }), null);
+  assert.equal(dateRangeError({ tu_ngay: "2026-11-01", den_ngay: "2026-11-15" }), null);
+  assert.equal(
+    dateRangeError({ tu_ngay: "2026-11-20", den_ngay: "2026-11-10" }),
+    "Từ ngày không được sau Đến ngày.",
   );
-  assert.equal(expected.length, 2);
-  assert.deepEqual(
-    filters.filter(({ name }) => ["tu_ngay", "den_ngay"].includes(name)),
-    expected,
+  assert.match(page, /validate=\{dateRangeError\}/);
+  const collection = source("../src/components/Collection.jsx");
+  assert.match(
+    collection,
+    /const message = validate\?\.\(draft\) \?\? null;\s*setFilterError\(message\);\s*if \(!message\) collection\.filter\(draft\);/,
   );
-  assert.match(page, /filters=\{auditFilters\(employeeRows\)\}/);
+  assert.match(
+    collection,
+    /\{filterError && \(\s*<div className="notice notice-error" role="alert">/,
+  );
+});
+
+// UC-43 AC-19: Màn chỉ đọc không có chế độ tạo mới
+test("the /moi path redirects back to the list instead of opening an empty dialog", () => {
+  assert.match(page, /if \(id === "moi"\) return <Navigate to=\{base\} replace \/>;/);
+  assert.ok(page.indexOf('if (id === "moi")') > page.indexOf("useMemo(() => auditFilters"));
 });
 
 // UC-43 AC-10: Không có ô tìm kiếm tự do — backend chỉ tìm mã thô, dùng bộ lọc thay thế
@@ -301,7 +356,7 @@ test("both roles use the same data columns and detail component", () => {
   assert.doesNotMatch(page, /\bmanager\b|quan_ly|chưa được hỗ trợ|không được xem snapshot/);
   assert.doesNotMatch(history, /ma_vai_tro|quan_tri_vien|quan_ly/);
   assert.equal(auditDetailEntries.length, 1);
-  assert.match(page, /<AuditDetail record=\{snapshot\.data\} employees=\{employeeRows\}/);
+  assert.match(page, /<AuditDetail record=\{snapshot\.data\} actorLabel=\{actorLabel\}/);
 });
 
 // UC-43 AC-12: Phân trang và thứ tự xác định
@@ -341,7 +396,7 @@ test("nullable evidence stays null without deriving status from snapshots", () =
     du_lieu_sau: null,
   };
   const original = structuredClone(nullable);
-  const details = Object.fromEntries(auditDetailEntries(nullable, employees));
+  const details = Object.fromEntries(auditDetailEntries(nullable, actors));
   assert.equal(details["Trạng thái trước"], null);
   assert.equal(details["Trạng thái sau"], null);
   assert.equal(details["Lý do"], null);
@@ -350,7 +405,7 @@ test("nullable evidence stays null without deriving status from snapshots", () =
   assert.equal(nullable.du_lieu_sau, null);
   assert.equal(
     Object.fromEntries(
-      auditDetailEntries({ ...nullable, du_lieu_sau: { trang_thai: "da_duyet" } }, employees),
+      auditDetailEntries({ ...nullable, du_lieu_sau: { trang_thai: "da_duyet" } }, actors),
     )["Trạng thái sau"],
     null,
   );
@@ -413,20 +468,21 @@ test("administrator dashboard activity card links to the audit history", () => {
 
 // UC-43 AC-19: Giao diện thực hiện đúng luồng đọc
 test("detail entries keep the approved order, labels, actor and original states", () => {
-  assert.deepEqual(auditDetailEntries(record, employees), [
+  assert.deepEqual(auditDetailEntries(record, actors), [
     ["Thời gian", dateTime(record.created_at)],
     ["Người thực hiện", "NV-000005 · Nguyễn An"],
     ["Đối tượng", "yêu cầu sản xuất #9"],
     ["Thao tác", "Kiểm tra"],
-    ["Trạng thái trước", "da_gui"],
-    ["Trạng thái sau", "cho_bo_sung_vat_tu"],
+    ["Trạng thái trước", "da_gui", "status"],
+    ["Trạng thái sau", "cho_bo_sung_vat_tu", "status"],
     ["Lý do", "Thiếu khung"],
   ]);
+  // Badge chọn theo kiểu "status", không theo chữ nhãn hiển thị.
   assert.match(
     page,
-    /\["Trạng thái trước", "Trạng thái sau"\]\.includes\(label\) &&\s*value !== null &&\s*value !== undefined/,
+    /kind === "status" && value !== null && value !== undefined \? <Badge status=\{value\} \/> : value/,
   );
-  assert.match(page, /<Badge status=\{value\}/);
+  assert.doesNotMatch(page, /\["Trạng thái trước", "Trạng thái sau"\]\.includes/);
 });
 
 // UC-43 AC-19: Giao diện thực hiện đúng luồng đọc
@@ -451,9 +507,12 @@ test("details load by route ID in RecordPanel and retain the final open link col
 
 // UC-43 AC-1: Lưu danh sách thiếu tại thời điểm chuyển trạng thái
 test("shortage table uses snapshot codes and numeric quantities before both JSON sections", () => {
-  assert.match(page, /Array\.isArray\(record\.du_lieu_sau\?\.danh_sach_thieu\)/);
+  // Một chỗ quyết định có danh sách thiếu hay không: auditShortageRows trả null khi không lưu.
+  assert.match(page, /const shortage = auditShortageRows\(record\);/);
+  assert.match(page, /\{shortage && \(/);
+  assert.match(page, /rows=\{shortage\}/);
+  assert.doesNotMatch(page, /Array\.isArray/);
   assert.match(page, /<h3>Danh sách thiếu tại thời điểm thao tác<\/h3>/);
-  assert.match(page, /auditShortageRows\(record\)/);
   assert.match(
     page,
     /\[row\.ma_mat_hang, row\.ten_mat_hang\]\.filter\(Boolean\)\.join\(" · "\) \|\|\s*`#\$\{row\.mat_hang_id\}`/,

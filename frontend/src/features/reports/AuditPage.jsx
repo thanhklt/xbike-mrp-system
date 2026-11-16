@@ -1,4 +1,5 @@
-import { Link, useParams } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useChoices, useCollection, useDetail } from "../../lib/api/useResources.js";
@@ -6,13 +7,16 @@ import { dateTime } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
+import { Notice } from "../../components/QueryState.jsx";
+import { Button } from "../../components/Button.jsx";
+import { dateRangeError } from "../../components/filterFields.js";
 import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Badge } from "../../components/Badge.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
 import { auditActionLabel, auditObjectLabel } from "../dashboard/auditFormat.js";
 import {
   auditFilters,
-  auditActorLabel,
+  auditActorLookup,
   auditDetailEntries,
   auditShortageRows,
 } from "./auditHistory.js";
@@ -25,24 +29,45 @@ export function AuditPage() {
   const collection = useCollection(API.audit, { sort: "-created_at" }, auditParams);
   const detail = useDetail(API.audit, id);
   const employees = useChoices(API.employees);
-  const employeeRows = employees.data || [];
+  const employeeRows = useMemo(() => employees.data || [], [employees.data]);
+  const actorLabel = useMemo(() => auditActorLookup(employeeRows), [employeeRows]);
+  const filters = useMemo(() => auditFilters(employeeRows), [employeeRows]);
+  // Màn chỉ đọc: không có chế độ tạo mới, "/moi" quay về danh sách.
+  if (id === "moi") return <Navigate to={base} replace />;
   return (
     <>
       <PageHeader
         title="Lịch sử thao tác"
         subtitle="Tra cứu người thực hiện, thời điểm và dữ liệu trước/sau của các thao tác đã lưu."
       />
+      {/* Cùng bố cục với QueryState khi lỗi: thông báo và nút "Tải lại" gọi refetch, chỉ đọc. */}
+      {employees.isError && (
+        <div className="stack">
+          <Notice tone="warning">
+            Không thể tải danh sách nhân viên. Bộ lọc Người thực hiện tạm chỉ có Tất cả và người
+            thực hiện hiển thị theo ID.
+          </Notice>
+          <Button
+            variant="secondary"
+            onClick={() => employees.refetch()}
+            disabled={employees.isFetching}
+          >
+            Tải lại
+          </Button>
+        </div>
+      )}
       {/* Tắt ô tìm kiếm: backend chỉ tìm mã thô trong loại đối tượng/thao tác/lý do, đã có bộ lọc chuyên biệt. */}
       <Collection
         collection={collection}
         search={false}
-        filters={auditFilters(employeeRows)}
+        validate={dateRangeError}
+        filters={filters}
         columns={[
           { key: "created_at", label: "Thời gian", render: (row) => dateTime(row.created_at) },
           {
             key: "nhan_vien_id",
             label: "Người thực hiện",
-            render: (row) => auditActorLabel(employeeRows, row.nhan_vien_id),
+            render: (row) => actorLabel(row.nhan_vien_id),
           },
           {
             key: "loai_doi_tuong",
@@ -68,32 +93,27 @@ export function AuditPage() {
         ]}
       />
       <RecordPanel id={id} query={detail} base={base} title="Chi tiết lịch sử thao tác">
-        {(snapshot) => snapshot && <AuditDetail record={snapshot.data} employees={employeeRows} />}
+        {(snapshot) => snapshot && <AuditDetail record={snapshot.data} actorLabel={actorLabel} />}
       </RecordPanel>
     </>
   );
 }
 
 // UC-43 Xem lịch sử thao tác — Main 5–6; R2, R3, R4, R6: xem chi tiết (specs/use_cases/audit/UC-43.md)
-function AuditDetail({ record, employees }) {
-  const entries = auditDetailEntries(record, employees).map(([label, value]) => [
+function AuditDetail({ record, actorLabel }) {
+  const entries = auditDetailEntries(record, actorLabel).map(([label, value, kind]) => [
     label,
-    ["Trạng thái trước", "Trạng thái sau"].includes(label) &&
-    value !== null &&
-    value !== undefined ? (
-      <Badge status={value} />
-    ) : (
-      value
-    ),
+    kind === "status" && value !== null && value !== undefined ? <Badge status={value} /> : value,
   ]);
+  const shortage = auditShortageRows(record);
   return (
     <div className="stack">
       <InfoGrid entries={entries} />
-      {Array.isArray(record.du_lieu_sau?.danh_sach_thieu) && (
+      {shortage && (
         <div>
           <h3>Danh sách thiếu tại thời điểm thao tác</h3>
           <DataTable
-            rows={auditShortageRows(record).map((row, index) => ({ ...row, id: index }))}
+            rows={shortage}
             columns={[
               {
                 key: "mat_hang_id",

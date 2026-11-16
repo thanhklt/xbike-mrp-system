@@ -1,4 +1,5 @@
-import { dateTime } from "../../lib/format.js";
+import { dateTime, employeeLabel } from "../../lib/format.js";
+import { dateFilters } from "../../components/filterFields.js";
 import { auditActionLabel, auditObjectLabel } from "../dashboard/auditFormat.js";
 
 // UC-43 Xem lịch sử thao tác — Main 3–4; R5: chọn thao tác (specs/use_cases/audit/UC-43.md)
@@ -45,12 +46,6 @@ export const AUDIT_SORT_OPTIONS = [
   { value: "id", label: "ID tăng dần" },
 ];
 
-// ResourceFields.jsx contains JSX; keep equivalent date filters importable by node --test.
-const dateFilters = [
-  { name: "tu_ngay", label: "Từ ngày", type: "date" },
-  { name: "den_ngay", label: "Đến ngày", type: "date" },
-];
-
 // UC-43 Xem lịch sử thao tác — Main 3–4; R5: kết hợp bộ lọc (specs/use_cases/audit/UC-43.md)
 export function auditFilters(employees = []) {
   return [
@@ -67,10 +62,7 @@ export function auditFilters(employees = []) {
       as: "select",
       options: [
         { value: "", label: "Tất cả" },
-        ...employees.map((employee) => ({
-          value: employee.id,
-          label: auditActorLabel(employees, employee.id),
-        })),
+        ...employees.map((employee) => ({ value: employee.id, label: employeeLabel(employee) })),
       ],
     },
     {
@@ -85,28 +77,29 @@ export function auditFilters(employees = []) {
 }
 
 // UC-43 Xem lịch sử thao tác — Main 2, 6: nhãn người thực hiện (specs/use_cases/audit/UC-43.md)
-export function auditActorLabel(employees, id) {
-  const employee = employees.find((person) => person.id === Number(id));
-  return employee
-    ? `${employee.ma_nhan_vien} · ${employee.ho_ten || "Chưa có họ tên"}`
-    : `Nhân viên #${id}`;
+// Dựng bảng tra một lần (id → nhãn) để mỗi dòng không phải duyệt lại cả danh sách nhân viên.
+export function auditActorLookup(employees = []) {
+  const labels = new Map(employees.map((employee) => [employee.id, employeeLabel(employee)]));
+  return (id) => labels.get(Number(id)) ?? `Nhân viên #${id}`;
 }
 
 // UC-43 Xem lịch sử thao tác — Main 5–6; R2, R3, R6: thông tin bản ghi (specs/use_cases/audit/UC-43.md)
-export function auditDetailEntries(record, employees = []) {
+// Mỗi mục là [nhãn, giá trị, kiểu]; kiểu "status" để trang hiển thị bằng Badge.
+export function auditDetailEntries(record, actorLabel = auditActorLookup()) {
   return [
     ["Thời gian", dateTime(record.created_at)],
-    ["Người thực hiện", auditActorLabel(employees, record.nhan_vien_id)],
+    ["Người thực hiện", actorLabel(record.nhan_vien_id)],
     ["Đối tượng", `${auditObjectLabel(record.loai_doi_tuong)} #${record.doi_tuong_id}`],
     ["Thao tác", auditActionLabel(record.thao_tac)],
-    ["Trạng thái trước", record.trang_thai_truoc],
-    ["Trạng thái sau", record.trang_thai_sau],
+    ["Trạng thái trước", record.trang_thai_truoc, "status"],
+    ["Trạng thái sau", record.trang_thai_sau, "status"],
     ["Lý do", record.ly_do],
   ];
 }
 
 // UC-43 Xem lịch sử thao tác — Main 6; R4: danh sách thiếu đã lưu (specs/use_cases/audit/UC-43.md)
+// null khi bản ghi không lưu danh sách thiếu; mảng (có thể rỗng) khi có.
 export function auditShortageRows(record) {
   const rows = record.du_lieu_sau?.danh_sach_thieu;
-  return Array.isArray(rows) ? rows : [];
+  return Array.isArray(rows) ? rows.map((row, index) => ({ ...row, id: index })) : null;
 }

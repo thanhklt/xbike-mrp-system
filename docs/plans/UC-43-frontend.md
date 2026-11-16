@@ -172,6 +172,19 @@ Thực thi 15/11/2026 trên nhánh `audit` tách từ `identity_access` @ `7fd30
 - Cột mặt hàng trong bảng danh sách thiếu chịu được trường hợp snapshot thiếu `ma_mat_hang`.
 - Kiểm tra ui-consistency do agent riêng làm. Agent hiệu chuẩn tìm ra chỗ cài sẵn (khung thông tin tự viết thay cho `InfoGrid`). Agent kiểm tra trang thật báo các điểm sau, đã sửa: (1) ở giao diện QTV tối, khối `.audit-json` nền sáng còn chữ sáng → thêm rule `html[data-admin-theme="true"] dialog .audit-json` dùng cặp màu ô nhập sẵn có của dialog quản trị (**lệch plan "không thêm CSS"**, cần để QTV đọc được); (2) dòng "Không có dữ liệu" dùng class `.empty-state`, giờ xử lý cả `undefined`; (3) bỏ `caption` trùng với tiêu đề h3 của bảng danh sách thiếu.
 
+**Sửa sau review PR 13 (16/11/2026, dev duyệt):**
+- Tắt ô tìm kiếm tự do (`search={false}`), lý do ở mục bộ lọc phía trên.
+- Lỗi tải danh sách nhân viên hiện `Notice tone="warning"` kèm nút "Tải lại" (gọi `refetch`, bố cục như `QueryState`) thay vì lặng lẽ chỉ còn "Tất cả" và "Nhân viên #id". Test AC-2 cho phép đúng một `<Button>` này.
+- "Từ ngày" sau "Đến ngày" bị chặn ngay trên form: `Collection` nhận prop tùy chọn `validate`, trang lịch sử truyền `dateRangeError`; các trang khác không đổi hành vi.
+- `/admin/lich-su/moi`, `/kho/lich-su/moi` chuyển về danh sách thay vì mở popup trống.
+- `dateFilters` chuyển sang `components/filterFields.js` (JS thuần), `ResourceFields.jsx` re-export; bỏ bản sao trong `auditHistory.js` và test đối chiếu chuỗi.
+- Nhãn "mã · họ tên" dùng chung `employeeLabel` (`lib/format.js`) cho `EmployeeSelect` và trang lịch sử; nhãn người thực hiện tra bằng `Map` dựng một lần (`auditActorLookup`), bỏ `find` lồng trong `map`.
+- `auditDetailEntries` gắn kiểu `"status"` cho hai mục trạng thái; `Badge` chọn theo kiểu, không so chữ nhãn.
+- `auditShortageRows` trả `null` khi bản ghi không lưu danh sách thiếu (mảng, kể cả rỗng, khi có) và gắn sẵn `id`; trang chỉ gọi một lần.
+- Agent kiểm tra ui-consistency (đọc code, đối chiếu TicketsPage, QueryState, App.css) báo và đã sửa: thông báo lỗi bộ lọc dính sát bảng → thêm `.filters + .notice { margin-bottom: 20px }`; bỏ ngoặc kép cong (dự án không dùng); câu chữ theo mẫu "Không thể tải…". Chưa làm: 7 trang khác dùng `dateFilters` chưa truyền `validate` (ngoài phạm vi UC-43).
+- Không sửa: nhãn thao tác lệch Tổng quan với bản ghi v3 `sua` (dev quyết định bỏ qua, backend hiện ghi mã riêng `doi_mat_khau`/`mo_khoa`).
+- `node --test tests/uc43-audit-history.test.js` 20 pass; `npm test` 159 pass; eslint sạch trên file đã sửa; `npm run build` thành công trên máy local.
+
 **Giới hạn còn lại:**
 - Chưa render trình duyệt, nên chưa kiểm tra bằng mắt kích thước, cuộn và độ tương phản thật.
 - Nhãn trạng thái v4 (vd. `cho_bo_sung_linh_kien`) chưa có trong `STATUS_LABELS` dùng chung, `Badge` sẽ hiện mã thô.

@@ -31,6 +31,8 @@ export const number = (value) =>
   value === null || value === undefined ? "—" : new Intl.NumberFormat("vi-VN").format(value);
 export const money = (value) =>
   value === null || value === undefined ? "Chưa chốt" : `${number(value)} ₫`;
+export const employeeLabel = (employee) =>
+  `${employee.ma_nhan_vien} · ${employee.ho_ten || "Chưa có họ tên"}`;
 export function dateTime(value) {
   if (!value) return "—";
   const instant = new Date(value);

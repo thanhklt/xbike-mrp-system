@@ -455,6 +455,10 @@ td.numeric {
   flex-wrap: wrap;
   padding-bottom: 20px;
 }
+/* Lỗi kiểm tra bộ lọc (Collection validate) cách bảng bên dưới như khoảng cách của .filters. */
+.filters + .notice {
+  margin-bottom: 20px;
+}
 .filters .field {
   flex: 1 1 155px;
 }
