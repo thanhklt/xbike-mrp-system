@@ -14,6 +14,7 @@ import { ReceivingPage } from "../features/receiving/ReceivingPage.jsx";
 import { MaterialIssuingPage } from "../features/material-issuing/MaterialIssuingPage.jsx";
 import { ProductionPage } from "../features/production/ProductionPage.jsx";
 import { RequestsPage } from "../features/production/RequestsPage.jsx";
+import { ShortagePage } from "../features/production/ShortagePage.jsx";
 import { CompletionsPage } from "../features/production/CompletionsPage.jsx";
 import { MyDocumentsPage } from "../features/production/MyDocumentsPage.jsx";
 import { AdjustmentsPage } from "../features/inventory-adjustments/AdjustmentsPage.jsx";
@@ -113,6 +114,7 @@ export function AppRoutes() {
               <Route path="/kho/phieu-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/duyet-xuat/:id?" element={<MaterialIssuingPage />} />
               <Route path="/kho/yeu-cau/:id?" element={<RequestsPage />} />
+              <Route path="/kho/nhu-cau-bo-sung" element={<ShortagePage />} />
               <Route path="/kho/lenh-sx/:id?" element={<ProductionPage />} />
               <Route path="/kho/duyet-hoan-thanh/:id?" element={<CompletionsPage />} />
               <Route path="/kho/dieu-chinh/:id?" element={<AdjustmentsPage />} />

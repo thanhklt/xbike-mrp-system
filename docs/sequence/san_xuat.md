@@ -9,6 +9,8 @@ Danh sách theo [UC-25](../../specs/use_cases/production/UC-25.md),
 plan `docs/plans/UC-25.md` và quyết định D1–D6 ngày 16/11/2026.
 Kiểm tra và giữ hàng theo [UC-26](../../specs/use_cases/production/UC-26.md),
 plan `docs/plans/UC-26.md`, D1–D6 ngày 16/11/2026 và data model v4 §3.5.
+Nhu cầu bổ sung theo [UC-27](../../specs/use_cases/production/UC-27.md),
+plan `docs/plans/UC-27.md` và D1–D6 dev duyệt ngày 16/11/2026.
 Các luồng lệnh, hủy và chứng từ
 hoàn thành giữ triển khai hiện tại, chưa chuyển toàn bộ sang v4.
 `Q = quan_ly`, `N = nhan_vien`. Admin bị chặn ở các endpoint nghiệp vụ này.
@@ -16,7 +18,8 @@ JWT được kiểm tra bằng tài khoản, vai trò và phiên bản đăng nh
 N chỉ đọc yêu cầu được giao đã gửi: danh sách loại `nhap` trước COUNT/phân trang;
 chi tiết Nháp trả 404, yêu cầu đã gửi ngoài phạm vi trả 403.
 
-Mọi lỗi dùng `{error: {code, message, details}, meta: {request_id}}`.
+Các endpoint yêu cầu/lệnh/chứng từ dùng lỗi `{error: {code, message, details}, meta: {request_id}}`.
+Ngoại lệ hiện tại của endpoint nhu cầu bổ sung UC-27 được ghi rõ bên dưới.
 Body không hỗ trợ trường lạ; ID path phải dương (422), ID vượt INT32 trả 404.
 GET chi tiết, POST tạo, PATCH, gửi và hủy trả strong ETag hash toàn bộ `YeuCauRead`,
 gồm cột v4/`phien_ban`; không còn `lenh_san_xuat_ids` hoặc hai trường tiến độ xuất (D6).
@@ -27,6 +30,78 @@ Mọi ghi nghiệp vụ và audit dùng cùng session/transaction; lỗi rollbac
 Tạo/gửi không tính nhu cầu, không sinh lệnh, không giữ hàng hoặc thay đổi tồn/ledger.
 Yêu cầu không đọc tổng xuất thành phẩm để tạo response/ETag hoặc audit (UC-25 D6).
 Cổng `ProductionIssues` chỉ giữ `co_phieu_da_ghi_so`, `huy_phieu_chua_ghi_so` cho luồng hủy.
+
+## GET /api/v1/nhu_cau_bo_sung_linh_kien
+
+Nguồn: UC-27 Main 1–4, R1–R3, AC-1–AC-3, A1; D1–D5.
+Chỉ QLK; N và Admin trả 403. Không tham số, không phân trang; query bất kỳ trả 422.
+Response `{data: {yeu_cau: [...], tong_hop: [...]}, meta: {request_id}}`.
+Không ETag/If-Match, không transaction ghi, khóa dòng, audit, giữ hàng hay cập nhật trạng thái.
+Lỗi dùng envelope hợp đồng như các endpoint sản xuất khác (`nhu_cau_bo_sung_linh_kien` có trong danh sách resource của `app/core/exceptions.py`).
+
+```mermaid
+sequenceDiagram
+    actor C as Quản lý kho
+    participant R as nhu_cau_bo_sung_router
+    participant A as AuthService / NhanVienService
+    participant S as YeuCauSanXuatService
+    participant P as SqlAlchemyYeuCauSanXuatRepository
+    participant DB as PostgreSQL
+    C->>R: GET /api/v1/nhu_cau_bo_sung_linh_kien + Bearer
+    R->>A: get_current_user_payload, require_roles(quan_ly)
+    alt Thiếu/sai JWT hoặc phiên đăng nhập không hợp lệ
+        A-->>C: 401
+    else Tài khoản bị khóa hoặc thiếu quyền QLK
+        A-->>C: 403
+    else QLK hợp lệ
+        R->>R: reject_query
+        alt Có query parameter
+            R-->>C: 422 extra_forbidden
+        else Không query
+            R->>S: xem_nhu_cau_bo_sung(actor, request_id)
+            S->>S: _require_manager(actor)
+            S->>P: yeu_cau_cho_bo_sung()
+            P->>DB: SELECT YeuCauSanXuat WHERE trang_thai = cho_bo_sung_linh_kien<br/>ORDER BY kiem_tra_lan_dau_at ASC, id ASC
+            DB-->>P: Yêu cầu chờ
+            P-->>S: list YeuCauRead
+            alt A1 - Không có yêu cầu chờ
+                S->>S: tong_hop_nhu_cau_bo_sung([], {}, {})
+                S-->>R: yeu_cau = [], tong_hop = [], meta
+            else Có yêu cầu chờ
+                S->>P: nhu_cau_cua_cac_yeu_cau(ids)
+                P->>DB: SELECT NhuCauLinhKien WHERE yeu_cau_san_xuat_id IN ids
+                DB-->>P: Nhu cầu đã chốt tại lần kiểm tra đầu UC-26
+                P-->>S: Nhu cầu theo yêu cầu và linh kiện
+                opt Có linh kiện trong nhu cầu
+                    S->>P: kha_dung(ids linh kiện, lock=False)
+                    P->>DB: SELECT MatHang id, mã, tên, ĐVT, so_luong_con_dung<br/>Không FOR UPDATE / FOR SHARE
+                    DB-->>P: Còn dùng được hiện tại
+                    P-->>S: dict HangKhaDung
+                end
+                S->>S: tong_hop_nhu_cau_bo_sung(yeu_cau, nhu_cau, kha_dung)
+                Note over S: Mỗi yêu cầu so riêng với còn dùng được;<br/>chỉ đưa dòng cần lớn hơn còn dùng được vào linh_kien_thieu.<br/>Vẫn giữ yêu cầu đã đủ với da_du = true.
+                Note over S: Tổng hợp mọi linh kiện trong nhu cầu các yêu cầu chờ:<br/>tong_can = tổng cần; thiếu = max(0, tong_can - còn dùng được).<br/>Đếm so_yeu_cau; giữ thiếu 0; sắp thiếu DESC rồi mã ASC.
+                S-->>R: yeu_cau, tong_hop, meta
+            end
+            R-->>C: 200 NhuCauBoSungResponse
+        end
+    end
+```
+
+`yeu_cau` giữ thứ tự D1; mỗi dòng gồm id, mã yêu cầu, `mat_hang_id` thành phẩm,
+loại yêu cầu, số cần sản xuất đã chốt, hạn hoàn thành, `nhan_vien_duoc_giao_id`,
+`kiem_tra_lan_dau_at`, `linh_kien_thieu`, `da_du`. Mỗi dòng thiếu gồm id linh kiện,
+mã, tên, đơn vị tính, cần, còn dùng được, thiếu. Tổng hợp trừ còn dùng được đúng
+một lần cho mỗi linh kiện; không cộng các lượng thiếu riêng của từng yêu cầu.
+Chỉ đọc ba truy vấn theo lô khi có nhu cầu; A1 chỉ đọc danh sách yêu cầu.
+Đây là dữ liệu tại lúc đọc, không bảo đảm snapshot chung giữa các truy vấn.
+Lỗi hạ tầng không xử lý riêng trong service, đi qua exception handler chung (500).
+
+FE `/kho/nhu-cau-bo-sung` tải API một lần, dùng catalog và danh sách nhân viên chung
+để hiện tên, không gọi theo từng yêu cầu. Tổng hợp hiển thị trước danh sách yêu cầu;
+mã liên kết tới `/kho/yeu-cau/{id}`. `da_du=true` hiển thị
+"Đã đủ linh kiện, chờ nhân viên kiểm tra lại."; A1 hiển thị hai khối trống.
+Không thao tác tạo phiếu nhập, lọc hoặc sắp xếp trên trang; QLK tự lập phiếu nhập ở UC-20.
 
 ## GET /api/v1/yeu_cau_san_xuat
 

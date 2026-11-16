@@ -31,6 +31,31 @@ class SqlAlchemyYeuCauSanXuatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-27 Xem nhu cầu bổ sung linh kiện — Main 2 đọc yêu cầu chờ theo D1 (specs/use_cases/production/UC-27.md)
+    async def yeu_cau_cho_bo_sung(self) -> list[YeuCauRead]:
+        records = (await self.session.scalars(
+            select(YeuCauSanXuat)
+            .where(YeuCauSanXuat.trang_thai == "cho_bo_sung_linh_kien")
+            .order_by(YeuCauSanXuat.kiem_tra_lan_dau_at.asc(), YeuCauSanXuat.id.asc())
+        )).all()
+        return await self._requests(list(records))
+
+    # UC-27 Xem nhu cầu bổ sung linh kiện — Main 2–3 đọc nhu cầu đã chốt theo lô (specs/use_cases/production/UC-27.md)
+    async def nhu_cau_cua_cac_yeu_cau(self, ids: list[int]) -> dict[int, dict[int, int]]:
+        rows = await self.session.execute(
+            select(
+                NhuCauLinhKien.yeu_cau_san_xuat_id,
+                NhuCauLinhKien.mat_hang_id,
+                NhuCauLinhKien.so_luong_can,
+            )
+            .where(NhuCauLinhKien.yeu_cau_san_xuat_id.in_(ids))
+            .order_by(NhuCauLinhKien.yeu_cau_san_xuat_id, NhuCauLinhKien.mat_hang_id)
+        )
+        result: dict[int, dict[int, int]] = {}
+        for request_id, item_id, quantity in rows:
+            result.setdefault(request_id, {})[item_id] = quantity
+        return result
+
     async def dinh_muc(self, bom_id: int) -> dict[int, int]:
         rows = await self.session.execute(
             select(ChiTietBom.mat_hang_id, ChiTietBom.so_luong)
@@ -48,6 +73,7 @@ class SqlAlchemyYeuCauSanXuatRepository:
         return dict(rows.all())
 
     # UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 3, 6; A4 khóa trước khi đọc (specs/use_cases/production/UC-26.md)
+    # UC-27 Xem nhu cầu bổ sung linh kiện — Main 2–3 đọc còn dùng được với lock=False (specs/use_cases/production/UC-27.md)
     async def kha_dung(self, mat_hang_ids: list[int], *, lock: bool) -> dict[int, HangKhaDung]:
         query = select(
             MatHang.id, MatHang.ma_mat_hang, MatHang.ten_mat_hang,

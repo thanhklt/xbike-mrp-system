@@ -10,6 +10,7 @@ export const API = {
   receipts: "/phieu_nhap",
   issues: "/phieu_xuat",
   requests: "/yeu_cau_san_xuat",
+  shortages: "/nhu_cau_bo_sung_linh_kien",
   orders: "/lenh_san_xuat",
   completions: "/chung_tu_hoan_thanh_sx",
   adjustments: "/phieu_dieu_chinh_kho",

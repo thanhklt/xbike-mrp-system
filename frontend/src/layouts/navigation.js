@@ -26,7 +26,8 @@ const navigation = {
       title: "Sản xuất",
       items: [
         ["/kho/bom", "BOM"],
-        ["/kho/yeu-cau", "Yêu cầu thành phẩm"],
+        ["/kho/yeu-cau", "Yêu cầu sản xuất"],
+        ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"],
         ["/kho/lenh-sx", "Lệnh sản xuất"],
         ["/kho/phieu-xuat", "Phiếu xuất kho"],
         ["/kho/duyet-hoan-thanh", "Duyệt chứng từ hoàn thành SX"],

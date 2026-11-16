@@ -203,6 +203,44 @@ class KiemTraResponse(BaseModel):
     meta: ResponseMeta
 
 
+class NhuCauThieuLine(KiemTraLine):
+    """Linh kiện hiện còn thiếu của một yêu cầu đang chờ."""
+
+
+class YeuCauChoBoSung(BaseModel):
+    id: int
+    ma_yeu_cau_san_xuat: str
+    mat_hang_id: int
+    loai_yeu_cau: LoaiYeuCau
+    so_luong_can_san_xuat: int
+    han_hoan_thanh: date
+    nhan_vien_duoc_giao_id: int
+    kiem_tra_lan_dau_at: datetime
+    linh_kien_thieu: list[NhuCauThieuLine]
+    da_du: bool
+
+
+class TongHopLinhKien(BaseModel):
+    mat_hang_id: int
+    ma_mat_hang: str
+    ten_mat_hang: str
+    don_vi_tinh: str
+    tong_can: int
+    so_luong_con_dung: int
+    so_luong_thieu: int
+    so_yeu_cau: int
+
+
+class NhuCauBoSungData(BaseModel):
+    yeu_cau: list[YeuCauChoBoSung]
+    tong_hop: list[TongHopLinhKien]
+
+
+class NhuCauBoSungResponse(BaseModel):
+    data: NhuCauBoSungData
+    meta: ResponseMeta
+
+
 class SanXuatError(BaseModel):
     code: str
     message: str

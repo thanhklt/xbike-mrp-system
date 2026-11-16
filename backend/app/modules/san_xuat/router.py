@@ -32,6 +32,7 @@ from app.modules.san_xuat.schemas import (
     LenhQuery,
     LenhResponse,
     LyDoInput,
+    NhuCauBoSungResponse,
     SanXuatErrorResponse,
     VatTuLenhResponse,
     YeuCauCreate,
@@ -65,6 +66,24 @@ yeu_cau_sx_router = APIRouter(
         code: {"model": SanXuatErrorResponse} for code in (401, 403, 404, 409, 412, 422, 428, 500)
     },
 )
+
+
+nhu_cau_bo_sung_router = APIRouter(
+    prefix="/nhu_cau_bo_sung_linh_kien",
+    tags=["san_xuat"],
+    responses={code: {"model": SanXuatErrorResponse} for code in (401, 403, 422, 500)},
+)
+
+
+# UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 endpoint chỉ đọc cho QLK (specs/use_cases/production/UC-27.md)
+@nhu_cau_bo_sung_router.get(
+    "", response_model=NhuCauBoSungResponse,
+    dependencies=[Depends(write_actor), Depends(reject_query)],
+)
+async def xem_nhu_cau_bo_sung(
+    actor: WriteActor, service: Service, request_id: RequestId,
+) -> NhuCauBoSungResponse:
+    return await service.xem_nhu_cau_bo_sung(actor, request_id)
 
 
 def reject_repeated_query(request: Request) -> None:

@@ -31,7 +31,12 @@ from app.modules.san_xuat.schemas import (
     KiemTraResponse,
     LenhRead,
     ListResponseMeta,
+    NhuCauBoSungData,
+    NhuCauBoSungResponse,
+    NhuCauThieuLine,
     ResponseMeta,
+    TongHopLinhKien,
+    YeuCauChoBoSung,
     YeuCauCreate,
     YeuCauDetailResponse,
     YeuCauListQuery,
@@ -125,6 +130,50 @@ def tinh_ket_qua_kiem_tra(
     )
 
 
+# UC-27 Xem nhu cầu bổ sung linh kiện — Main 2–3; D3–D4 tính thiếu riêng và tổng hợp (specs/use_cases/production/UC-27.md)
+def tong_hop_nhu_cau_bo_sung(
+    yeu_cau: list[YeuCauRead],
+    nhu_cau: dict[int, dict[int, int]],
+    kha_dung: dict[int, HangKhaDung],
+) -> NhuCauBoSungData:
+    requests = []
+    totals: dict[int, TongHopLinhKien] = {}
+    for record in yeu_cau:
+        missing = []
+        for item_id, quantity in sorted(nhu_cau.get(record.id, {}).items()):
+            item = kha_dung[item_id]
+            identity = {
+                "mat_hang_id": item_id, "ma_mat_hang": item.ma_mat_hang,
+                "ten_mat_hang": item.ten_mat_hang, "don_vi_tinh": item.don_vi_tinh,
+                "so_luong_con_dung": item.so_luong_con_dung,
+            }
+            if quantity > item.so_luong_con_dung:
+                missing.append(NhuCauThieuLine(
+                    **identity, so_luong_can=quantity,
+                    so_luong_thieu=quantity - item.so_luong_con_dung,
+                ))
+            if item_id not in totals:
+                totals[item_id] = TongHopLinhKien(
+                    **identity, tong_can=0, so_luong_thieu=0, so_yeu_cau=0,
+                )
+            total = totals[item_id]
+            total.tong_can += quantity
+            total.so_yeu_cau += 1
+            total.so_luong_thieu = max(0, total.tong_can - total.so_luong_con_dung)
+        requests.append(YeuCauChoBoSung(
+            **record.model_dump(include={
+                "id", "ma_yeu_cau_san_xuat", "mat_hang_id", "loai_yeu_cau",
+                "so_luong_can_san_xuat", "han_hoan_thanh", "nhan_vien_duoc_giao_id",
+                "kiem_tra_lan_dau_at",
+            }),
+            linh_kien_thieu=missing, da_du=not missing,
+        ))
+    return NhuCauBoSungData(
+        yeu_cau=requests,
+        tong_hop=sorted(totals.values(), key=lambda row: (-row.so_luong_thieu, row.ma_mat_hang)),
+    )
+
+
 def _cancel_ordering(orders: list[LenhRead]) -> list[LenhRead]:
     parents = {order.id: order.lenh_san_xuat_cha_id for order in orders}
     depths = {}
@@ -156,6 +205,21 @@ class YeuCauSanXuatService:
         self.items = items
         self.employees = employees
         self.issues = issues
+
+    # UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–3; A1 chỉ QLK, chỉ đọc không khóa (specs/use_cases/production/UC-27.md)
+    async def xem_nhu_cau_bo_sung(self, actor: dict, request_id: str) -> NhuCauBoSungResponse:
+        _require_manager(actor)
+        requests = await self.repository.yeu_cau_cho_bo_sung()
+        needs = (
+            await self.repository.nhu_cau_cua_cac_yeu_cau([row.id for row in requests])
+            if requests else {}
+        )
+        item_ids = sorted({item_id for quantities in needs.values() for item_id in quantities})
+        available = await self.repository.kha_dung(item_ids, lock=False) if item_ids else {}
+        return NhuCauBoSungResponse(
+            data=tong_hop_nhu_cau_bo_sung(requests, needs, available),
+            meta=ResponseMeta(request_id=request_id),
+        )
 
     async def _check_result(self, record: YeuCauRead, *, lock: bool) -> KiemTraKetQua:
         quantities = (
