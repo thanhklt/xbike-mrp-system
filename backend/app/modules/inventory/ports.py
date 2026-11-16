@@ -22,6 +22,7 @@ class StockReceiptLine(NamedTuple):
 
 
 class InventoryWriter(Protocol):
+    async def lock_receipt_stock(self, item_ids: list[int]) -> list["ReceiptStock"]: ...
     async def lock_balances(self, item_ids: list[int]) -> dict[int, int]: ...
 
     async def adjust_stock(
@@ -37,6 +38,16 @@ class StockIssueLine(NamedTuple):
     chi_tiet_phieu_xuat_id: int
     mat_hang_id: int
     so_luong: int
+
+
+@dataclass(frozen=True)
+class ReceiptStock:
+    id: int
+    loai_mat_hang: str
+    is_active: bool
+    so_luong_ton: int
+    so_luong_dang_giu: int
+    ledger_balance: int
 
 
 @dataclass(frozen=True)
