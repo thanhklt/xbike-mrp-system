@@ -62,7 +62,7 @@ Filter `q` tìm mã yêu cầu bằng ILIKE tham số hóa, escape ký tự wild
 `mat_hang_id`, `trang_thai`, `nhan_vien_duoc_giao_id`, `loai_yeu_cau` (`xuat_giao`/`nhap_kho`),
 `tu_ngay`, `den_ngay` kết hợp
 với phạm vi N. Ngày địa phương Asia/Ho_Chi_Minh chuyển sang khoảng UTC nửa mở.
-Không gửi `sort`: N dùng `created_at` (cũ nhất trước), Q dùng `-created_at` (mới nhất trước).
+Không gửi `sort`: cả N và Q dùng `-created_at` (mới nhất trước; dev chốt 16/11/2026).
 Whitelist `id`, `created_at`, `ma_yeu_cau_san_xuat`, `han_hoan_thanh`, mỗi cột có chiều
 tăng hoặc dấu `-` cho giảm; luôn thêm `id` cùng chiều làm khóa phụ.
 Sai loại/sort trả 422. Bộ lọc người được giao không thay thế phạm vi N: lọc người khác

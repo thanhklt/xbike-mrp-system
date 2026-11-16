@@ -155,7 +155,8 @@ class YeuCauSanXuatService:
             raise ForbiddenException()
         actor_id = None if "quan_ly" in actor["roles"] else int(actor["sub"])
         if params.sort is None:
-            params = params.model_copy(update={"sort": "created_at" if actor_id is not None else "-created_at"})
+            # Dev chốt 16/11/2026: mặc định mới nhất trước cho cả QLK và NV (UC-25 R2, AC-3).
+            params = params.model_copy(update={"sort": "-created_at"})
         result = await self.repository.list_entries(params, actor_id)
         return YeuCauListResponse(
             data=result.items,

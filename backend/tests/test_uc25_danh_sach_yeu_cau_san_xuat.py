@@ -118,7 +118,7 @@ async def test_manager_sql_has_no_employee_or_status_restriction():
 async def test_employee_scope_cannot_be_overridden_by_assignee_filter(listing_api):
     response = await listing_api.client.get(URL, headers=EMPLOYEE_HEADERS)
     assert response.status_code == 200
-    assert [row["id"] for row in response.json()["data"]] == [4, 6, 2, 8]
+    assert [row["id"] for row in response.json()["data"]] == [8, 2, 6, 4]
     assert {row["nhan_vien_duoc_giao_id"] for row in response.json()["data"]} == {20}
     filtered = await listing_api.client.get(
         URL, headers=EMPLOYEE_HEADERS, params={"nhan_vien_duoc_giao_id": 22},
@@ -144,9 +144,9 @@ async def test_employee_opening_another_assignees_request_is_forbidden(listing_a
     assert own.status_code == 200 and own.json()["data"]["id"] == 2
 
 
-# UC-25 AC-3: Không gửi sort, NV cũ trước/QLK mới trước; id phụ cùng chiều ở SQL
+# UC-25 AC-3: Không gửi sort, cả NV và QLK đều mới nhất trước; id phụ cùng chiều ở SQL
 @pytest.mark.parametrize("actor,headers,sort,ids,direction", [
-    (EMPLOYEE, EMPLOYEE_HEADERS, "created_at", [4, 6, 2, 8], "ASC"),
+    (EMPLOYEE, EMPLOYEE_HEADERS, "-created_at", [8, 2, 6, 4], "DESC"),
     (MANAGER, {}, "-created_at", [5, 8, 7, 2, 6, 1, 3, 4], "DESC"),
 ])
 async def test_default_sort_is_chosen_by_role_without_mutating_query(
@@ -188,7 +188,7 @@ async def test_deadline_sort_with_same_direction_id_tiebreaker(listing_api, head
 # UC-25 A3: Lọc đúng từng loại ở cả hai vai trò và áp dụng trước COUNT/phân trang
 @pytest.mark.parametrize("headers,kind,ids", [
     ({}, "nhap_kho", [5, 8, 7, 6, 4]),
-    (EMPLOYEE_HEADERS, "nhap_kho", [4, 6, 8]),
+    (EMPLOYEE_HEADERS, "nhap_kho", [8, 6, 4]),
     ({}, "xuat_giao", [2, 1, 3]),
     (EMPLOYEE_HEADERS, "xuat_giao", [2]),
 ])
@@ -226,7 +226,7 @@ async def test_invalid_type_or_sort_is_rejected(listing_api, headers, params, fi
 
 # UC-25 AC-5: Nháp được giao vẫn ẩn, kể cả lọc nhap; chi tiết trả 404, SQL lọc trước COUNT
 async def test_assigned_draft_is_hidden_in_list_filter_and_detail(listing_api):
-    for params, ids in [({}, [4, 6, 2, 8]), ({"trang_thai": "nhap"}, [])]:
+    for params, ids in [({}, [8, 2, 6, 4]), ({"trang_thai": "nhap"}, [])]:
         response = await listing_api.client.get(URL, headers=EMPLOYEE_HEADERS, params=params)
         assert response.status_code == 200
         assert [row["id"] for row in response.json()["data"]] == ids

@@ -214,7 +214,7 @@ Nhân viên biết ngay yêu cầu của mình làm được tới đâu: dùng 
 - shortage_report_completeness = 100% (mỗi dòng thiếu có mã, tên, đơn vị tính, số cần, số còn dùng được, số thiếu)
 
 ## In Scope (Giai đoạn 1)
-- Nhân viên chỉ thấy yêu cầu giao cho mình; mặc định yêu cầu cũ nhất lên đầu (chỉ là thứ tự hiển thị, không bắt buộc làm theo)
+- Nhân viên chỉ thấy yêu cầu giao cho mình; mặc định yêu cầu mới nhất lên đầu (chỉ là thứ tự hiển thị, không bắt buộc làm theo; sửa 2026-11-16)
 - "Còn dùng được" = tồn thực tế trừ phần đang giữ cho các yêu cầu khác
 - Kiểm tra lần đầu:
   - Yêu cầu xuất giao: dùng thành phẩm còn dùng được trước; số cần sản xuất = số yêu cầu − thành phẩm dùng được (không âm)
