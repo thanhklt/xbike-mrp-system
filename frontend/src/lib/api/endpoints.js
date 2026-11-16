@@ -1,7 +1,6 @@
 export const API = {
   login: "/auth/dang_nhap",
   me: "/auth/me",
-  password: "/auth/doi_mat_khau",
   employees: "/nhan_vien",
   roles: "/vai_tro",
   items: "/mat_hang",
@@ -11,10 +10,12 @@ export const API = {
   receipts: "/phieu_nhap",
   issues: "/phieu_xuat",
   requests: "/yeu_cau_san_xuat",
-  orders: "/lenh_san_xuat",
   completions: "/chung_tu_hoan_thanh_sx",
+  shortages: "/nhu_cau_bo_sung_linh_kien",
   adjustments: "/phieu_dieu_chinh_kho",
   tickets: "/ticket_loi_dieu_chinh",
   audit: "/audit",
   traffic: "/luu_luong_truy_cap",
+  inventoryReport: "/bao_cao/nhap_xuat_ton",
+  stockMovements: "/bao_cao/bien_dong_kho",
 };

@@ -1,5 +1,19 @@
 # Đặc tả yêu cầu UI/UX frontend Cổng Nhân viên (Employee Portal) — xBike MRP
 
+## Quyết định hiện hành ngày 17/11/2026 — ưu tiên hơn mô tả lịch sử bên dưới
+
+Dev yêu cầu sửa theo luồng main `b228193` sau rà soát trước push. Giữ màu tối/cam và style đã chỉnh của Nhân viên; nghiệp vụ theo UC/router/schema main:
+
+- Điều hướng 3 mục: Tổng quan, Việc được giao, Tra cứu tồn kho; hồ sơ chỉ đọc/đăng xuất ở Topbar. Không còn trang lệnh SX riêng, danh sách hoàn thành/phiếu xuất cho NV; các URL danh sách cũ chuyển về Việc được giao.
+- Tổng quan có 3 KPI theo yêu cầu. Không gọi danh sách chứng từ hay phiếu xuất vốn chỉ cấp quyền Quản lý.
+- Trong yêu cầu được giao: xem trước/kiểm tra linh kiện, bắt đầu SX, lập chứng từ hoàn thành, lập phiếu xuất linh kiện/thành phẩm khi đủ điều kiện. Bộ lọc nâng cao luôn thu gọn khi vào trang; Hiện thêm/Ẩn bớt giữ nội dung đang nhập trong lần mở hiện tại.
+- Hoàn thành: tạo chỉ gửi `yeu_cau_san_xuat_id`; số lượng server cố định theo số cần SX; giờ do server ghi lúc gửi. Từ chối thì Gửi lại trực tiếp; không có sửa/xóa/trả nháp.
+- Phiếu xuất: NV được giao lập và gửi/gửi lại, QLK chỉ duyệt/từ chối. Tạo chỉ gửi `loai_phieu` (`xuat_linh_kien`/`xuat_thanh_pham`) và `yeu_cau_san_xuat_id`; dòng hàng và số lượng server chốt, chỉ đọc. Gửi/gửi lại dùng body rỗng + ETag phiếu đã xem, luôn có xác nhận.
+- Tra cứu tồn kho chỉ đọc, lọc theo hai loại main: Linh kiện/Thành phẩm. Giữ ô chi tiết hai cột, nhãn đơn vị có dấu ở phần hiển thị.
+- Các mục mô tả 6 menu, lệnh riêng, nhập giờ/số lượng hoàn thành, sửa/xóa/trả nháp và QLK lập phiếu ở phần lịch sử bên dưới đã được thay thế bởi quyết định này; không dùng checklist/test cũ làm bằng chứng bản main đã đạt.
+
+Giới hạn API còn mở: tìm lại ID phiếu theo yêu cầu và xem trước các dòng nhu cầu trước khi tạo nháp, ghi tại NV-MAIN-005/006 trong [MISSING.md](./MISSING.md). Không tự thêm endpoint hoặc giả lập thành công trong app. Lịch sử ảnh 16/11 và bộ preview đầu 17/11 không được xem là ảnh nghiệm thu bản sửa cuối.
+
 Ngày cập nhật: **12/11/2026**. Nhánh bàn giao: `feature/UI-nhanvien`.
 Căn cứ thiết kế chuẩn: **`C:\Users\binhb\Downloads\XBIKE_Employee_Portal_Preview (1).html`** (SHA256: `80582902F488AE1BD3D4E944BFAA05EE98483955D5FA002B5BFE1B82646B99CB`, lưu trong repository tại `doc/ui-nhan-vien-preview/employee-portal-preview.html`).
 

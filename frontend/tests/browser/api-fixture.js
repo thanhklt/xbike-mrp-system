@@ -154,7 +154,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ma_mat_hang: "MH-000001",
       ten_mat_hang: "Khung xe",
       sku: "FRAME-01",
-      loai_mat_hang: "nguyen_vat_lieu",
+      loai_mat_hang: "linh_kien",
       don_vi_tinh: "cai",
       mau_sac: "den",
       mo_ta: "Khung xe thép",
@@ -182,7 +182,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ma_mat_hang: "MH-000003",
       ten_mat_hang: "Cụm bánh xe",
       sku: "WHEEL-01",
-      loai_mat_hang: "ban_thanh_pham",
+      loai_mat_hang: "linh_kien",
       don_vi_tinh: "bo",
       mau_sac: null,
       mo_ta: null,
@@ -218,38 +218,19 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     trang_thai: "nhap",
     created_at: now,
     completed_at: null,
-    so_luong_da_xuat: 0,
-    so_luong_con_phai_xuat: 20,
-    lenh_san_xuat_ids: [1],
-  };
-  const order = {
-    id: 1,
-    ma_lenh_san_xuat: "LSX-202611-000001",
-    yeu_cau_san_xuat_id: 1,
-    lenh_san_xuat_cha_id: null,
-    mat_hang_id: 4,
-    bom_id: 1,
-    so_luong: 8,
-    nhan_vien_id: 3,
-    trang_thai: "da_gui",
-    created_at: now,
+    loai_yeu_cau: "xuat_giao",
+    han_hoan_thanh: "2026-12-01",
+    bom_id: null,
+    so_luong_dung_thanh_pham: null,
+    so_luong_can_san_xuat: null,
+    updated_at: now,
+    gui_at: null,
+    kiem_tra_lan_dau_at: null,
     started_at: null,
-    completed_at: null,
-    nhu_cau_truc_tiep: [{ id: 1, mat_hang_id: 1, so_luong_can: 8 }],
-    so_luong_da_hoan_thanh: 0,
-    so_luong_con_phai_hoan_thanh: 8,
-    lenh_con_ids: [],
-  };
-  const completion = {
-    id: 1,
-    ma_phieu: "HTSX-202611-000001",
-    lenh_san_xuat_id: 1,
-    mat_hang_id: 4,
-    so_luong_hoan_thanh: 2,
-    nhan_vien_id: 3,
-    trang_thai: "nhap",
-    finish_time: now,
-    created_at: now,
+    huy_at: null,
+    nguoi_huy_id: null,
+    ly_do_huy: null,
+    phien_ban: 1,
   };
   const receipt = {
     id: 1,
@@ -291,7 +272,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           ma_vai_tro: "nhan_vien",
           ten_vai_tro: "Nhân viên",
           mo_ta:
-            "Kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
+            "Lập đề nghị xuất nguyên vật liệu và thành phẩm, kiểm tra vật tư, ghi nhận sản xuất, lập và gửi chứng từ hoàn thành sản xuất.",
         },
       ],
       mat_hang: items,
@@ -329,21 +310,19 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         {
           id: 1,
           ma_phieu_xuat: "PX-202611-000001",
-          nhan_vien_id: 2,
-          loai_phieu: "xuat_vat_tu",
-          lenh_san_xuat_id: 1,
-          yeu_cau_san_xuat_id: null,
+          nhan_vien_id: 3,
+          loai_phieu: "xuat_linh_kien",
+          yeu_cau_san_xuat_id: 2,
           tong_tien: null,
           trang_thai: "cho_duyet",
           created_at: now,
-          chi_tiet: lines,
+          chi_tiet: [{ id: 1, mat_hang_id: 1, so_luong: 8, don_gia_thuc: null, tong_gia: null }],
         },
         {
           id: 2,
           ma_phieu_xuat: "PX-202611-000002",
-          nhan_vien_id: 2,
+          nhan_vien_id: 3,
           loai_phieu: "xuat_thanh_pham",
-          lenh_san_xuat_id: null,
           yeu_cau_san_xuat_id: 2,
           tong_tien: null,
           trang_thai: "nhap",
@@ -351,24 +330,14 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           chi_tiet: [{ id: 2, mat_hang_id: 4, so_luong: 2, don_gia_thuc: null, tong_gia: null }],
         },
       ],
+      chung_tu_hoan_thanh_sx: [],
       yeu_cau_san_xuat: [
         request,
-        { ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "da_gui", lenh_san_xuat_ids: [2] },
-      ],
-      lenh_san_xuat: [
-        order,
         {
-          ...order,
-          id: 2,
-          ma_lenh_san_xuat: "LSX-202611-000002",
-          yeu_cau_san_xuat_id: 2,
-          trang_thai: "dang_thuc_hien",
-          started_at: now,
+          ...request, id: 2, ma_yeu_cau_san_xuat: "YCSX-202611-000002", trang_thai: "dang_thuc_hien",
+          bom_id: 1, so_luong_dung_thanh_pham: 12, so_luong_can_san_xuat: 8,
+          gui_at: now, kiem_tra_lan_dau_at: now,
         },
-      ],
-      chung_tu_hoan_thanh_sx: [
-        completion,
-        { ...completion, id: 2, ma_phieu: "HTSX-202611-000002", lenh_san_xuat_id: 2, trang_thai: "cho_duyet" },
       ],
       phieu_dieu_chinh_kho: [
         {
@@ -476,11 +445,45 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (state.accessToken !== "browser-test-token" && call.headers.authorization !== `Bearer ${state.accessToken}`)
       return respond({ error: { message: "Please sign in again" } }, 401);
     if (path === "auth/me") return respond({ data: user, meta: {} }, 200, { etag: '"user-v1"' });
-    if (path === "auth/doi_mat_khau") return respond({ data: { da_doi: true }, meta: {} });
     if (path === "danh_muc_mat_hang")
       return respond({ data: items, meta: { total: items.length } });
     if (path === "luu_luong_truy_cap")
       return respond(trafficSeries(call.params.khoang_thoi_gian || "hom_nay"));
+    if (method === "GET" && path === "bao_cao/nhap_xuat_ton") {
+      const { ky, nam, thang, quy } = call.params;
+      const year = Number(nam);
+      const month = ky === "thang" ? Number(thang) : ky === "quy" ? Number(quy) * 3 - 2 : 1;
+      const duration = ky === "thang" ? 1 : ky === "quy" ? 3 : 12;
+      return respond({
+        success: true,
+        data: {
+          ky,
+          nam: year,
+          thang: thang ? Number(thang) : null,
+          quy: quy ? Number(quy) : null,
+          tu_thoi_diem: new Date(Date.UTC(year, month - 1, 1, -7)).toISOString(),
+          den_thoi_diem: new Date(Date.UTC(year, month - 1 + duration, 1, -7)).toISOString(),
+          mat_hang: [],
+        },
+        message: "Lấy báo cáo nhập-xuất-tồn thành công",
+      });
+    }
+    if (method === "GET" && path === "bao_cao/bien_dong_kho")
+      return respond({
+        success: true,
+        data: [],
+        pagination: {
+          page: Number(call.params.page || 1),
+          page_size: Number(call.params.page_size || 20),
+          total_items: 0,
+          total_pages: 0,
+          has_next: false,
+          has_prev: false,
+        },
+        message: "Items retrieved successfully",
+      });
+    if (path === "nhu_cau_bo_sung_linh_kien")
+      return respond({ data: { yeu_cau: [], tong_hop: [] }, meta: {} });
     const [resource, rawId, action] = path.split("/");
     const records = state.resources[resource];
     if (!records) {
@@ -490,6 +493,72 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     const id = Number(rawId);
     const record = records.find((entry) => entry.id === id);
     const version = () => `"v${state.versions[`${resource}/${id}`] || 1}"`;
+    if (resource === "yeu_cau_san_xuat" && action === "chung_tu_hoan_thanh" && method === "GET") {
+      if (!record || (role === "nhan_vien" && record.nhan_vien_duoc_giao_id !== user.id))
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      const document = state.resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === id);
+      const visible = document && !(role === "quan_ly" && document.trang_thai === "nhap") ? document : null;
+      return respond({ data: visible, meta: {} }, 200, visible ? { etag: `"v${state.versions[`chung_tu_hoan_thanh_sx/${document.id}`] || 1}"` } : {});
+    }
+    if (resource === "chung_tu_hoan_thanh_sx") {
+      const source = state.resources.yeu_cau_san_xuat.find((entry) => entry.id === (record?.yeu_cau_san_xuat_id || body.yeu_cau_san_xuat_id));
+      if (record && role === "nhan_vien" && source?.nhan_vien_duoc_giao_id !== user.id)
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      if (["PATCH", "DELETE", "PUT"].includes(method) || action === "ve_nhap")
+        return respond({ error: { message: "Không có thao tác này" } }, 405);
+      if (!rawId && method === "POST") {
+        if (role !== "nhan_vien" || source?.nhan_vien_duoc_giao_id !== user.id)
+          return respond({ error: { message: "Không có quyền" } }, 403);
+        if (Object.keys(body).join(",") !== "yeu_cau_san_xuat_id")
+          return respond({ error: { message: "Payload không đúng hợp đồng" } }, 422);
+        if (source.trang_thai !== "dang_thuc_hien" || !source.started_at || !(source.so_luong_can_san_xuat > 0) || records.some((entry) => entry.yeu_cau_san_xuat_id === source.id))
+          return respond({ error: { message: "Yêu cầu chưa đủ điều kiện hoặc đã có chứng từ" } }, 409);
+        const nextId = Math.max(0, ...records.map((entry) => entry.id)) + 1;
+        const created = { id: nextId, ma_phieu: `HTSX-FIXTURE-${nextId}`, ...body, nhan_vien_id: user.id,
+          so_luong_hoan_thanh: source.so_luong_can_san_xuat, finish_time: null, trang_thai: "nhap", created_at: now };
+        records.push(created);
+        return respond({ data: created, meta: {} }, 201, { etag: '"v1"' });
+      }
+      if (method === "POST" && action === "gui" && (role !== "nhan_vien" || source?.nhan_vien_duoc_giao_id !== user.id))
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      if (method === "POST" && action === "gui" && (Object.keys(body).length || !["nhap", "tu_choi"].includes(record?.trang_thai)))
+        return respond({ error: { message: "Trạng thái hoặc payload không hợp lệ" } }, 409);
+    }
+    if (resource === "phieu_xuat") {
+      const source = state.resources.yeu_cau_san_xuat.find((entry) => entry.id === (record?.yeu_cau_san_xuat_id || body?.yeu_cau_san_xuat_id));
+      if (record && role === "nhan_vien" && source?.nhan_vien_duoc_giao_id !== user.id)
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      if (["PATCH", "DELETE", "PUT"].includes(method) || action === "ve_nhap")
+        return respond({ error: { message: "Không có thao tác này" } }, 405);
+      if (!rawId && method === "POST") {
+        if (role !== "nhan_vien" || source?.nhan_vien_duoc_giao_id !== user.id)
+          return respond({ error: { message: "Không có quyền" } }, 403);
+        if (Object.keys(body).sort().join(",") !== "loai_phieu,yeu_cau_san_xuat_id" ||
+          !["xuat_linh_kien", "xuat_thanh_pham"].includes(body.loai_phieu))
+          return respond({ error: { message: "Payload không đúng hợp đồng" } }, 422);
+        const completed = state.resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === source.id);
+        if (source.trang_thai !== "dang_thuc_hien" || (body.loai_phieu === "xuat_linh_kien"
+          ? !(source.so_luong_can_san_xuat > 0)
+          : source.loai_yeu_cau !== "xuat_giao" || !(source.so_luong_can_san_xuat === 0 || completed?.trang_thai === "da_duyet")))
+          return respond({ error: { message: "Yêu cầu chưa đủ điều kiện lập phiếu" } }, 409);
+        if (records.some((entry) => entry.yeu_cau_san_xuat_id === source.id && entry.loai_phieu === body.loai_phieu))
+          return respond({ error: { message: "Yêu cầu đã có phiếu xuất loại này" } }, 409);
+        const nextId = Math.max(0, ...records.map((entry) => entry.id)) + 1;
+        const created = { id: nextId, ma_phieu_xuat: `PX-FIXTURE-${nextId}`, ...body, nhan_vien_id: user.id,
+          trang_thai: "nhap", created_at: now, updated_at: now, gui_at: null, ly_do_tu_choi: null, phien_ban: 1, tong_tien: null,
+          chi_tiet: [{ id: nextId, mat_hang_id: body.loai_phieu === "xuat_linh_kien" ? 1 : source.mat_hang_id,
+            so_luong: body.loai_phieu === "xuat_linh_kien" ? source.so_luong_can_san_xuat : source.so_luong,
+            don_gia_thuc: null, tong_gia: null }] };
+        records.push(created);
+        return respond({ data: created, meta: {} }, 201, { etag: '"v1"' });
+      }
+      if (method === "POST" && action) {
+        if ((action === "gui" && role !== "nhan_vien") || (["duyet", "tu_choi"].includes(action) && role !== "quan_ly"))
+          return respond({ error: { message: "Không có quyền" } }, 403);
+        if (action === "gui" && (Object.keys(body).length || !["nhap", "tu_choi"].includes(record?.trang_thai)))
+          return respond({ error: { message: "Trạng thái hoặc payload không hợp lệ" } }, 409);
+      }
+    }
     if (action === "cau_truc")
       return respond({
         data: {
@@ -510,63 +579,17 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         },
         meta: {},
       });
-    if (action === "vat_tu")
-      return respond(
-        {
-          data: {
-            lenh_san_xuat_id: id,
-            du_dieu_kien_bat_dau: true,
-            chi_tiet: [
-              {
-                mat_hang_id: 1,
-                so_luong_can: 8,
-                so_luong_da_cap: 8,
-                so_luong_con_phai_cap: 0,
-                ton_hien_tai: 120,
-              },
-            ],
-          },
-          meta: {},
-        },
-        200,
-        { etag: version() },
-      );
-    if (action === "ke_hoach")
-      return respond({ data: { yeu_cau_san_xuat_id: id, lenh: [order] }, meta: {} });
-    if (action === "tinh_ke_hoach")
-      return respond({
-        data: {
-          yeu_cau_san_xuat_id: id,
-          tinh_luc: now,
-          ke_hoach_token: "plan-test-token",
-          so_luong_yeu_cau: 20,
-          ton_thanh_pham: 18,
-          so_luong_can_san_xuat: 2,
-          du_dieu_kien_gui: true,
-          thieu_vat_tu: false,
-          lenh_du_kien: [
-            { ma_tam: "L1", ma_cha_tam: null, mat_hang_id: 4, bom_id: 1, so_luong: 2 },
-          ],
-          vat_tu: [
-            {
-              mat_hang_id: 1,
-              ma_mat_hang: "MH-000001",
-              ten_mat_hang: "Khung xe",
-              don_vi_tinh: "cai",
-              so_luong_can_tu_kho: 2,
-              so_luong_hien_co: 120,
-              so_luong_thieu: 0,
-            },
-          ],
-        },
-        meta: {},
-      });
     if (method === "GET" && rawId)
       return record
         ? respond({ data: record, meta: {} }, 200, { etag: version() })
         : respond({ error: { message: "Không tìm thấy" } }, 404);
     if (method === "GET") {
+      if ((resource === "phieu_xuat" || resource === "chung_tu_hoan_thanh_sx") && role === "nhan_vien") {
+        return respond({ error: { message: "Không có quyền truy cập danh sách" } }, 403);
+      }
       let matching = records.filter((entry) =>
+        !(resource === "yeu_cau_san_xuat" && role === "nhan_vien" &&
+          (entry.trang_thai === "nhap" || entry.nhan_vien_duoc_giao_id !== user.id)) &&
         Object.entries(call.params).every(([key, value]) =>
           key === "bo_thao_tac"
             ? entry.thao_tac !== value
@@ -620,7 +643,24 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       if (id === user.id) state.accessToken = "browser-test-token-renewed";
       return respond({ data: record, meta: {} }, 200, { etag: version() });
     }
+    if (resource === "yeu_cau_san_xuat" && action === "bat_dau") {
+      if (role !== "nhan_vien" || record.nhan_vien_duoc_giao_id !== user.id)
+        return respond({ error: { message: "Không có quyền" }, meta: {} }, 403);
+      if (record.started_at)
+        return respond({ data: record, meta: {} }, 200, { etag: version() });
+      if (record.trang_thai !== "dang_thuc_hien" || record.so_luong_can_san_xuat <= 0)
+        return respond({ error: { message: "Trạng thái không hợp lệ" }, meta: {} }, 409);
+      if (!state.resources.phieu_xuat.some((issue) =>
+        issue.yeu_cau_san_xuat_id === id && issue.loai_phieu === "xuat_linh_kien" && issue.trang_thai === "da_duyet"))
+        return respond({ error: { message: "Phiếu xuất linh kiện chưa được duyệt" }, meta: {} }, 409);
+    }
     state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
+    if (resource === "chung_tu_hoan_thanh_sx" && action === "gui") record.finish_time = now;
+    if (resource === "yeu_cau_san_xuat" && action === "bat_dau") {
+      record.started_at = now;
+      record.phien_ban += 1;
+      record.updated_at = now;
+    }
     if (method === "PATCH" || method === "PUT") {
       Object.assign(record, body);
       if (resource === "nhan_vien" && action === "vai_tro" && body.vai_tro_id !== undefined) {
@@ -657,17 +697,13 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     };
     if (action && transitions[action])
       record.trang_thai =
-        action === "gui" && ["lenh_san_xuat", "yeu_cau_san_xuat"].includes(resource)
+        action === "gui" && resource === "yeu_cau_san_xuat"
           ? "da_gui"
           : transitions[action];
     if (action === "nhan_xu_ly") record.nguoi_xu_ly_id = user.id;
     if (action === "giai_quyet") Object.assign(record, body);
     if (resource === "bom") record.is_active = method !== "DELETE";
-    const result =
-      action === "gui" && resource === "yeu_cau_san_xuat"
-        ? { yeu_cau: record, ke_hoach: { lenh: [order] } }
-        : record;
-    return respond({ data: result, meta: {} }, 200, { etag: version() });
+    return respond({ data: record, meta: {} }, 200, { etag: version() });
   });
   return state;
 }

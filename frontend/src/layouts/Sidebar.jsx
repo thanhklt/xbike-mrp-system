@@ -25,7 +25,7 @@ import {
   Users,
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
-import adminArtworkSource from "../../../doc/ui-spec-admin/tong_quan.png";
+import adminArtworkSource from "../assets/images/admin/sidebar-artwork.webp";
 import employeeArtworkSource from "../assets/images/brand/employee-bicycle.png";
 import { API } from "../lib/api/endpoints.js";
 import { useResource } from "../lib/api/useResources.js";
@@ -168,7 +168,7 @@ export function Sidebar({
           <div className={styles.account}>
             <SidebarLink
               path="/ho-so"
-              label="Hồ sơ & đổi mật khẩu"
+              label="Hồ sơ"
               onNavigate={onNavigate}
               darkTheme={darkTheme}
             />

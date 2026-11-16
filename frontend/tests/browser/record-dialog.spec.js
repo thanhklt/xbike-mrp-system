@@ -8,15 +8,9 @@ const tabs = [
   ["quan_ly", "/kho/phieu-nhap"],
   ["quan_ly", "/kho/phieu-xuat"],
   ["quan_ly", "/kho/yeu-cau"],
-  ["quan_ly", "/kho/lenh-sx"],
-  ["quan_ly", "/kho/duyet-hoan-thanh"],
   ["quan_ly", "/kho/dieu-chinh"],
   ["quan_ly", "/kho/ticket"],
-  ["nhan_vien", "/nv/lenh-sx"],
   ["nhan_vien", "/nv/yeu-cau"],
-  ["nhan_vien", "/nv/xuat-nvl"],
-  ["nhan_vien", "/nv/xuat-tp"],
-  ["nhan_vien", "/nv/hoan-thanh"],
   ["nhan_vien", "/nv/ton-kho"],
 ];
 
@@ -57,14 +51,29 @@ for (const [role, path] of tabs) {
   });
 }
 
+for (const [route, id] of [["/nv/xuat-nvl", 1], ["/nv/xuat-tp", 2]]) {
+  test(`${route}: direct issue detail closes to its source request without listing or writing`, async ({ page }) => {
+    const state = await installApi(page, { role: "nhan_vien" });
+    await page.goto(`${route}/${id}`);
+    const dialog = page.getByRole("dialog", { name: "Chi tiết phiếu xuất" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Đóng", exact: true }).click();
+    await expect(page).toHaveURL(/\/nv\/yeu-cau\/2$/);
+    await expect(page.getByRole("dialog", { name: "Chi tiết yêu cầu" })).toBeVisible();
+    expect(state.calls.filter((call) => call.path === "phieu_xuat")).toHaveLength(0);
+    expect(state.calls.filter((call) => call.method !== "GET")).toHaveLength(0);
+  });
+}
+
 test("record modal supports keyboard navigation, Escape, and browser history", async ({ page }) => {
   await installApi(page, { role: "nhan_vien" });
-  await page.goto("/nv/lenh-sx");
-  const action = page.getByRole("link", { name: "Xem vật tư →" }).first();
+  await page.goto("/nv/yeu-cau");
+  const action = page.getByRole("link", { name: "Mở", exact: true }).first();
   await action.click();
-  const dialog = page.getByRole("dialog", { name: "Chi tiết lệnh sản xuất" });
+  const dialog = page.getByRole("dialog", { name: "Chi tiết yêu cầu" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: "Vật tư của lệnh" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: /YCSX-/ })).toBeVisible();
   for (let step = 0; step < 12; step += 1) {
     await page.keyboard.press("Tab");
     await expect
@@ -72,7 +81,7 @@ test("record modal supports keyboard navigation, Escape, and browser history", a
       .toBe(true);
   }
   await page.keyboard.press("Escape");
-  await expect(page).toHaveURL(/\/nv\/lenh-sx$/);
+  await expect(page).toHaveURL(/\/nv\/yeu-cau$/);
   await expect(dialog).toHaveCount(0);
   await expect(action).toBeFocused();
   await action.click();

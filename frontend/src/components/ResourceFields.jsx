@@ -1,7 +1,16 @@
 import { Field } from "./Field.jsx";
 import { Button } from "./Button.jsx";
 import { DataTable } from "./DataTable.jsx";
-import { itemName, ITEM_LABELS, STATUS_LABELS, money, number } from "../lib/format.js";
+import {
+  employeeLabel,
+  itemName,
+  ITEM_LABELS,
+  STATUS_LABELS,
+  money,
+  number,
+  unitLabel,
+} from "../lib/format.js";
+export { dateFilters } from "./filterFields.js";
 export const statusFilter = (statuses) => ({
   name: "trang_thai",
   label: "Trạng thái",
@@ -11,10 +20,6 @@ export const statusFilter = (statuses) => ({
     ...statuses.map((value) => ({ value, label: STATUS_LABELS[value] })),
   ],
 });
-export const dateFilters = [
-  { name: "tu_ngay", label: "Từ ngày", type: "date" },
-  { name: "den_ngay", label: "Đến ngày", type: "date" },
-];
 export function ItemSelect({ items = [], label = "Mặt hàng", value, onChange, types, ...props }) {
   const choices = items.filter(
     (item) =>
@@ -50,7 +55,7 @@ export function EmployeeSelect({
       <option value="">Chưa giao</option>
       {candidates.map((employee) => (
         <option key={employee.id} value={employee.id}>
-          {employee.ma_nhan_vien} · {employee.ho_ten || "Chưa có họ tên"}
+          {employeeLabel(employee)}
           {employee.trang_thai !== "hoat_dong" ? " (bị khóa)" : ""}
         </option>
       ))}
@@ -185,6 +190,7 @@ export function SavedLines({
   items = [],
   prices = false,
   caption = "Danh sách dòng mặt hàng",
+  units = false,
 }) {
   return (
     <DataTable
@@ -208,7 +214,9 @@ export function SavedLines({
           key: "so_luong",
           label: "Số lượng",
           numeric: true,
-          render: (line) => number(line.so_luong),
+          render: (line) => units
+            ? `${number(line.so_luong)} ${unitLabel(items.find((item) => item.id === line.mat_hang_id)?.don_vi_tinh) || ""}`
+            : number(line.so_luong),
         },
         ...(prices
           ? [

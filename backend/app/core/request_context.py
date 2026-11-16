@@ -13,6 +13,13 @@ def get_request_id(request: Request) -> str:
     return request_id
 
 
+async def reject_body(request: Request) -> None:
+    if await request.body():
+        raise RequestValidationError(
+            [{"loc": ("body",), "msg": "Request body is not permitted", "type": "extra_forbidden"}]
+        )
+
+
 def reject_query(request: Request) -> None:
     if request.query_params:
         raise RequestValidationError(
@@ -60,3 +67,15 @@ def get_if_match(
             ]
         )
     return if_match
+
+
+def get_strong_if_match(
+    request: Request,
+    if_match: Annotated[
+        str | None,
+        Header(description="Single strong ETag from GET detail, required at runtime (428)"),
+    ] = None,
+) -> str | None:
+    """Preserve multiple validators for the service's strict comparison (412)."""
+    values = request.headers.getlist("if-match")
+    return ", ".join(values) if values else if_match

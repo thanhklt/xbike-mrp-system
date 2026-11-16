@@ -95,20 +95,23 @@ test("admin does not inherit warehouse privileges", () => {
   );
   assert.equal(homeFor("unknown"), "/403");
 });
-test("employees can neither create issue documents nor edit someone else's completion", () => {
-  assert.equal(documentPermissions("issue", "nhan_vien", { trang_thai: "nhap" }, 3).create, false);
+test("only employees create issue documents and completion content stays immutable", () => {
+  assert.equal(documentPermissions("issue", "nhan_vien", undefined, 3).create, true);
+  assert.equal(documentPermissions("issue", "quan_ly", undefined, 2).create, false);
   assert.equal(
     documentPermissions("completion", "nhan_vien", { trang_thai: "nhap", nhan_vien_id: 4 }, 3).edit,
     false,
   );
 });
-test("posted documents stay immutable and rejected completion can return to draft", () => {
+test("posted documents stay immutable and rejected documents resend without returning to draft", () => {
   assert.equal(documentPermissions("issue", "quan_ly", { trang_thai: "da_duyet" }, 2).edit, false);
   assert.equal(
     documentPermissions("completion", "nhan_vien", { trang_thai: "tu_choi", nhan_vien_id: 3 }, 3)
       .returnDraft,
-    true,
+    false,
   );
+  assert.equal(documentPermissions("issue", "nhan_vien", { trang_thai: "tu_choi", nhan_vien_id: 3 }, 3).send, true);
+  assert.equal(documentPermissions("issue", "nhan_vien", { trang_thai: "nhap", nhan_vien_id: 3 }, 3, 4).send, false);
 });
 test("timestamps display in Vietnam time independently of browser or runner timezone", () => {
   assert.equal(localDateTime("2026-11-04T18:05:00Z"), "2026-11-05T01:05");

@@ -4,7 +4,7 @@ api_v1_str: "/api/v1"
 environment: "development"
 
 # Database
-database_url: "postgresql+asyncpg://xbike_admin:12345@localhost:5433/xbike_mrp"
+database_url: "postgresql+asyncpg://xbike_admin:12345@localhost:5432/xbike_mrp"
 
 # JWT Authentication
 secret_key: "super-secret-jwt-key-xbike-mrp-2026-production-ready-string-minimum-32-chars"

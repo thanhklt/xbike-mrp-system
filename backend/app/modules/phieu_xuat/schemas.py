@@ -1,4 +1,4 @@
-"""Contract v3 issue documents: quantities only on input, integer VND after posting."""
+"""Goods issue v4: source-only input and integer VND after posting."""
 
 import re
 from datetime import date, datetime, timezone
@@ -12,7 +12,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic.json_schema import SkipJsonSchema
 
 from app.modules.nhan_vien.schemas import ListResponseMeta, ResponseMeta
 
@@ -20,7 +19,7 @@ INT_MAX = 2**31 - 1
 MONEY_MAX = 2**63 - 1
 IssueId = Annotated[int, Field(strict=True, gt=0, le=INT_MAX)]
 IssueMoney = Annotated[int, Field(strict=True, ge=0, le=MONEY_MAX)]
-IssueType = Literal["xuat_vat_tu", "xuat_thanh_pham"]
+IssueType = Literal["xuat_linh_kien", "xuat_thanh_pham"]
 IssueState = Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"]
 
 
@@ -30,49 +29,10 @@ class ChiTietPhieuXuatCreate(BaseModel):
     so_luong: IssueId
 
 
-IssueLines = Annotated[list[ChiTietPhieuXuatCreate], Field(min_length=1)]
-
-
-def unique_lines(lines: list[ChiTietPhieuXuatCreate]) -> list[ChiTietPhieuXuatCreate]:
-    if len({line.mat_hang_id for line in lines}) != len(lines):
-        raise ValueError("Duplicate mat_hang_id")
-    return lines
-
-
 class PhieuXuatCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     loai_phieu: IssueType
-    lenh_san_xuat_id: IssueId | None = None
-    yeu_cau_san_xuat_id: IssueId | None = None
-    chi_tiet: IssueLines
-
-    @model_validator(mode="after")
-    def validate_source(self) -> Self:
-        material = self.loai_phieu == "xuat_vat_tu"
-        if material != (self.lenh_san_xuat_id is not None) or material == (
-            self.yeu_cau_san_xuat_id is not None
-        ):
-            raise ValueError("Exactly one source is required for loai_phieu")
-        return self
-
-    _unique = field_validator("chi_tiet")(unique_lines)
-
-
-class PhieuXuatPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    chi_tiet: IssueLines | SkipJsonSchema[None] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def reject_null(cls, value):
-        if isinstance(value, dict) and "chi_tiet" in value and value["chi_tiet"] is None:
-            raise ValueError("chi_tiet cannot be null")
-        return value
-
-    @field_validator("chi_tiet")
-    @classmethod
-    def check_unique(cls, value):
-        return unique_lines(value) if value is not None else value
+    yeu_cau_san_xuat_id: IssueId
 
 
 class EmptyInput(BaseModel):
@@ -97,17 +57,22 @@ class PhieuXuatRead(BaseModel):
     ma_phieu_xuat: str
     nhan_vien_id: int
     loai_phieu: IssueType
-    lenh_san_xuat_id: int | None
-    yeu_cau_san_xuat_id: int | None
+    yeu_cau_san_xuat_id: int
     tong_tien: IssueMoney | None
     trang_thai: IssueState
     created_at: datetime
+    updated_at: datetime
+    gui_at: datetime | None
+    nguoi_xu_ly_id: int | None
+    xu_ly_at: datetime | None
+    ly_do_tu_choi: str | None
+    phien_ban: int
     chi_tiet: list[ChiTietPhieuXuatRead]
 
-    @field_validator("created_at")
+    @field_validator("created_at", "updated_at", "gui_at", "xu_ly_at")
     @classmethod
     def utc_time(cls, value):
-        return value.astimezone(timezone.utc)
+        return value.astimezone(timezone.utc) if value is not None else None
 
 
 class PhieuXuatResponse(BaseModel):
@@ -141,7 +106,6 @@ class PhieuXuatQuery(BaseModel):
     loai_phieu: IssueType | None = None
     trang_thai: IssueState | None = None
     nhan_vien_id: int | None = Field(default=None, gt=0, le=INT_MAX)
-    lenh_san_xuat_id: int | None = Field(default=None, gt=0, le=INT_MAX)
     yeu_cau_san_xuat_id: int | None = Field(default=None, gt=0, le=INT_MAX)
     tu_ngay: date | None = None
     den_ngay: date | None = None

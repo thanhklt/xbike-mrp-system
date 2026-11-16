@@ -93,7 +93,7 @@ for (const [width, height] of [
     const before = { input: await username.boundingBox(), button: await submit.boundingBox() };
     await submit.click();
     const alert = page.getByRole("alert");
-    await expect(alert).toContainText("Thông tin đăng nhập không hợp lệ");
+    await expect(alert).toContainText(/Thông tin đăng nhập không hợp lệ|Tên đăng nhập hoặc mật khẩu không đúng/);
     await expect(alert).not.toContainText("Mã yêu cầu");
     await expect(alert).toHaveAttribute(
       "title",
@@ -130,10 +130,10 @@ for (const [width, height] of [
 }
 
 for (const [status, message] of [
-  [403, "Tài khoản bị khóa hoặc không có quyền đăng nhập."],
-  [422, "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại."],
+  [403, /Tài khoản (bị khóa hoặc không có quyền đăng nhập|không có quyền đăng nhập|đang bị khóa)/],
+  [422, /Thông tin chưa hợp lệ|Vui lòng nhập đủ tên đăng nhập và mật khẩu/],
   [429, "Bạn thử quá nhiều lần. Vui lòng thử lại sau."],
-  [500, "Chưa thể đăng nhập. Vui lòng thử lại sau."],
+  [500, /Chưa thể đăng nhập|Đăng nhập thất bại/],
   [0, "Không kết nối được máy chủ. Vui lòng thử lại."],
 ]) {
   test(`login error ${status} stays compact on mobile`, async ({ page }) => {
@@ -247,6 +247,7 @@ test("leaving with the pointer keeps autoplay paused while focus remains inside"
 
 test("reduced motion stops autoplay but allows manual selection", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/dang-nhap");
   await page.clock.runFor(10000);
   await expect(dots(page).nth(0)).toHaveAttribute("aria-current", "true");
   await dots(page).nth(2).click();

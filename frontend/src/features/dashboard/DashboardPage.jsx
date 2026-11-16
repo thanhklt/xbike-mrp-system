@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ban, BarChart3, CalendarDays, CircleCheck, ClipboardList, Factory, FileCheck, Info, Layers, PieChart, Users } from "lucide-react";
+import { Ban, BarChart3, CircleCheck, Info, Layers, PieChart, Users } from "lucide-react";
 import { API } from "../../lib/api/endpoints.js";
 import { useChoices, useResource } from "../../lib/api/useResources.js";
 import { formatAuditAction, formatAuditDetail } from "./auditFormat.js";
@@ -13,6 +13,7 @@ import {
   formatAuditTime,
   itemName,
   number,
+  unitLabel,
 } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Card } from "../../components/Card.jsx";
@@ -29,16 +30,13 @@ export function DashboardPage() {
   return <EmployeeDashboard />;
 }
 
-function Metric({ label, path, params, href, description, icon: Icon, className = "metric" }) {
+function Metric({ label, path, params, href }) {
   const query = useResource(path, { page: 1, page_size: 1, ...params });
   return (
-    <Link className={className} to={href}>
-      {Icon && <Icon size={19} aria-hidden="true" />}
+    <Link className="metric" to={href}>
       <span>{label}</span>
       <strong>{query.isError || query.isPending ? "—" : number(query.data?.meta.total)}</strong>
-      {(query.isError || description) && (
-        <small>{query.isError ? "Không tải được số liệu" : description}</small>
-      )}
+      {query.isError && <small>Không tải được số liệu</small>}
     </Link>
   );
 }
@@ -498,12 +496,15 @@ function AdminDashboard() {
             </table>
           </div>
         </QueryState>
+        {/* UC-43 Xem lịch sử thao tác — Main 1: lối vào lịch sử cho Quản trị viên (specs/use_cases/audit/UC-43.md) */}
+        <div className="actions actions-end">
+          <Link to="/admin/lich-su">Xem tất cả →</Link>
+        </div>
       </section>
     </div>
   );
 }
 function WarehouseDashboard() {
-  const pending = useResource(API.completions, { page: 1, page_size: 5, trang_thai: "cho_duyet" });
   return (
     <>
       <PageHeader
@@ -528,45 +529,69 @@ function WarehouseDashboard() {
           href="/kho/yeu-cau"
         />
         <Metric
-          label="Lệnh đang thực hiện"
-          path={API.orders}
-          params={{ trang_thai: "dang_thuc_hien" }}
-          href="/kho/lenh-sx"
-        />
-        <Metric
-          label="Chờ bổ sung vật tư"
+          label="Yêu cầu đang thực hiện"
           path={API.requests}
-          params={{ trang_thai: "cho_bo_sung_vat_tu" }}
+          params={{ trang_thai: "dang_thuc_hien" }}
           href="/kho/yeu-cau"
         />
         <Metric
-          label="Hoàn thành chờ duyệt"
-          path={API.completions}
-          params={{ trang_thai: "cho_duyet" }}
-          href="/kho/duyet-hoan-thanh"
+          label="Chờ bổ sung linh kiện"
+          path={API.requests}
+          params={{ trang_thai: "cho_bo_sung_linh_kien" }}
+          href="/kho/yeu-cau"
         />
       </div>
-      <Card
-        title="Chứng từ hoàn thành cần duyệt"
-        action={<Link to="/kho/duyet-hoan-thanh">Xem tất cả →</Link>}
-      >
-        <QueryState query={pending}>
+      <div className="dashboard-columns">
+        <QuickStock />
+        <RecentAudit />
+      </div>
+    </>
+  );
+}
+function EmployeeDashboard() {
+  // Lọc "chưa bắt đầu" ở FE nên đọc đủ trang tối đa rồi mới cắt 5 dòng, tránh báo rỗng sai.
+  const requests = useResource(API.requests, { page: 1, page_size: 100, trang_thai: "dang_thuc_hien" });
+  const items = useResource(API.catalog);
+  return (
+    <div className="employee-overview">
+      <PageHeader
+        title="Tổng quan"
+        subtitle="Yêu cầu sản xuất được giao và công việc cần theo dõi."
+      />
+      <div className="metrics employee-stats">
+        <Metric label="Yêu cầu được giao" path={API.requests} href="/nv/yeu-cau" />
+        <Metric
+          label="Yêu cầu đã giao"
+          path={API.requests}
+          params={{ trang_thai: "da_gui" }}
+          href="/nv/yeu-cau"
+        />
+        <Metric
+          label="Đang thực hiện"
+          path={API.requests}
+          params={{ trang_thai: "dang_thuc_hien" }}
+          href="/nv/yeu-cau"
+        />
+      </div>
+      <Card title="Yêu cầu chờ bắt đầu sản xuất" action={<Link to="/nv/yeu-cau">Xem yêu cầu của tôi</Link>}>
+        <QueryState query={requests}>
           <DataTable
-            rows={pending.data?.data}
-            empty="Không có chứng từ hoàn thành chờ duyệt."
+            rows={requests.data?.data
+              ?.filter((row) => !row.started_at && row.so_luong_can_san_xuat > 0)
+              .slice(0, 5)}
+            empty="Không có yêu cầu chờ bắt đầu sản xuất."
             columns={[
-              { key: "ma_phieu", label: "Chứng từ" },
               {
-                key: "lenh_san_xuat_id",
-                label: "Lệnh sản xuất",
-                render: (row) => `#${row.lenh_san_xuat_id}`,
+                key: "ma_yeu_cau_san_xuat",
+                label: "Mã yêu cầu",
+                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>{row.ma_yeu_cau_san_xuat}</Link>,
               },
-              { key: "so_luong_hoan_thanh", label: "Số lượng", numeric: true },
               {
-                key: "finish_time",
-                label: "Hoàn thành lúc",
-                render: (row) => dateTime(row.finish_time),
+                key: "mat_hang_id",
+                label: "Thành phẩm",
+                render: (row) => itemName(items.data?.data, row.mat_hang_id),
               },
+              { key: "so_luong_can_san_xuat", label: "Số cần sản xuất", numeric: true },
               {
                 key: "trang_thai",
                 label: "Trạng thái",
@@ -575,7 +600,7 @@ function WarehouseDashboard() {
               {
                 key: "action",
                 label: "Thao tác",
-                render: (row) => <Link to={`/kho/duyet-hoan-thanh/${row.id}`}>Xem & duyệt →</Link>,
+                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Mở</Link>,
               },
             ]}
           />
@@ -583,217 +608,16 @@ function WarehouseDashboard() {
       </Card>
       <div className="dashboard-columns">
         <QuickStock />
-        <RecentAudit />
-      </div>
-    </>
-  );
-}
-const employeeRequestTabs = [
-  ["all", "Tất cả"],
-  ["production", "Cần sản xuất"],
-  ["pending", "Chờ duyệt chứng từ"],
-];
-
-function EmployeeDashboard() {
-  const [requestTab, setRequestTab] = useState("all");
-  const requests = useResource(API.requests, { page: 1, page_size: 6, sort: "-created_at" });
-  const pendingDocuments = useChoices(
-    API.completions,
-    { trang_thai: "cho_duyet" },
-    requestTab === "pending",
-  );
-  const orders = useResource(API.orders, { page: 1, page_size: 3, trang_thai: "da_gui", sort: "-created_at" });
-  const pendingMaterials = useResource(API.requests, {
-    page: 1,
-    page_size: 1,
-    trang_thai: "cho_bo_sung_vat_tu",
-  });
-  const recent = useResource(API.completions, { page: 1, page_size: 4, sort: "-id" });
-  const items = useChoices(API.items);
-  const catalog = items.data || [];
-  const product = (id) => catalog.find((item) => item.id === id);
-  const requestRows = requests.data?.data || [];
-  const pendingOrderIds = new Set(pendingDocuments.data?.map((document) => document.lenh_san_xuat_id));
-  const filteredRequests = requestTab === "production"
-    ? requestRows.filter((request) => ["da_gui", "cho_bo_sung_vat_tu", "dang_thuc_hien"].includes(request.trang_thai))
-    : requestTab === "pending"
-      ? requestRows.filter((request) => request.lenh_san_xuat_ids?.some((id) => pendingOrderIds.has(id)))
-      : requestRows;
-  function moveRequestTab(event) {
-    const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')];
-    const index = tabs.indexOf(document.activeElement);
-    let next = index;
-    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
-    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = tabs.length - 1;
-    else return;
-    event.preventDefault();
-    setRequestTab(employeeRequestTabs[next][0]);
-    tabs[next].focus();
-  }
-  return (
-    <div className="employee-dashboard">
-      <PageHeader
-        title="Tổng quan công việc"
-        subtitle="Yêu cầu được giao, lệnh sản xuất và chứng từ cần theo dõi."
-        action={
-          <>
-            <span className="employee-current-date">
-              <CalendarDays size={16} aria-hidden="true" />
-              {new Intl.DateTimeFormat("vi-VN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date())}
-            </span>
-            <Link className="btn btn-primary" to="/nv/hoan-thanh/moi">
-              Tạo chứng từ hoàn thành SX
-            </Link>
-          </>
-        }
-      />
-      <div className="employee-stats" aria-label="Số liệu công việc">
-        <Metric
-          label="Yêu cầu phụ trách"
-          path={API.requests}
-          href="/nv/yeu-cau"
-          description="Theo dõi yêu cầu được giao"
-          icon={ClipboardList}
-          className="employee-stat-card"
-        />
-        <Metric
-          label="Lệnh đã giao"
-          path={API.orders}
-          params={{ trang_thai: "da_gui" }}
-          href="/nv/lenh-sx"
-          description="Lệnh chờ bắt đầu"
-          icon={Factory}
-          className="employee-stat-card"
-        />
-        <Metric
-          label="Đang thực hiện"
-          path={API.orders}
-          params={{ trang_thai: "dang_thuc_hien" }}
-          href="/nv/lenh-sx"
-          description="Công việc đang sản xuất"
-          icon={Factory}
-          className="employee-stat-card"
-        />
-        <Metric
-          label="Hoàn thành chờ duyệt"
-          path={API.completions}
-          params={{ trang_thai: "cho_duyet" }}
-          href="/nv/hoan-thanh"
-          description="Chờ quản lý ghi nhận đầu ra"
-          icon={FileCheck}
-          className="employee-stat-card"
-        />
-      </div>
-      <div className="employee-dashboard-grid">
-        <Card
-          title={<>Yêu cầu sản xuất được giao <span className="employee-count">{requests.data?.meta.total ?? "—"}</span></>}
-          action={<Link to="/nv/yeu-cau">Xem tất cả →</Link>}
-        >
-          <p className="employee-card-intro">Theo dõi yêu cầu được phân công. Các tab lọc trong những dòng đang hiển thị.</p>
-          <div className="tabs" role="tablist" aria-label="Lọc yêu cầu sản xuất đang hiển thị" onKeyDown={moveRequestTab}>
-            {employeeRequestTabs.map(([value, label]) => (
-              <button
-                key={value}
-                id={`employee-request-tab-${value}`}
-                type="button"
-                role="tab"
-                aria-selected={requestTab === value}
-                aria-controls="employee-request-panel"
-                tabIndex={requestTab === value ? 0 : -1}
-                onClick={() => setRequestTab(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div id="employee-request-panel" role="tabpanel" aria-labelledby={`employee-request-tab-${requestTab}`}>
-            <QueryState query={requests}>
-              {requestTab === "pending" && (pendingDocuments.isPending || pendingDocuments.isError) ? (
-                <QueryState query={pendingDocuments} />
-              ) : <DataTable
-              caption="Yêu cầu sản xuất được giao"
-              rows={filteredRequests}
-              empty={requestTab === "all" ? "Không có yêu cầu được giao." : "Không có yêu cầu phù hợp trong các dòng đang hiển thị."}
-              columns={[
-                {
-                  key: "ma_yeu_cau_san_xuat",
-                  label: "Yêu cầu / Thành phẩm",
-                  render: (row) => (
-                    <>
-                      <Link to={`/nv/yeu-cau/${row.id}`}>{row.ma_yeu_cau_san_xuat}</Link>
-                      <small>{itemName(catalog, row.mat_hang_id)}</small>
-                    </>
-                  ),
-                },
-                { key: "so_luong", label: "SL yêu cầu", numeric: true },
-                {
-                  key: "so_luong_ton",
-                  label: "Tồn hiện có",
-                  numeric: true,
-                  render: (row) => product(row.mat_hang_id) ? number(product(row.mat_hang_id).so_luong_ton) : "—",
-                },
-                { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
-                { key: "action", label: "Thao tác", render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Theo dõi →</Link> },
-              ]}
-              />}
-            </QueryState>
+        <Card title="Theo dõi công việc">
+          <div className="stack">
+            <p className="muted">
+              Mở yêu cầu được giao để kiểm tra linh kiện, bắt đầu sản xuất và lập chứng từ hoặc phiếu xuất.
+              Quản lý kho duyệt các phiếu đã gửi.
+            </p>
+            <Link to="/nv/yeu-cau">Xem việc được giao</Link>
           </div>
         </Card>
-        <div className="employee-sidepanels">
-          <Card title="Việc tiếp theo">
-            <QueryState query={orders}>
-              <div className="employee-task">
-                <strong>{number(orders.data?.meta.total || 0)} lệnh chờ bắt đầu</strong>
-                <p>Kiểm tra vật tư trước khi bắt đầu sản xuất.</p>
-                {orders.data?.data.length > 0 && (
-                  <ul className="employee-task-list">
-                    {orders.data.data.map((order) => (
-                      <li key={order.id}>
-                        <Link to={`/nv/lenh-sx/${order.id}`}>{order.ma_lenh_san_xuat} →</Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <Link to="/nv/lenh-sx">Xem tất cả lệnh →</Link>
-              </div>
-            </QueryState>
-            <Link to="/nv/phieu-xuat">Tra cứu phiếu xuất liên quan →</Link>
-          </Card>
-          <Card title="Cảnh báo vật tư">
-            <QueryState query={pendingMaterials}>
-              <div className="employee-task">
-                <strong>{number(pendingMaterials.data?.meta.total || 0)} yêu cầu chờ bổ sung vật tư</strong>
-                <p>{pendingMaterials.data?.data.length
-                  ? `${itemName(catalog, pendingMaterials.data.data[0].mat_hang_id)} đang chờ vật tư theo kế hoạch đã chốt.`
-                  : "Không có yêu cầu chờ bổ sung vật tư."}</p>
-                <Link to={pendingMaterials.data?.data.length
-                  ? `/nv/yeu-cau/${pendingMaterials.data.data[0].id}`
-                  : "/nv/yeu-cau"}>Xem yêu cầu →</Link>
-              </div>
-            </QueryState>
-          </Card>
-          <QuickStock />
-        </div>
       </div>
-      <Card title="Chứng từ gần đây" action={<Link to="/nv/hoan-thanh">Xem tất cả →</Link>}>
-        <QueryState query={recent}>
-          <DataTable
-            caption="Chứng từ hoàn thành gần đây"
-            rows={recent.data?.data}
-            empty="Chưa có chứng từ hoàn thành."
-            columns={[
-              { key: "ma_phieu", label: "Chứng từ / Lệnh", render: (row) => <><Link to={`/nv/hoan-thanh/${row.id}`}>{row.ma_phieu}</Link><small>LSX #{row.lenh_san_xuat_id}</small></> },
-              { key: "mat_hang_id", label: "Thành phẩm", render: (row) => itemName(catalog, row.mat_hang_id) },
-              { key: "created_at", label: "Ngày tạo", render: (row) => dateTime(row.created_at) },
-              { key: "so_luong_hoan_thanh", label: "Số lượng", numeric: true },
-              { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
-              { key: "action", label: "Thao tác", render: (row) => <Link to={`/nv/hoan-thanh/${row.id}`}>Xem chi tiết →</Link> },
-            ]}
-          />
-        </QueryState>
-      </Card>
     </div>
   );
 }
@@ -831,7 +655,7 @@ function QuickStock() {
                   <small>{item.ma_mat_hang}</small>
                 </div>
                 <strong>
-                  {number(item.so_luong_ton)} {item.don_vi_tinh}
+                  {number(item.so_luong_ton)} {unitLabel(item.don_vi_tinh)}
                 </strong>
               </div>
             ))

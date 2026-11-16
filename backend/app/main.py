@@ -12,7 +12,6 @@ from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
 from app.modules.dieu_chinh_kho.router import router as dieu_chinh_kho_router
 from app.modules.dieu_chinh_kho.router import ticket_router
-from app.modules.inventory.router import router as inventory_router
 from app.modules.luu_luong.middleware import dem_luu_luong
 from app.modules.luu_luong.recorder import LuuLuongRecorder
 from app.modules.luu_luong.router import router as luu_luong_router
@@ -24,7 +23,12 @@ from app.modules.nhan_vien.router import router as nhan_vien_router
 from app.modules.nhan_vien.router import vai_tro_router
 from app.modules.phieu_nhap.router import router as phieu_nhap_router
 from app.modules.phieu_xuat.router import router as phieu_xuat_router
-from app.modules.san_xuat.router import chung_tu_router, lenh_sx_router, yeu_cau_sx_router
+from app.modules.reporting.router import router as reporting_router
+from app.modules.san_xuat.router import (
+    chung_tu_hoan_thanh_router,
+    nhu_cau_bo_sung_router,
+    yeu_cau_sx_router,
+)
 
 
 @asynccontextmanager
@@ -115,13 +119,13 @@ app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(vai_tro_router, prefix=api_v1_prefix)
 app.include_router(nha_cung_cap_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
-app.include_router(inventory_router, prefix=api_v1_prefix)
+app.include_router(reporting_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(phieu_nhap_router, prefix=api_v1_prefix)
 app.include_router(phieu_xuat_router, prefix=api_v1_prefix)
 app.include_router(yeu_cau_sx_router, prefix=api_v1_prefix)
-app.include_router(lenh_sx_router, prefix=api_v1_prefix)
-app.include_router(chung_tu_router, prefix=api_v1_prefix)
+app.include_router(chung_tu_hoan_thanh_router, prefix=api_v1_prefix)
+app.include_router(nhu_cau_bo_sung_router, prefix=api_v1_prefix)
 app.include_router(audit_router, prefix=api_v1_prefix)
 app.include_router(luu_luong_router, prefix=api_v1_prefix)
 app.include_router(ticket_router, prefix=api_v1_prefix)

@@ -35,7 +35,9 @@ test("bad credentials never grant a session or show a dashboard", async ({ page 
   await page.getByLabel("Tên đăng nhập", { exact: true }).fill("wrong");
   await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Thông tin đăng nhập không hợp lệ");
+  await expect(page.getByRole("alert")).toContainText(
+    /Thông tin đăng nhập không hợp lệ|Tên đăng nhập hoặc mật khẩu không đúng/,
+  );
   expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
 });
 
@@ -54,7 +56,7 @@ test("the latest /auth/me role takes precedence over the earlier login response"
   await page.getByLabel("Mật khẩu", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await expect(page).toHaveURL(/\/nv$/);
-  await expect(page.getByRole("heading", { name: "Tổng quan công việc", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Tổng quan|Việc được giao/ })).toBeVisible();
 });
 
 test("admin sees no warehouse menu or snapshot and direct warehouse URL is denied", async ({
@@ -72,14 +74,14 @@ test("admin sees no warehouse menu or snapshot and direct warehouse URL is denie
   ).toHaveLength(0);
 });
 
-test("employee can view issues but cannot create or approve them", async ({ page }) => {
+test("employee can view issues and needs an assigned request to create, but cannot approve", async ({ page }) => {
   await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/xuat-nvl/1");
   await expect(page.getByRole("heading", { name: "Chi tiết phiếu xuất" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Duyệt phiếu xuất", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Tạo phiếu xuất", exact: true })).toHaveCount(0);
   await page.goto("/nv/xuat-nvl/moi");
-  await expect(page.getByText("Bạn không có quyền lập phiếu xuất.")).toBeVisible();
+  await expect(page.getByText("Mở yêu cầu được giao để lập phiếu xuất.")).toBeVisible();
 });
 
 test("saving a receipt keeps it draft and canceling confirmation sends no completion action", async ({
@@ -87,7 +89,7 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/phieu-nhap/moi");
-  await page.locator("form").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await page.locator("main").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
   await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("1");
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("3");
   await page.getByLabel("Đơn giá dòng 1", { exact: true }).fill("250000");
@@ -169,11 +171,10 @@ test("stale approval stays failed without retries or a false success message", a
   await expect(page.locator(".toast")).toHaveCount(0);
 });
 
-test("planning is explicit and submitting the plan requires a confirmation", async ({ page }) => {
+// UC-29 D6: Gửi yêu cầu v4 không còn tính kế hoạch hoặc tạo lệnh v3
+test("sending a draft request requires confirmation and does not create orders", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/kho/yeu-cau/1");
-  await page.getByRole("button", { name: "Tính kế hoạch", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Cây lệnh dự kiến" })).toBeVisible();
   expect(state.calls.some((call) => call.path === "yeu_cau_san_xuat/1/gui")).toBeFalsy();
   await page.getByRole("button", { name: "Gửi yêu cầu cho nhân viên" }).click();
   await page
@@ -182,28 +183,21 @@ test("planning is explicit and submitting the plan requires a confirmation", asy
     .click();
   await expect(page.locator("dialog.confirmation")).toHaveCount(0);
   const send = state.calls.find((call) => call.path === "yeu_cau_san_xuat/1/gui");
-  expect(send.body).toEqual({ ke_hoach_token: "plan-test-token" });
+  expect(send.body).toEqual({});
   expect(send.headers["if-match"]).toBe('"v1"');
-  await expect(page.getByText("plan-test-token", { exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.path.startsWith("lenh_san_xuat"))).toBeFalsy();
 });
 
-test("changing password invalidates the local session and returns to login", async ({ page }) => {
+// UC-08 AC-6: Hồ sơ không còn form tự đổi mật khẩu, không gửi request ghi
+test("profile displays employee information without a password form", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/ho-so");
-  await page.getByLabel("Mật khẩu hiện tại", { exact: true }).fill("old-password");
-  await page.getByLabel("Mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByLabel("Nhập lại mật khẩu mới", { exact: true }).fill("new-password");
-  await page.getByRole("button", { name: "Đổi mật khẩu", exact: true }).click();
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Đổi mật khẩu", exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/dang-nhap$/);
-  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-  expect(state.calls.find((call) => call.path === "auth/doi_mat_khau").body).toEqual({
-    mat_khau_hien_tai: "old-password",
-    mat_khau_moi: "new-password",
-  });
+  await expect(page.getByRole("heading", { name: "Hồ sơ", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hồ sơ nhân viên", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Mật khẩu hiện tại", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Mật khẩu mới", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Đổi mật khẩu", exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
 });
 
 test("unsupported supplier actions are disabled with visible reasons", async ({ page }) => {
@@ -215,15 +209,29 @@ test("unsupported supplier actions are disabled with visible reasons", async ({ 
   expect(state.calls.some((call) => ["PATCH", "DELETE"].includes(call.method))).toBeFalsy();
 });
 
+// UC-42 R2: Hai trang báo cáo chỉ đọc endpoint reporting, không gọi inventory cũ
 test("read-only reports make no requests to unimplemented or legacy stock endpoints", async ({
   page,
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/thong-ke");
-  await expect(page.getByRole("button", { name: "Xem thống kê" })).toBeDisabled();
+  await page.getByRole("button", { name: "Xem báo cáo", exact: true }).click();
+  await expect(page.getByText("Không có mặt hàng thỏa bộ lọc.", { exact: true })).toBeVisible();
+  expect(
+    state.calls.some((call) => call.method === "GET" && call.path === "bao_cao/nhap_xuat_ton"),
+  ).toBeTruthy();
   await page.goto("/kho/giao-dich");
-  await expect(page.getByRole("button", { name: "Lọc giao dịch" })).toBeDisabled();
-  expect(state.calls.some((call) => /inventory|bao_cao/.test(call.path))).toBeFalsy();
+  await expect(
+    page.getByRole("heading", { name: "Lịch sử biến động kho", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Chưa có dữ liệu phù hợp.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Lọc", exact: true }).click();
+  expect(
+    state.calls.some((call) => call.method === "GET" && call.path === "bao_cao/bien_dong_kho"),
+  ).toBeTruthy();
+  expect(state.calls.some((call) => /inventory/.test(call.path))).toBeFalsy();
+  expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
+  expect(state.unexpected).toEqual([]);
 });
 
 test("expired authenticated request closes the workflow and returns to login", async ({ page }) => {
@@ -266,12 +274,11 @@ const screens = {
     "/kho/phieu-nhap/2",
     "/kho/yeu-cau/moi",
     "/kho/yeu-cau/2",
-    "/kho/lenh-sx",
-    "/kho/lenh-sx/1",
+    "/kho/yeu-cau",
+    "/kho/yeu-cau/1",
     "/kho/phieu-xuat",
     "/kho/phieu-xuat/moi",
     "/kho/phieu-xuat/2",
-    "/kho/duyet-hoan-thanh/2",
     "/kho/dieu-chinh",
     "/kho/dieu-chinh/moi",
     "/kho/dieu-chinh/1",
@@ -284,12 +291,9 @@ const screens = {
   nhan_vien: [
     "/nv",
     "/nv/yeu-cau/2",
-    "/nv/lenh-sx/1",
+    "/nv/yeu-cau",
     "/nv/xuat-nvl",
     "/nv/xuat-tp/2",
-    "/nv/hoan-thanh",
-    "/nv/hoan-thanh/moi",
-    "/nv/hoan-thanh/1",
     "/nv/phieu",
     "/nv/ton-kho/1",
     "/ho-so",

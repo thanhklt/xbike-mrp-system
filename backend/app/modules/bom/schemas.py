@@ -1,39 +1,49 @@
-"""BOM contract v2 with the SCD2 decisions recorded in docs/DECISION.md."""
+"""UC-15–19 DTOs: immutable one-level formulas (specs/use_cases/bom)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-BomSort = Literal["id", "-id", "version", "-version", "start_time", "-start_time"]
+BomSort = Literal[
+    "id",
+    "-id",
+    "version",
+    "-version",
+    "created_at",
+    "-created_at",
+    "kich_hoat_gan_nhat_at",
+    "-kich_hoat_gan_nhat_at",
+]
 
 
 class ChiTietBomInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mat_hang_id: int = Field(gt=0)
-    so_luong: int = Field(gt=0)
+    mat_hang_id: int = Field(strict=True, gt=0, le=2**31 - 1)
+    so_luong: int = Field(strict=True, gt=0, le=2**31 - 1)
 
 
-class BomCreate(BaseModel):
+class BomFormula(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mat_hang_id: int = Field(gt=0)
     chi_tiet: list[ChiTietBomInput] = Field(min_length=1)
 
     @field_validator("chi_tiet")
     @classmethod
-    def validate_components(
-        cls, components: list[ChiTietBomInput], info: ValidationInfo
-    ) -> list[ChiTietBomInput]:
+    def validate_components(cls, components: list[ChiTietBomInput]) -> list[ChiTietBomInput]:
         seen: set[int] = set()
         for index, component in enumerate(components):
             if component.mat_hang_id in seen:
                 raise ValueError(f"Dòng {index}: mat_hang_id trùng thành phần trước đó")
-            if component.mat_hang_id == info.data.get("mat_hang_id"):
-                raise ValueError(f"Dòng {index}: thành phần không được trùng mặt hàng đầu ra")
             seen.add(component.mat_hang_id)
         return components
+
+
+class BomCreate(BomFormula):
+    """Internal DTO retained for callers; no standalone HTTP create-v1 endpoint."""
+
+    mat_hang_id: int = Field(strict=True, gt=0, le=2**31 - 1)
 
 
 class KichHoatBomInput(BaseModel):
@@ -45,8 +55,8 @@ class BomListQuery(BaseModel):
 
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
-    mat_hang_id: int | None = Field(default=None, gt=0)
-    version: int | None = Field(default=None, gt=0)
+    mat_hang_id: int | None = Field(default=None, gt=0, le=2**31 - 1)
+    version: int | None = Field(default=None, gt=0, le=2**31 - 1)
     is_active: bool | None = None
     sort: BomSort = "id"
 
@@ -63,11 +73,16 @@ class BomRead(BaseModel):
     id: int
     mat_hang_id: int
     version: int
-    start_time: datetime | None
-    end_time: datetime | None
+    created_at: AwareDatetime
+    kich_hoat_gan_nhat_at: AwareDatetime
     is_active: bool
     da_duoc_su_dung: bool
     chi_tiet: list[ChiTietBomRead]
+
+    @field_validator("created_at", "kich_hoat_gan_nhat_at")
+    @classmethod
+    def utc_time(cls, value: datetime) -> datetime:
+        return value.astimezone(timezone.utc)
 
 
 class BomTreeNode(BaseModel):

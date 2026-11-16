@@ -9,6 +9,8 @@ export const ITEM_LABELS = {
   ban_thanh_pham: "Bán thành phẩm",
   thanh_pham: "Thành phẩm",
 };
+const UNIT_LABELS = { cai: "cái", bo: "bộ", chiec: "chiếc" };
+export const unitLabel = (value) => Object.hasOwn(UNIT_LABELS, value) ? UNIT_LABELS[value] : value;
 export const STATUS_LABELS = {
   nhap: "Bản nháp",
   da_gui: "Đã giao",
@@ -18,7 +20,7 @@ export const STATUS_LABELS = {
   da_duyet: "Đã duyệt",
   tu_choi: "Từ chối",
   da_huy: "Đã hủy",
-  cho_bo_sung_vat_tu: "Chờ bổ sung vật tư",
+  cho_bo_sung_linh_kien: "Chờ bổ sung linh kiện",
   da_xac_nhan: "Đã xác nhận",
   loi: "Lỗi",
   cho_xu_ly: "Chờ xử lý",
@@ -31,6 +33,8 @@ export const number = (value) =>
   value === null || value === undefined ? "—" : new Intl.NumberFormat("vi-VN").format(value);
 export const money = (value) =>
   value === null || value === undefined ? "Chưa chốt" : `${number(value)} ₫`;
+export const employeeLabel = (employee) =>
+  `${employee.ma_nhan_vien} · ${employee.ho_ten || "Chưa có họ tên"}`;
 export function dateTime(value) {
   if (!value) return "—";
   const instant = new Date(value);

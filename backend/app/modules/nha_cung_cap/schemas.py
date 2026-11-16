@@ -2,31 +2,46 @@
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 
 SupplierSort = Literal["id", "-id", "ma_ncc", "-ma_ncc", "ten_ncc", "-ten_ncc"]
 
 
-def require_nonzero_supplier_code(value: str) -> str:
-    if value == "NCC-000000":
-        raise ValueError("Supplier code must be NCC-000001 through NCC-999999")
+def nonblank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Supplier information must not be blank")
     return value
 
 
-SupplierCode = Annotated[
-    str, Field(pattern=r"^NCC-[0-9]{6}$"), AfterValidator(require_nonzero_supplier_code)
-]
+SupplierText = Annotated[str, Field(min_length=1), AfterValidator(nonblank)]
 
 
 class NhaCungCapCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    ma_ncc: SupplierCode
-    ten_ncc: str = Field(min_length=1)
-    so_dien_thoai: str | None = None
-    dia_chi: str | None = None
-    phuong: str | None = None
-    tinh: str | None = None
+    ten_ncc: SupplierText
+    so_dien_thoai: SupplierText
+    dia_chi: SupplierText
+    phuong: SupplierText
+    tinh: SupplierText
+
+
+class NhaCungCapPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ten_ncc: SupplierText | SkipJsonSchema[None] = None
+    so_dien_thoai: SupplierText | SkipJsonSchema[None] = None
+    dia_chi: SupplierText | SkipJsonSchema[None] = None
+    phuong: SupplierText | SkipJsonSchema[None] = None
+    tinh: SupplierText | SkipJsonSchema[None] = None
+
+    @field_validator("ten_ncc", "so_dien_thoai", "dia_chi", "phuong", "tinh")
+    @classmethod
+    def reject_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Supplier information must not be null")
+        return value
 
 
 class NhaCungCapListQuery(BaseModel):
@@ -39,21 +54,26 @@ class NhaCungCapListQuery(BaseModel):
     phuong: str | None = None
     sort: SupplierSort = "id"
 
+    @field_validator("q", "tinh", "phuong")
+    @classmethod
+    def normalize_filter(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
+
 
 class SupplierResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     ma_ncc: str
-    ten_ncc: str | None
-    so_dien_thoai: str | None
-    dia_chi: str | None
-    phuong: str | None
-    tinh: str | None
+    ten_ncc: str
+    so_dien_thoai: str
+    dia_chi: str
+    phuong: str
+    tinh: str
 
 
 class NhaCungCapRead(SupplierResponse):
-    """Legacy rows may have no supplier name, as explicitly agreed for GET."""
+    """Current supplier information, Catalog UC-13/44."""
 
 
 class ResponseMeta(BaseModel):

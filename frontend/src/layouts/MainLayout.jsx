@@ -22,38 +22,23 @@ function adminBreadcrumbs(pathname) {
   }
   if (pathname === "/admin/tai-khoan") return [{ label: "Quản lý tài khoản" }];
   if (pathname === "/admin/vai-tro") return [{ label: "Quản lý vai trò" }];
+  if (pathname.startsWith("/admin/lich-su/")) {
+    return [
+      { label: "Lịch sử thao tác", to: "/admin/lich-su" },
+      { label: "Chi tiết lịch sử" },
+    ];
+  }
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
-  if (pathname === "/ho-so") return [{ label: "Hồ sơ & đổi mật khẩu" }];
+  if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
 }
 
 function employeeBreadcrumbs(pathname) {
-  if (pathname === "/nv/yeu-cau") return [{ label: "Yêu cầu sản xuất" }];
+  if (pathname === "/nv/yeu-cau") return [{ label: "Việc được giao" }];
   if (pathname.startsWith("/nv/yeu-cau/")) {
     return [
-      { label: "Yêu cầu sản xuất", to: "/nv/yeu-cau" },
+      { label: "Việc được giao", to: "/nv/yeu-cau" },
       { label: "Chi tiết yêu cầu" },
-    ];
-  }
-  if (pathname === "/nv/lenh-sx") return [{ label: "Lệnh sản xuất" }];
-  if (pathname.startsWith("/nv/lenh-sx/")) {
-    return [
-      { label: "Lệnh sản xuất", to: "/nv/lenh-sx" },
-      { label: "Chi tiết lệnh" },
-    ];
-  }
-  if (pathname === "/nv/hoan-thanh") return [{ label: "Chứng từ hoàn thành" }];
-  if (pathname.startsWith("/nv/hoan-thanh/")) {
-    return [
-      { label: "Chứng từ hoàn thành", to: "/nv/hoan-thanh" },
-      { label: pathname.endsWith("/moi") ? "Tạo chứng từ" : "Chi tiết chứng từ" },
-    ];
-  }
-  if (pathname === "/nv/phieu-xuat") return [{ label: "Tra cứu phiếu xuất" }];
-  if (pathname.startsWith("/nv/phieu-xuat/")) {
-    return [
-      { label: "Tra cứu phiếu xuất", to: "/nv/phieu-xuat" },
-      { label: "Chi tiết phiếu xuất" },
     ];
   }
   if (pathname === "/nv/ton-kho") return [{ label: "Tra cứu tồn kho" }];
@@ -64,9 +49,9 @@ function employeeBreadcrumbs(pathname) {
     ];
   }
   if (pathname === "/nv/phieu") return [{ label: "Phiếu của tôi" }];
-  if (pathname.startsWith("/nv/xuat-nvl")) return [{ label: "Phiếu xuất NVL" }];
-  if (pathname.startsWith("/nv/xuat-tp")) return [{ label: "Phiếu xuất TP" }];
-  if (pathname === "/ho-so") return [{ label: "Hồ sơ & đổi mật khẩu" }];
+  if (pathname.startsWith("/nv/xuat-nvl")) return [{ label: "Phiếu xuất linh kiện" }];
+  if (pathname.startsWith("/nv/xuat-tp")) return [{ label: "Phiếu xuất thành phẩm" }];
+  if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
 }
 
@@ -130,7 +115,7 @@ export function MainLayout() {
       </summary>
       <div className="user-dropdown">
         <NavLink to="/ho-so">
-          <UserRound size={16} aria-hidden="true" /> Hồ sơ & đổi mật khẩu
+          <UserRound size={16} aria-hidden="true" /> Hồ sơ
         </NavLink>
         <button type="button" onClick={signOut}>
           <LogOut size={16} aria-hidden="true" /> Đăng xuất

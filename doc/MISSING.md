@@ -1,5 +1,26 @@
 # Các phần còn thiếu khi triển khai frontend
 
+## Sửa theo luồng main — 17/11/2026
+
+Dev đã yêu cầu “sửa lại theo luồng main” sau báo cáo review. Quyết định này thay phần “chờ chốt thiết kế” trong NV-MAIN-001..004 bên dưới; các ghi nhận lịch sử vẫn giữ để đối chiếu. Không coi kiểm chứng fixture là E2E backend/DB.
+
+- NV-MAIN-001: Đã đổi dashboard sang KPI theo yêu cầu; bỏ đường dẫn danh sách bị cấm của NV, redirect URL cũ về Việc được giao. Giữ GET chi tiết phiếu theo ID. Không mở rộng quyền GET danh sách backend.
+- NV-MAIN-002: Đã chuyển quyền UI theo UC-34/37: NV được giao lập/gửi/gửi lại, QLK duyệt/từ chối. Payload tạo chỉ có loại phiếu + mã yêu cầu, không có `chi_tiet`; phiếu chỉ đọc; không PATCH/DELETE/ve_nhap.
+- NV-MAIN-003: Chứng từ hoàn thành theo yêu cầu, số lượng và giờ server quản lý, gửi lại trực tiếp. Giữ bước tạo nháp trước khi gửi.
+- NV-MAIN-004: Hồ sơ chỉ đọc và đăng xuất qua Topbar; không khôi phục form đổi mật khẩu cũ.
+- [ ] NV-MAIN-005 — Thiếu cách tra cứu phiếu xuất hiện có theo yêu cầu cho NV. UC-34/37 A2 yêu cầu mở phiếu đã có, nhưng `YeuCauRead` không chứa ID phiếu (`backend/app/modules/san_xuat/schemas.py`), GET `/phieu_xuat` chỉ QLK, GET `/phieu_xuat/{id}` cần biết ID. App mở được phiếu sau khi tạo hoặc qua URL có ID; tạo trùng hiển thị 409 và giữ form, không đoán ID hay gọi danh sách trái quyền. Cần backend cung cấp ID/endpoint lookup theo yêu cầu hoặc dev chốt cách truy cập khác; chưa bổ sung backend.
+- [ ] NV-MAIN-006 — Thiếu nguồn xem trước đầy đủ dòng phiếu linh kiện trước khi lưu nháp. `PhieuXuatCreate` chỉ nhận nguồn, các dòng được server chốt khi POST; `YeuCauRead` không chứa dòng nhu cầu, GET kiểm tra chỉ áp dụng trạng thái đã gửi/chờ bổ sung (service `_require_check_state`), khác trạng thái đang thực hiện khi lập phiếu. UI hiển thị yêu cầu/loại phiếu trước Lưu nháp và các dòng chỉ đọc từ response sau khi lưu, không giả dựng BOM. Nếu cần đúng bước preview dòng trước Lưu trong UC-34 thì cần endpoint đọc nhu cầu đã chốt; chưa có trong phạm vi này.
+
+
+## Đối chiếu main ngày 16/11/2026 — chưa triển khai
+
+Nguồn: commit `b228193`, không phải backend đang chạy. Chi tiết và thứ tự xử lý tại [kế hoạch UI Nhân viên theo main](./ke-hoach-ui-nhan-vien-theo-main.md). Các ghi nhận cũ bên dưới chưa được tự động đóng bởi kế hoạch này.
+
+- [x] NV-MAIN-001 — Đóng theo quyết định chuyển luồng main ngày 17/11: NV không dùng danh sách hoàn thành/phiếu xuất của QLK. `DashboardPage.jsx` dùng KPI yêu cầu; routes cũ redirect sang Việc được giao. Browser NV-04 kiểm route đích, bảng dữ liệu tải thành công và không có request danh sách trái quyền. Không mở quyền API; lookup phiếu hiện có tách sang NV-MAIN-005.
+- [x] NV-MAIN-002 — Đã tích hợp UI quyền NV lập/gửi/gửi lại và QLK duyệt/từ chối theo main; tạo chỉ có loại phiếu + mã yêu cầu. `issue-main-flow.spec.js` kiểm payload, ETag, hủy xác nhận, gửi lại, xung đột, điều kiện thành phẩm và chặn người không được giao. Preview nhu cầu trước tạo tách sang NV-MAIN-006. Đây là bằng chứng fixture, chưa là E2E DB.
+- [x] NV-MAIN-003 — Đã cập nhật luồng hoàn thành theo yêu cầu: server quản lý số lượng/giờ, tạo nháp rồi gửi, từ chối gửi lại trực tiếp; không có PATCH/DELETE/ve_nhap trong UI. Browser NV-03/NV-09 và unit UC-30 kiểm payload, xác nhận, ETag, lỗi/busy. Chưa chạy API/DB thật.
+- [x] NV-MAIN-004 — Theo ProfilePage/UC-08 main: hồ sơ chỉ đọc; tài khoản và đăng xuất ở Topbar, không có form đổi mật khẩu. Test workflows/profile và sidebar/logout kiểm trên fixture. Không tự mở quyền đổi mật khẩu NV.
+
 Theo dõi các thành phần trong thiết kế mà API hoặc thông tin đã chốt chưa đáp ứng. Tuân thủ [quy tắc frontend](./FRONTEND_RULES.md); tiếp tục các phần độc lập đã rõ, hỏi dev về phần chưa rõ và không tự bổ sung chức năng.
 
 File được khởi tạo cùng quy tắc frontend và được cập nhật trong đợt triển khai Admin UI (`feature/UI-admin`). Các khác biệt admin đã ghi trong [đặc tả giao diện admin](./dac-ta-giao-dien-admin.md) là căn cứ để đối chiếu khi triển khai.
@@ -121,7 +142,8 @@ Theo quyết định ngày 11/11/2026 của dev, giao diện nhân viên chuyể
   - Phản hồi của dev: Ngày 12/11/2026 dev đã quyết định giữ nguyên nghiệp vụ/quyền/API hiện tại; ghi riêng các khác biệt preview để chờ duyệt.
   - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` chờ dev quyết định.
 
-- [ ] FE-MISS-007 — Khác biệt preview: Quyền tạo phiếu xuất thành phẩm (`create-issue`) của Nhân viên
+- [x] FE-MISS-007 — Khác biệt preview: Quyền tạo phiếu xuất thành phẩm (`create-issue`) của Nhân viên
+  - Cập nhật đóng mục ngày 17/11/2026: các ghi nhận ngày 12/11 bên dưới là lịch sử v3. Main v4 đã cấp quyền NV lập/gửi; dev yêu cầu chuyển UI theo main và frontend đã tích hợp, kiểm chứng fixture trong `issue-main-flow.spec.js`. Không còn giữ quyền lập phiếu cho QLK; lookup và preview còn thiếu được theo dõi riêng tại NV-MAIN-005/006.
   - Màn hình / mã yêu cầu / ảnh thiết kế: Tổng quan (`/nv`), Yêu cầu sản xuất (`/nv/yeu-cau`), Tra cứu phiếu xuất (`/nv/phieu-xuat`) — nút `+ Tạo phiếu xuất thành phẩm` và modal `issueModal` trong `XBIKE_Employee_Portal_Preview (1).html`.
   - Thành phần hoặc thao tác bị ảnh hưởng: Nút mở modal và form gửi phiếu xuất thành phẩm ở trạng thái chờ duyệt.
   - Thiết kế yêu cầu: Nhân viên được phép lập phiếu xuất thành phẩm cho yêu cầu đã đủ điều kiện (đủ tồn khả dụng hoặc đã duyệt hoàn thành) để gửi quản lý phê duyệt.
@@ -133,6 +155,7 @@ Theo quyết định ngày 11/11/2026 của dev, giao diện nhân viên chuyể
   - Kết quả xử lý / kiểm tra / căn cứ đóng mục: Giữ `[ ]` chờ dev quyết định.
 
 - [ ] FE-MISS-008 — Khác biệt preview: Mức cảnh báo tồn kho tối thiểu (`min`) và đánh dấu trạng thái tồn thấp/thiếu
+  - Cập nhật ngày 17/11/2026: MatHangRead main đã có `so_luong_dang_giu` và `so_luong_con_dung`; phần thiếu hiện tại chỉ là ngưỡng `min_stock`/`ton_kho_toi_thieu`. Những mô tả API v3 bên dưới là lịch sử, không phản ánh các trường tồn v4. UI không tự gán ngưỡng cảnh báo.
   - Màn hình / mã yêu cầu / ảnh thiết kế: Tra cứu tồn kho (`/nv/ton-kho`) trong `XBIKE_Employee_Portal_Preview (1).html`.
   - Thành phần hoặc thao tác bị ảnh hưởng: Cột `Tình trạng` hiển thị tag `Đủ tồn tối thiểu` hoặc `Thấp / thiếu` dựa trên so sánh `available < min`.
   - Thiết kế yêu cầu: Hiển thị mức tồn tối thiểu (`min`) và cảnh báo mặt hàng thiếu tồn.

@@ -39,16 +39,11 @@ test("missing, unknown and inherited property names never grant a role or menu",
   }
 });
 
+// UC-29 D5: Việc được giao dẫn tới yêu cầu; giữ quyền xem phiếu xuất liên quan
 test("employee sidebar focuses on assigned work without revoking read-only document access", () => {
   const paths = navigationFor("nhan_vien").flatMap((group) => group.items.map(([path]) => path));
-  assert.deepEqual(paths, [
-    "/nv",
-    "/nv/yeu-cau",
-    "/nv/lenh-sx",
-    "/nv/hoan-thanh",
-    "/nv/phieu-xuat",
-    "/nv/ton-kho",
-  ]);
+  assert.deepEqual(paths, ["/nv", "/nv/yeu-cau", "/nv/ton-kho"]);
+  assert.equal(canAccessPath("nhan_vien", "/nv/yeu-cau"), true);
   for (const path of ["/nv/xuat-nvl", "/nv/xuat-tp", "/nv/phieu"]) {
     assert.equal(paths.includes(path), false);
     assert.equal(canAccessPath("nhan_vien", path), true);

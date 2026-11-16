@@ -4,7 +4,7 @@ import { installApi } from "./api-fixture.js";
 const areas = {
   quan_tri_vien: { home: "/admin", detail: "/admin/tai-khoan/1", parent: "/admin/tai-khoan" },
   quan_ly: { home: "/kho", detail: "/kho/phieu-nhap/1", parent: "/kho/phieu-nhap" },
-  nhan_vien: { home: "/nv", detail: "/nv/lenh-sx/1", parent: "/nv/lenh-sx" },
+  nhan_vien: { home: "/nv", detail: "/nv/yeu-cau/1", parent: "/nv/yeu-cau" },
 };
 
 for (const [role, area] of Object.entries(areas)) {
@@ -100,7 +100,7 @@ for (const width of [768, 375]) {
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
     await page.screenshot({ path: `test-results/sidebar-open-${width}.png`, fullPage: true });
-    const profile = sidebar.getByRole("link", { name: "Hồ sơ & đổi mật khẩu", exact: true });
+    const profile = sidebar.getByRole("link", { name: "Hồ sơ", exact: true });
     await profile.click();
     await expect(page).toHaveURL(/\/ho-so$/);
     await expect(sidebar).toBeHidden();
@@ -131,7 +131,7 @@ test("desktop collapse does not hide mobile labels and respects reduced motion",
   await expect(sidebar).toHaveCSS("width", "76px");
 });
 
-test("employee topbar logout keeps the existing confirmation and cancel preserves the session", async ({
+test("employee topbar logout keeps confirmation and cancel preserves the session", async ({
   page,
 }) => {
   await installApi(page, { role: "nhan_vien" });
