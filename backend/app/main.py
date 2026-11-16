@@ -12,7 +12,6 @@ from app.modules.auth.router import router as auth_router
 from app.modules.bom.router import router as bom_router
 from app.modules.dieu_chinh_kho.router import router as dieu_chinh_kho_router
 from app.modules.dieu_chinh_kho.router import ticket_router
-from app.modules.inventory.router import router as inventory_router
 from app.modules.luu_luong.middleware import dem_luu_luong
 from app.modules.luu_luong.recorder import LuuLuongRecorder
 from app.modules.luu_luong.router import router as luu_luong_router
@@ -120,7 +119,6 @@ app.include_router(nhan_vien_router, prefix=api_v1_prefix)
 app.include_router(vai_tro_router, prefix=api_v1_prefix)
 app.include_router(nha_cung_cap_router, prefix=api_v1_prefix)
 app.include_router(bom_router, prefix=api_v1_prefix)
-app.include_router(inventory_router, prefix=api_v1_prefix)
 app.include_router(reporting_router, prefix=api_v1_prefix)
 app.include_router(mat_hang_router, prefix=api_v1_prefix)
 app.include_router(phieu_nhap_router, prefix=api_v1_prefix)

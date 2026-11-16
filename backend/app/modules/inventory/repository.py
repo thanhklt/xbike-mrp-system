@@ -6,8 +6,6 @@ from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictException
-from app.core.persistence import select_page
-from app.modules.inventory.models import StockLevel
 from app.modules.inventory.ports import (
     IssueReservation,
     IssueStockContext,
@@ -17,10 +15,7 @@ from app.modules.inventory.ports import (
     StockReceiptLine,
     StockShortage,
 )
-from app.modules.inventory.schemas import StockLevelResponse
 from app.modules.mat_hang.models import MatHang
-from app.shared.pagination import PageParams
-from app.shared.records import RecordPage
 
 
 class SqlAlchemyInventoryRepository:
@@ -299,6 +294,3 @@ class SqlAlchemyInventoryRepository:
             )
         await self.session.flush()
         return sorted(movements)
-
-    async def list_stock(self, params: PageParams) -> RecordPage[StockLevelResponse]:
-        return await select_page(self.session, StockLevel, StockLevelResponse, params)

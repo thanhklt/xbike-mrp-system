@@ -210,7 +210,8 @@ test("ADM-02 account list supports Enter search, immediate filters, page reset, 
 
   // Reset status filter, then search on Enter
   await page.getByLabel("Trạng thái", { exact: true }).selectOption("");
-  const searchInput = page.getByLabel("Tìm tài khoản", { exact: true });
+  // UC-03 R3: tìm theo mã nhân viên hoặc họ tên
+  const searchInput = page.getByLabel("Tìm theo mã NV hoặc họ tên", { exact: true });
   await searchInput.fill("Nguyễn Văn An");
   await searchInput.press("Enter");
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(1);
@@ -457,12 +458,52 @@ test("ADM-03 detail view, inline edit, and ADM-05 confirmation/success popups pr
     state.calls.filter((call) => call.path === "nhan_vien/2/vai_tro" && call.method === "PUT"),
   ).toHaveLength(0);
 
-  // Admin account (id=1) cannot be locked or downgraded
+  // UC-05 AC-3, A2 / UC-07 AC-8: QTV đang hoạt động cuối cùng — hệ thống từ chối khóa và hạ quyền,
+  // báo lý do, trạng thái và vai trò không đổi. Quy tắc do máy chủ kiểm tra (có thể còn QTV khác).
   await page.goto("/admin/tai-khoan/1");
-  await expect(page.getByRole("button", { name: "Vô hiệu hóa", exact: true })).toBeDisabled();
+  await installLastAdminRefusal(page, state);
+  const lockButton = page.getByRole("button", { name: "Vô hiệu hóa", exact: true });
+  await expect(lockButton).toBeEnabled();
+  await lockButton.click();
+  const lockDialog = page.locator("dialog.confirmation");
+  await lockDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(lockDialog.getByRole("alert")).toContainText(
+    "Không khóa được Quản trị viên đang hoạt động cuối cùng",
+  );
+  await lockDialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  expect(state.resources.nhan_vien[0].trang_thai).toBe("hoat_dong");
+
   await page.getByRole("button", { name: "Chỉnh sửa", exact: true }).click();
-  await expect(page.getByLabel("Vai trò", { exact: true })).toBeDisabled();
+  await page.getByLabel("Vai trò", { exact: true }).selectOption("2");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const roleDialog = page.locator("dialog.confirmation-profile-save");
+  await roleDialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(roleDialog.getByRole("alert")).toContainText(
+    "Không hạ quyền được Quản trị viên đang hoạt động cuối cùng",
+  );
+  await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
+  expect(state.resources.nhan_vien[0].ma_vai_tro).toBe("quan_tri_vien");
 });
+
+async function installLastAdminRefusal(page, state) {
+  await page.route("**/api/v1/nhan_vien/1**", async (route) => {
+    const method = route.request().method();
+    const path = new URL(route.request().url()).pathname;
+    if (method === "DELETE" || (method === "PUT" && path.endsWith("/vai_tro"))) {
+      state.calls.push({ method, path: path.replace(/^.*\/api\/v1\//, "") });
+      const message =
+        method === "DELETE"
+          ? "Không khóa được Quản trị viên đang hoạt động cuối cùng"
+          : "Không hạ quyền được Quản trị viên đang hoạt động cuối cùng";
+      return route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "quan_tri_vien_cuoi_cung", message } }),
+      });
+    }
+    return route.fallback();
+  });
+}
 
 test("ADM-03 inline edit supports role-only write, combined profile+role ETag chaining, partial-save failure recovery without re-sending saved profile, and 412 without GET retry", async ({
   page,
@@ -504,7 +545,8 @@ test("ADM-03 inline edit supports role-only write, combined profile+role ETag ch
   );
   expect(rolePutsAfterRoleOnly).toHaveLength(1);
   expect(rolePutsAfterRoleOnly[0].headers["if-match"]).toBe('"v1"');
-  expect(rolePutsAfterRoleOnly[0].body).toEqual({ vai_tro_id: 2 });
+  // UC-07 R2: lý do tùy chọn, bỏ trống gửi null
+  expect(rolePutsAfterRoleOnly[0].body).toEqual({ vai_tro_id: 2, ly_do: null });
 
   // 2. Partial save: profile PATCH succeeds ("v2" -> "v3"), role PUT fails -> reports partial save, does NOT show "Lưu thành công", retry sends ONLY PUT /vai_tro with "v3"
   failRoleOnce = true;
@@ -588,12 +630,15 @@ test("ADM-03 inline edit supports role-only write, combined profile+role ETag ch
   const createDialog = page.locator("dialog.record-dialog");
   await expect(createDialog).toBeVisible();
   await createDialog.getByLabel("Tên đăng nhập", { exact: true }).fill("new_staff");
-  await createDialog.getByLabel("Mã nhân viên", { exact: true }).fill("NV-000099");
+  // UC-04 AC-6: mã nhân viên do hệ thống cấp, form không có ô nhập mã và không gửi mã
+  await expect(createDialog.getByLabel("Mã nhân viên", { exact: true })).toHaveCount(0);
   await createDialog.getByLabel("Mật khẩu ban đầu", { exact: true }).fill("secret123");
   await createDialog.getByLabel("Vai trò", { exact: true }).selectOption("3");
   await createDialog.getByLabel("Họ tên", { exact: true }).fill("Nhân Viên Mới");
   await createDialog.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/tai-khoan\/4$/);
+  const createCall = state.calls.find((call) => call.path === "nhan_vien" && call.method === "POST");
+  expect(createCall.body).not.toHaveProperty("ma_nhan_vien");
 });
 
 test("ADM-04 shows role descriptions, disables role writes, preserves disabled state under search, and simplified logout popup hides inventory impact notice", async ({
@@ -902,11 +947,20 @@ test("ADM-03 password input toggles, validates, discards on cancel and skips bla
   await page.getByRole("button", { name: "Ẩn mật khẩu", exact: true }).click();
   await expect(input).toHaveAttribute("type", "password");
 
-  // Seven characters fail before opening confirmation or issuing any write.
-  await input.fill("1234567");
+  // UC-08 AC-3, R4: 5 ký tự bị từ chối trước khi mở xác nhận hoặc gửi ghi.
+  await input.fill("12345");
   await page.getByRole("button", { name: "Lưu", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Mật khẩu mới phải có từ 8 đến 1024 ký tự.");
+  await expect(page.getByRole("alert")).toContainText("Mật khẩu mới phải có từ 6 đến 1024 ký tự.");
   await expect(page.locator("dialog")).toHaveCount(0);
+  expect(state.calls.filter((call) => call.method !== "GET")).toHaveLength(0);
+
+  // UC-08 R4: đủ 6 ký tự thì được mở hộp xác nhận; hủy thì không ghi gì.
+  await input.fill("123456");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const confirmDialog = page.locator("dialog.confirmation-profile-save");
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(confirmDialog).toHaveCount(0);
   expect(state.calls.filter((call) => call.method !== "GET")).toHaveLength(0);
 
   await input.fill("draft-password");
@@ -995,56 +1049,36 @@ for (const reopenDialog of [false, true]) {
   });
 }
 
-test("ADM-03 self reset logs in immediately with new password before any authenticated refetch", async ({ page }) => {
-  let releaseLogin;
-  const loginGate = new Promise((resolve) => { releaseLogin = resolve; });
-  const state = await installApi(page, {
-    role: "quan_tri_vien",
-    intercept: async (call) => {
-      if (call.path === "auth/dang_nhap") await loginGate;
-      return null;
-    },
-  });
+test("UC-08 AC-5 admin changing own password is not asked for the current one, ends the session and must sign in with the new password", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
   await page.goto("/admin/tai-khoan/1?mode=edit");
-  const password = "self-reset-password";
+  // R5: chỉ có ô mật khẩu mới, không có ô mật khẩu hiện tại
+  await expect(page.locator("input[type=password]")).toHaveCount(1);
+  const password = "self-change-password";
   await page.locator("#inline-mat-khau").fill(password);
   await page.getByRole("button", { name: "Lưu", exact: true }).click();
   await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect.poll(() => state.calls.some((call) => call.path === "auth/dang_nhap")).toBe(true);
-  const resetIndex = state.calls.findIndex((call) => call.path.endsWith("/dat_lai_mat_khau"));
-  expect(state.calls.slice(resetIndex + 1).map((call) => call.path)).toEqual(["auth/dang_nhap"]);
-  const login = state.calls.at(-1);
-  expect(login.body).toEqual({ ten_dang_nhap: "admin", mat_khau: password });
-  expect(login.headers.authorization).toBeUndefined();
-  await expect(page.locator("#inline-mat-khau")).toBeDisabled();
-  releaseLogin();
-  await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
-  await expect(page).toHaveURL(/\/admin\/tai-khoan\/1$/);
-  const afterReset = state.calls.slice(resetIndex + 1);
-  expect(afterReset[1].path).toBe("auth/me");
-  for (const call of afterReset.slice(1)) expect(call.headers.authorization).toBe("Bearer browser-test-token-renewed");
-  await expect(page.locator("#inline-mat-khau")).toHaveCount(0);
-  expect(await page.content()).not.toContain(password);
-  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(password);
-  expect(state.unexpected).toEqual([]);
-});
 
-test("ADM-03 self reset login failure logs out with the agreed notice", async ({ page }) => {
-  const state = await installApi(page, {
-    role: "quan_tri_vien",
-    intercept: (call) => call.path === "auth/dang_nhap"
-      ? { status: 500, json: { error: { message: "Lỗi đăng nhập" } } }
-      : null,
-  });
-  await page.goto("/admin/tai-khoan/1?mode=edit");
-  await page.locator("#inline-mat-khau").fill("fallback-password");
-  await page.getByRole("button", { name: "Lưu", exact: true }).click();
-  await page.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  // R6: phiên hiện tại kết thúc ngay, không tự đăng nhập lại
   await expect(page).toHaveURL(/\/dang-nhap$/);
-  await expect(page.getByRole("status")).toContainText("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
+  await expect(page.getByRole("status")).toContainText("Đã đổi mật khẩu. Vui lòng đăng nhập lại.");
   await expect(page.locator("dialog.confirmation-save-success")).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-  const resetIndex = state.calls.findIndex((call) => call.path.endsWith("/dat_lai_mat_khau"));
-  expect(state.calls.slice(resetIndex + 1).map((call) => call.path)).toEqual(["auth/dang_nhap"]);
-  expect(await page.content()).not.toContain("fallback-password");
+  const resetIndex = state.calls.findIndex((call) => call.path === "nhan_vien/1/dat_lai_mat_khau");
+  expect(state.calls[resetIndex].body).toEqual({ mat_khau_moi: password });
+  expect(state.calls.slice(resetIndex + 1).some((call) => call.path === "auth/dang_nhap")).toBe(false);
+  expect(await page.content()).not.toContain(password);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(password);
+
+  // Đăng nhập lại bằng mật khẩu mới
+  await page.getByLabel("Tên đăng nhập", { exact: true }).fill("admin");
+  await page.getByLabel("Mật khẩu", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
+  await expect.poll(() => state.calls.some((call) => call.path === "auth/dang_nhap")).toBe(true);
+  expect(state.calls.find((call) => call.path === "auth/dang_nhap").body).toEqual({
+    ten_dang_nhap: "admin",
+    mat_khau: password,
+  });
+  await expect(page).not.toHaveURL(/\/dang-nhap$/);
+  expect(state.unexpected).toEqual([]);
 });

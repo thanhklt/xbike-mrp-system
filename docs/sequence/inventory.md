@@ -1,110 +1,13 @@
-# Sequence inventory — phạm vi phiếu xuất v4 và giới hạn legacy
+# Sequence inventory — writer tồn kho v4
 
-Đối chiếu `inventory/{router,service,repository,ports,models}.py`, `dependencies.py`,
-`core/persistence.py`, [phiếu xuất](phieu_xuat.md) và [sản xuất](san_xuat.md).
-Đường ghi xuất, nhập thành phẩm sản xuất UC-31 và nhập linh kiện UC-21 đã nâng v4.
-Các endpoint đọc còn dùng ORM `StockLevel`/`StockMovement` của bảng legacy lowercase
-`ton_kho`/`giao_dich_kho`, không tồn tại trong bootstrap v4; trên DB v4 chúng có thể
-trả 500. Không mô tả chúng như API tồn v4 đã nghiệm thu. Luồng điều chỉnh tồn
-legacy chưa nâng trong tác vụ này.
-
-## GET /api/v1/inventory/stock
-
-Ảnh: [Đọc tồn legacy](assets/inventory/01-stock.png).
-QLK/NV, PageParams chung (page 1, size 20 tối đa 100, search, sort_by, sort_order).
-Không ETag; không ghi kho. Envelope success/data/pagination/message hiện hữu.
-
-```mermaid
-sequenceDiagram
-    actor C as QLK / NV
-    participant R as inventory.router / dependencies
-    participant A as AuthService / NhanVienService
-    participant N as SqlAlchemyNhanVienRepository
-    participant S as InventoryService
-    participant P as SqlAlchemyInventoryRepository
-    participant DB as PostgreSQL
-    C->>R: GET /api/v1/inventory/stock + JWT + query
-    R->>A: current_payload / get_auth_identity
-    A->>N: get_credentials_by_id
-    N->>DB: Current employee and role
-    alt Invalid credentials / forbidden or locked account
-        R-->>C: 401 / 403
-    else Invalid pagination / sort direction
-        R-->>C: 422
-    else Valid request
-        R->>S: list_stock(params)
-        S->>P: list_stock(params)
-        P->>DB: select_page COUNT and SELECT StockLevel legacy
-        alt Legacy table exists
-            P-->>S: RecordPage
-            S-->>C: 200 PaginatedResponse
-        else Missing legacy table in v4
-            R-->>C: Safe 500, no stock changes
-        end
-    end
-```
-
-## GET /api/v1/inventory/movements
-
-Ảnh: [Đọc giao dịch legacy](assets/inventory/02-movements.png).
-Cùng quyền/query/envelope với GET stock; chưa chuyển read model sang GiaoDichKho v4.
-
-```mermaid
-sequenceDiagram
-    actor C as QLK / NV
-    participant R as inventory.router / dependencies
-    participant A as AuthService / NhanVienService
-    participant N as SqlAlchemyNhanVienRepository
-    participant S as InventoryService
-    participant P as SqlAlchemyInventoryRepository
-    participant DB as PostgreSQL
-    C->>R: GET /api/v1/inventory/movements + JWT + query
-    R->>A: current_payload / get_auth_identity
-    A->>N: get_credentials_by_id
-    N->>DB: Current employee and role
-    alt Invalid credentials / forbidden or locked account
-        R-->>C: 401 / 403
-    else Invalid pagination / sort direction
-        R-->>C: 422
-    else Valid request
-        R->>S: list_movements(params)
-        S->>P: list_movements(params)
-        P->>DB: select_page COUNT and SELECT StockMovement legacy
-        alt Legacy table exists
-            P-->>S: RecordPage
-            S-->>C: 200 PaginatedResponse
-        else Missing legacy table in v4
-            R-->>C: Safe 500
-        end
-    end
-```
-
-## POST /api/v1/inventory/movements
-
-Ảnh: [Workflow chưa triển khai](assets/inventory/03-record-movement.png).
-Route cũ còn đăng ký nhưng service luôn báo WorkflowNotImplemented (501), không ghi DB.
-Ghi ledger v4 chỉ qua use case có chứng từ nguồn, không qua endpoint này.
-
-```mermaid
-sequenceDiagram
-    actor C as QLK
-    participant R as inventory.router / dependencies
-    participant A as AuthService / NhanVienService
-    participant N as SqlAlchemyNhanVienRepository
-    participant S as InventoryService
-    participant DB as PostgreSQL
-    C->>R: POST /api/v1/inventory/movements + JWT
-    R->>A: current_payload / get_auth_identity
-    A->>N: get_credentials_by_id
-    N->>DB: Current account and role
-    alt Invalid credentials / not active QLK
-        R-->>C: 401 / 403
-    else Authorized
-        R->>S: record_movement
-        S-->>R: WorkflowNotImplemented
-        R-->>C: 501, no database writes
-    end
-```
+Đối chiếu `inventory/{repository,ports}.py`, `dependencies.py`,
+[phiếu xuất](phieu_xuat.md) và [sản xuất](san_xuat.md).
+Module inventory không còn endpoint HTTP: router, service, ORM và schema legacy
+(`ton_kho`/`giao_dich_kho` lowercase, `GET /inventory/stock`, `POST /inventory/movements`)
+đã gỡ vì không khớp bootstrap v4. Module chỉ còn writer dùng chung transaction của
+service gọi: ghi xuất, nhập thành phẩm sản xuất UC-31, nhập linh kiện UC-21 và điều chỉnh
+tồn. Tồn hiện tại đọc qua `MatHang.so_luong_ton`; lịch sử biến động qua
+[reporting](reporting.md).
 
 ## Port ghi xuất nội bộ — không phải endpoint
 

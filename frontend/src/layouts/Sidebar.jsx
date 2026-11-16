@@ -23,7 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
-import adminArtworkSource from "../../../doc/ui-spec-admin/tong_quan.png";
+import adminArtworkSource from "../assets/images/admin/sidebar-artwork.webp";
 import styles from "./Sidebar.module.css";
 
 const sectionIcons = {

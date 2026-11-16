@@ -21,7 +21,6 @@ from app.modules.dieu_chinh_kho.repository import (
 )
 from app.modules.dieu_chinh_kho.service import PhieuDieuChinhKhoService, TicketDieuChinhService
 from app.modules.inventory.repository import SqlAlchemyInventoryRepository
-from app.modules.inventory.service import InventoryService
 from app.modules.luu_luong.repository import SqlAlchemyLuuLuongRepository
 from app.modules.luu_luong.service import LuuLuongService
 from app.modules.mat_hang.cache import MatHangCache
@@ -203,10 +202,6 @@ def get_chung_tu_hoan_thanh_service(
         AuditService(SqlAlchemyAuditRepository(db)), SqlAlchemyTransaction(db),
         inventory=SqlAlchemyInventoryRepository(db),
     )
-
-
-def get_inventory_service(db: Annotated[AsyncSession, Depends(get_db)]) -> InventoryService:
-    return InventoryService(SqlAlchemyInventoryRepository(db))
 
 
 def get_phieu_xuat_service(

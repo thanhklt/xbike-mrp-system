@@ -1,16 +1,8 @@
-"""Inventory queries, receipt posting and warehouse adjustment contracts."""
+"""Inventory writer contracts: receipt, issue, production and adjustment posting."""
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, Protocol
-
-from app.modules.inventory.schemas import StockLevelResponse
-from app.shared.pagination import PageParams
-from app.shared.records import RecordPage
-
-
-class InventoryRepository(Protocol):
-    async def list_stock(self, params: PageParams) -> RecordPage[StockLevelResponse]: ...
 
 
 class StockReceiptLine(NamedTuple):
