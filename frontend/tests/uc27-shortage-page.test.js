@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { CHECK_COLUMNS } from "../src/features/production/requestForm.js";
+import { CHECK_COLUMNS, unitCell } from "../src/features/production/requestForm.js";
 import {
   SHORTAGE_COLUMNS,
   SUMMARY_COLUMNS,
@@ -42,7 +42,7 @@ test("summary displays twenty required and missing frames for two requests", () 
   assert.deepEqual(SUMMARY_COLUMNS, [
     { key: "ma_mat_hang", label: "Mã" },
     { key: "ten_mat_hang", label: "Tên" },
-    { key: "don_vi_tinh", label: "Đơn vị tính" },
+    { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell },
     { key: "tong_can", label: "Tổng cần", numeric: true },
     { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
     { key: "so_luong_thieu", label: "Thiếu", numeric: true },

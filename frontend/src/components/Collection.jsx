@@ -3,6 +3,7 @@ import { ArrowDownUp, CalendarDays, ChevronDown, ChevronUp, Filter, LayoutGrid, 
 import { Card } from "./Card.jsx";
 import { Button } from "./Button.jsx";
 import { Field } from "./Field.jsx";
+import { DateInput } from "./DateInput.jsx";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
 export function Collection({
@@ -21,15 +22,25 @@ export function Collection({
   const [expanded, setExpanded] = useState(false);
   const advancedId = useId();
   const icons = { trang_thai: Layers, loai_yeu_cau: LayoutGrid, sort: ArrowDownUp, tu_ngay: CalendarDays, den_ngay: CalendarDays };
+  function apply(next) {
+    const message = validate?.(next) ?? null;
+    setFilterError(message);
+    if (!message) collection.filter(next);
+  }
   function renderFilter(field) {
     const Icon = expandableFilters && icons[field.name];
     return (
       <Field
         key={field.name}
         {...field}
+        {...(field.type === "date" ? { as: DateInput, type: undefined } : {})}
         label={Icon ? <><Icon size={19} aria-hidden="true" />{field.label}</> : field.label}
         value={draft[field.name] ?? ""}
-        onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })}
+        onChange={(event) => {
+          const next = { ...draft, [field.name]: event.target.value };
+          setDraft(next);
+          if (field.as === "select") apply(next);
+        }}
       />
     );
   }
@@ -55,9 +66,7 @@ export function Collection({
         className={expandableFilters ? "filters employee-request-filters" : "filters"}
         onSubmit={(event) => {
           event.preventDefault();
-          const message = validate?.(draft) ?? null;
-          setFilterError(message);
-          if (!message) collection.filter(draft);
+          apply(draft);
         }}
       >
         {expandableFilters ? (

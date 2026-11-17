@@ -1,5 +1,91 @@
 import { test, expect } from "@playwright/test";
 import { adminActivityEntries, installApi } from "./api-fixture.js";
+import { DEFAULT_ACCOUNT_SORT } from "../../src/features/auth/accountList.js";
+
+test("account filters reset search, role, status and sort while keeping page size", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan");
+  const reset = page.getByRole("button", { name: "Đặt lại", exact: true });
+  await expect(reset).toBeDisabled();
+  const role = page.getByLabel("Vai trò", { exact: true });
+  const status = page.getByLabel("Trạng thái", { exact: true });
+  const sort = page.getByLabel("Sắp xếp", { exact: true });
+  const search = page.getByLabel("Tìm theo mã NV hoặc họ tên", { exact: true });
+  await role.selectOption({ label: "Quản trị viên" });
+  await status.selectOption("bi_khoa");
+  await sort.selectOption("-ho_ten");
+  await search.fill("Quản trị");
+  await search.press("Enter");
+  const calls = () => state.calls.filter((call) => call.path === "nhan_vien" && call.method === "GET");
+  await expect.poll(() => calls().at(-1).params.q).toBe("Quản trị");
+  await expect(reset).toBeEnabled();
+  const pageSize = calls().at(-1).params.page_size;
+  await reset.click();
+  await expect(search).toHaveValue("");
+  await expect(role).toHaveValue("");
+  await expect(status).toHaveValue("");
+  await expect(sort).toHaveValue(DEFAULT_ACCOUNT_SORT);
+  await expect(reset).toBeDisabled();
+  await expect.poll(() => calls().at(-1).params).toEqual({
+    page: "1", page_size: pageSize, sort: DEFAULT_ACCOUNT_SORT,
+  });
+  await search.fill("Chưa gửi");
+  await expect(reset).toBeEnabled();
+  await reset.click();
+  await expect(search).toHaveValue("");
+  await expect(reset).toBeDisabled();
+});
+
+for (const rename of [true, false]) {
+  test(`inline account save ${rename ? "includes a trimmed new" : "omits an unchanged"} username`, async ({ page }) => {
+    const state = await installApi(page, { role: "quan_tri_vien" });
+    await page.goto("/admin/tai-khoan/2?mode=edit");
+    const username = page.getByLabel("Tên đăng nhập", { exact: true });
+    await expect(username).toHaveValue("manager");
+    await expect(username).toHaveAttribute("maxlength", "255");
+    await expect(username).toHaveAttribute("autocomplete", "off");
+    await expect(username).toHaveAttribute("required", "");
+    await username.fill(rename ? "  renamed.manager  " : "  manager  ");
+    if (!rename) await page.getByLabel("Họ tên", { exact: true }).fill("Họ tên mới");
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await page.locator("dialog.confirmation").getByRole("button", { name: "Xác nhận", exact: true }).click();
+    await expect(page.locator("dialog.confirmation-save-success")).toBeVisible();
+    const calls = state.calls.filter((call) => call.path === "nhan_vien/2" && call.method === "PATCH");
+    expect(calls).toHaveLength(1);
+    if (rename) {
+      expect(calls[0].body.ten_dang_nhap).toBe("renamed.manager");
+      expect(state.resources.nhan_vien[1].ten_dang_nhap).toBe("renamed.manager");
+    } else {
+      expect(calls[0].body).not.toHaveProperty("ten_dang_nhap");
+    }
+  });
+}
+
+test("duplicate username is displayed through the inline save error", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan/2?mode=edit");
+  await page.getByLabel("Tên đăng nhập", { exact: true }).fill("admin");
+  await page.getByRole("button", { name: "Lưu", exact: true }).click();
+  const dialog = page.locator("dialog.confirmation");
+  await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Tên đăng nhập đã tồn tại");
+  await dialog.getByRole("button", { name: "Hủy", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Tên đăng nhập đã tồn tại");
+  await expect(page.getByLabel("Tên đăng nhập", { exact: true })).toHaveValue("admin");
+  expect(state.resources.nhan_vien[1].ten_dang_nhap).toBe("manager");
+});
+
+for (const username of ["", "   "]) {
+  test(`inline account save rejects ${username ? "whitespace" : "empty"} usernames`, async ({ page }) => {
+    const state = await installApi(page, { role: "quan_tri_vien" });
+    await page.goto("/admin/tai-khoan/2?mode=edit");
+    await page.getByLabel("Tên đăng nhập", { exact: true }).fill(username);
+    await page.getByRole("button", { name: "Lưu", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Tên đăng nhập không được để trống.");
+    await expect(page.locator("dialog.confirmation")).toHaveCount(0);
+    expect(state.calls.filter((call) => call.method === "PATCH")).toHaveLength(0);
+  });
+}
 
 test("ADM-01 overview displays 4 KPI cards in order, role distribution including locked accounts, traffic chart per range, and 4-column recent activity", async ({
   page,
@@ -143,7 +229,7 @@ test("admin audit history still renders when the API includes both snapshots", a
   expect(state.calls.filter((call) => call.path === "audit")[0].params.bo_thao_tac).toBeUndefined();
 });
 
-test("ADM-02 account list supports Enter search, immediate filters, page reset, select-all on current page, and only 10 rows per page option", async ({
+test("ADM-02 account list supports Enter search, immediate filters, page reset, no selection, and only 10 rows per page option", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -188,15 +274,11 @@ test("ADM-02 account list supports Enter search, immediate filters, page reset, 
   await page.screenshot({ path: "test-results/adm-02-accounts-1672x941.png" });
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Select all selects only current page (10 rows)
-  const selectAll = page.getByLabel("Chọn tất cả tài khoản trên trang");
-  await selectAll.check();
-  await expect(page.locator('.admin-table tbody input[type="checkbox"]:checked')).toHaveCount(10);
+  await expect(page.locator('.admin-table input[type="checkbox"]')).toHaveCount(0);
 
-  // Navigate to page 2 -> resets selection and shows remaining 4 rows
+  // Trang 2 hiển thị 4 tài khoản còn lại.
   await page.getByRole("button", { name: "Trang 2", exact: true }).click();
   await expect(page.locator(".admin-table tbody tr")).toHaveCount(4);
-  await expect(selectAll).not.toBeChecked();
 
   // Filter by status applies immediately and resets to page 1
   await page.getByLabel("Trạng thái", { exact: true }).selectOption("bi_khoa");
@@ -360,8 +442,8 @@ test("ADM-03 detail view, inline edit, and ADM-05 confirmation/success popups pr
   await expect(page.getByRole("heading", { name: "Phân quyền" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Trạng thái tài khoản" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Đặt lại mật khẩu…" })).toHaveCount(0);
-  await expect(page.locator(".admin-detail-row").nth(4).locator("dd")).toHaveText("manager");
-  await expect(page.locator(".admin-detail-row").nth(4).locator("input")).toHaveCount(0);
+  await expect(page.getByLabel("Tên đăng nhập", { exact: true })).toHaveValue("manager");
+  await expect(page.getByLabel("Tên đăng nhập", { exact: true })).toBeEditable();
   await expect(page.locator("#inline-mat-khau")).toHaveAttribute("type", "password");
   await expect(page.locator("#inline-mat-khau")).toHaveValue("");
   await expect(page.locator("#inline-mat-khau")).toHaveAttribute("placeholder", "Để trống nếu không đổi");

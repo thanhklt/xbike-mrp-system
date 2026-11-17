@@ -17,6 +17,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  RotateCcw,
   Save,
   Search,
   UserRound,
@@ -70,7 +71,10 @@ const PROFILE_FIELDS = [
 ];
 
 function extractProfileDraft(record) {
-  return Object.fromEntries(PROFILE_FIELDS.map((field) => [field, record?.[field] ?? ""]));
+  return {
+    ...Object.fromEntries(PROFILE_FIELDS.map((field) => [field, record?.[field] ?? ""])),
+    ten_dang_nhap: record?.ten_dang_nhap ?? "",
+  };
 }
 
 function normalizeProfileField(field, value) {
@@ -83,6 +87,7 @@ function normalizeProfileField(field, value) {
 }
 
 function isProfileChanged(record, values) {
+  if (values.ten_dang_nhap.trim() !== record.ten_dang_nhap) return true;
   return PROFILE_FIELDS.some((field) => {
     const left = normalizeProfileField(field, record?.[field]);
     const right = normalizeProfileField(field, values[field]);
@@ -160,7 +165,6 @@ function AccountListView({ id, roles }) {
   const collection = useCollection(API.employees, { page: 1, page_size: 10, sort: DEFAULT_ACCOUNT_SORT });
   const detail = useDetail(API.employees, id);
   const [searchDraft, setSearchDraft] = useState(collection.params.q || "");
-  const [selectedIds, setSelectedIds] = useState([]);
   const [loadingRowId, setLoadingRowId] = useState(null);
   const [rowError, setRowError] = useState(null);
 
@@ -169,29 +173,16 @@ function AccountListView({ id, roles }) {
   const page = meta.page || collection.params.page || 1;
   const pageSize = meta.page_size || collection.params.page_size || 10;
   const totalPages = meta.total_pages || 1;
-  const currentIds = rows.map((row) => row.id);
-  const allCurrentSelected =
-    currentIds.length > 0 && currentIds.every((rowId) => selectedIds.includes(rowId));
+  const filtersAreDefault =
+    !searchDraft.trim() &&
+    !collection.params.q &&
+    !collection.params.vai_tro_id &&
+    !collection.params.trang_thai &&
+    (collection.params.sort ?? DEFAULT_ACCOUNT_SORT) === DEFAULT_ACCOUNT_SORT;
 
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [
-    collection.params.page,
-    collection.params.page_size,
-    collection.params.q,
-    collection.params.vai_tro_id,
-    collection.params.trang_thai,
-    collection.params.sort,
-  ]);
-
-  function toggleAll(checked) {
-    setSelectedIds(checked ? currentIds : []);
-  }
-
-  function toggleRow(rowId, checked) {
-    setSelectedIds((previous) =>
-      checked ? [...new Set([...previous, rowId])] : previous.filter((item) => item !== rowId),
-    );
+  function resetFilters() {
+    setSearchDraft("");
+    collection.filter({ q: "", vai_tro_id: "", trang_thai: "", sort: DEFAULT_ACCOUNT_SORT });
   }
 
   // UC-05 Khóa tài khoản — Main 1–2: đọc phiên bản hiện tại và mở xác nhận trên dòng (specs/use_cases/identity_access/UC-05.md)
@@ -288,6 +279,14 @@ function AccountListView({ id, roles }) {
               ))}
             </select>
           </div>
+          <button
+            type="button"
+            className="admin-subbar-btn admin-filter-reset"
+            onClick={resetFilters}
+            disabled={filtersAreDefault}
+          >
+            <RotateCcw size={18} aria-hidden="true" /> <span>Đặt lại</span>
+          </button>
         </form>
 
         <Link className="btn btn-primary admin-primary-cta" to={`${base}/moi`}>
@@ -305,15 +304,6 @@ function AccountListView({ id, roles }) {
               <caption className="sr-only">Danh sách tài khoản</caption>
               <thead>
                 <tr>
-                  <th scope="col" className="admin-col-check">
-                    <input
-                      type="checkbox"
-                      aria-label="Chọn tất cả tài khoản trên trang"
-                      checked={allCurrentSelected}
-                      disabled={rows.length === 0}
-                      onChange={(event) => toggleAll(event.target.checked)}
-                    />
-                  </th>
                   <th scope="col" className="admin-col-stt">
                     STT
                   </th>
@@ -335,14 +325,6 @@ function AccountListView({ id, roles }) {
                     const isLocked = row.trang_thai === "bi_khoa";
                     return (
                       <tr key={row.id}>
-                        <td className="admin-col-check">
-                          <input
-                            type="checkbox"
-                            aria-label={`Chọn ${row.ma_nhan_vien}`}
-                            checked={selectedIds.includes(row.id)}
-                            onChange={(event) => toggleRow(row.id, event.target.checked)}
-                          />
-                        </td>
                         <td className="admin-col-stt">{stt}</td>
                         <td>
                           <div className="admin-user-cell">
@@ -403,7 +385,7 @@ function AccountListView({ id, roles }) {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="empty-state">
+                    <td colSpan={6} className="empty-state">
                       Chưa có dữ liệu phù hợp.
                     </td>
                   </tr>
@@ -541,11 +523,22 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
     };
   }
 
+  function validateUsername() {
+    if (!values.ten_dang_nhap.trim()) {
+      setSaveError(new ApiError("Tên đăng nhập không được để trống.", {
+        status: 422,
+        code: "VALIDATION_ERROR",
+      }));
+      return false;
+    }
+    return true;
+  }
+
   function handleInlineSubmit(event) {
     event.preventDefault();
     const baseSnapshot = editBaselineRef.current || snapshot;
     const baseRecord = baseSnapshot?.data;
-    if (!baseRecord || busy) return;
+    if (!baseRecord || busy || !validateUsername()) return;
 
     const profileDirty = isProfileChanged(baseRecord, values);
     const passwordDirty = newPassword.length > 0;
@@ -609,6 +602,10 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
         const profilePayload = Object.fromEntries(
           PROFILE_FIELDS.map((name) => [name, nullable(String(submission.values[name] ?? ""))]),
         );
+        const username = String(submission.values.ten_dang_nhap ?? "").trim();
+        if (username && username !== submission.baselineRecord.ten_dang_nhap) {
+          profilePayload.ten_dang_nhap = username;
+        }
 
         const updateCache = (nextSnap) => {
           editBaselineRef.current = nextSnap;
@@ -896,12 +893,23 @@ function AccountDetailView({ id, roles, isEditing, onStartEdit, onCancelEdit }) 
                         disabled={busy}
                       />
                     </InlineEditRow>
-                    <DetailRow
+                    <InlineEditRow
                       icon={UserRound}
                       label="Tên đăng nhập"
-                      value={activeBaselineRecord.ten_dang_nhap || "—"}
-                      readOnly
-                    />
+                      htmlFor="inline-ten-dang-nhap"
+                    >
+                      <input
+                        id="inline-ten-dang-nhap"
+                        className="admin-inline-input"
+                        required
+                        maxLength={255}
+                        autoComplete="off"
+                        value={values.ten_dang_nhap}
+                        onChange={updateField("ten_dang_nhap")}
+                        onInvalid={validateUsername}
+                        disabled={busy}
+                      />
+                    </InlineEditRow>
                     <InlineEditRow icon={KeyRound} label="Mật khẩu" htmlFor="inline-mat-khau">
                       <div className="admin-inline-password">
                         <input

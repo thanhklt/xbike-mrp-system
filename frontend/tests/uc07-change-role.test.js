@@ -26,7 +26,7 @@ function editAction({ own = false, writeError, reason = "  Phân công mới  " 
   const environment = {
     editBaselineRef: { current: { data: record, etag: '"reviewed"' } }, snapshot: null,
     busy: false, isProfileChanged: () => false, values: {}, newPassword: "new-password",
-    roleId: "3", roleReason: reason, ApiError: Error, setSaveError: (error) => errors.push(error),
+    roleId: "3", roleReason: reason, ApiError: Error, setSaveError: (error) => errors.push(error), validateUsername: () => true,
     editInitializedRef: { current: true }, onCancelEdit: () => {},
     confirm: (options) => { confirmation = options; }, setBusy: () => {},
     PROFILE_FIELDS: [], nullable: (value) => value || null,

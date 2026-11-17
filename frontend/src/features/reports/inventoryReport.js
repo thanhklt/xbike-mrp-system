@@ -1,6 +1,6 @@
-import { ITEM_LABELS } from "../../lib/format.js";
+import { ITEM_LABELS, ITEM_TYPES } from "../../lib/format.js";
 
-export const REPORT_ITEM_TYPES = ["linh_kien", "thanh_pham"].map((value) => ({
+export const REPORT_ITEM_TYPES = ITEM_TYPES.map((value) => ({
   value,
   label: ITEM_LABELS[value],
 }));

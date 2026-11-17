@@ -101,6 +101,8 @@ export function AppRoutes() {
               <Route path="/admin" element={<DashboardPage />} />
               <Route path="/admin/tai-khoan/:id?" element={<UsersPage />} />
               <Route path="/admin/vai-tro" element={<RolesPage />} />
+              <Route path="/admin/mat-hang/:id?" element={<MaterialsPage mode="admin" />} />
+              <Route path="/admin/nha-cung-cap/:id?" element={<SuppliersPage readOnly />} />
               <Route path="/admin/lich-su/:id?" element={<AuditPage />} />
             </Route>
             <Route element={<RoleGate />}>
@@ -136,7 +138,7 @@ export function AppRoutes() {
               <Route path="/nv/phieu" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route path="/nv/hoan-thanh/*" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route path="/nv/phieu-xuat/*" element={<Navigate to="/nv/yeu-cau" replace />} />
-              <Route path="/nv/ton-kho/:id?" element={<MaterialsPage readOnly />} />
+              <Route path="/nv/ton-kho/:id?" element={<MaterialsPage mode="employee" />} />
             </Route>
           </Route>
         </Route>

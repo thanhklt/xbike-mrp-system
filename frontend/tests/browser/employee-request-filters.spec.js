@@ -34,8 +34,8 @@ test("employee request filters collapse without losing values and submit support
   await page.screenshot({ path: "test-results/employee-request-filters-desktop.png", fullPage: true });
   await form.getByLabel("Loại yêu cầu").selectOption("xuat_giao");
   await form.getByLabel("Sắp xếp").selectOption("-created_at");
-  await form.getByLabel("Từ ngày").fill("2026-11-01");
-  await form.getByLabel("Đến ngày").fill("2026-11-30");
+  await form.getByLabel("Từ ngày").fill("01/11/2026");
+  await form.getByLabel("Đến ngày").fill("30/11/2026");
   const toggle = form.getByRole("button", { name: "Ẩn bớt" });
   await toggle.click();
   await expect(form.getByLabel("Loại yêu cầu")).toBeHidden();
@@ -46,7 +46,7 @@ test("employee request filters collapse without losing values and submit support
     && call.params.tu_ngay === "2026-11-01" && call.params.den_ngay === "2026-11-30")).toBe(true);
   await form.getByRole("button", { name: "Hiện thêm" }).click();
   await expect(form.getByLabel("Loại yêu cầu")).toHaveValue("xuat_giao");
-  await expect(form.getByLabel("Từ ngày")).toHaveValue("2026-11-01");
+  await expect(form.getByLabel("Từ ngày")).toHaveValue("01/11/2026");
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(page.locator("#main-navigation")).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
