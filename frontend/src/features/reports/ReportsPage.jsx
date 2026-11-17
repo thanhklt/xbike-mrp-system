@@ -7,7 +7,7 @@ import { DataTable } from "../../components/DataTable.jsx";
 import { QueryState } from "../../components/QueryState.jsx";
 import { API } from "../../lib/api/endpoints.js";
 import { useChoices, useResource } from "../../lib/api/useResources.js";
-import { ITEM_LABELS, number } from "../../lib/format.js";
+import { ITEM_LABELS, number, unitLabel } from "../../lib/format.js";
 import {
   defaultReportForm,
   periodLabel,
@@ -123,7 +123,7 @@ export function ReportsPage() {
                   label: "Loại",
                   render: (row) => ITEM_LABELS[row.loai_mat_hang],
                 },
-                { key: "don_vi_tinh", label: "ĐVT" },
+                { key: "don_vi_tinh", label: "ĐVT", render: (row) => unitLabel(row.don_vi_tinh) },
                 {
                   key: "ton_dau_ky",
                   label: "Tồn đầu kỳ",

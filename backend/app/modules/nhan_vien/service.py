@@ -307,6 +307,7 @@ class NhanVienService:
             await self._audit(actor, employee, "tao", reason=params.ly_do)
         return self._result(employee, actor, request_id)
 
+    # Sửa hồ sơ tài khoản — cho đổi tên đăng nhập, quyết định dev 17/11/2026 (.handoff/plan-admin-tai-khoan-lich-su.md)
     async def patch_employee(
         self,
         employee_id: int,
@@ -325,6 +326,10 @@ class NhanVienService:
                 if getattr(before, key) != value
             }
             employee = before
+            if "ten_dang_nhap" in changes:
+                existing = await self.repository.find_by_username(changes["ten_dang_nhap"])
+                if existing is not None and existing.id != employee_id:
+                    raise DuplicateUsernameException()
             if changes:
                 employee = await self.repository.update_profile(employee_id, changes)
                 await self._audit(actor, employee, "sua", before=before)

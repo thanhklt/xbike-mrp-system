@@ -141,6 +141,35 @@ async def api(database, admin_hash):
         await engine.dispose()
 
 
+async def test_patch_duplicate_username_rolls_back_database(database, api, monkeypatch):
+    created = []
+    for username in ("patch-first", "patch-second"):
+        response = await api.client.post(
+            "/api/v1/nhan_vien", headers=api.headers(),
+            json={"ten_dang_nhap": username, "mat_khau": "123456", "vai_tro_id": 3},
+        )
+        assert response.status_code == 201, response.text
+        created.append(response.json()["data"])
+    before = await database.fetch('SELECT id, ten_dang_nhap FROM "NhanVien" ORDER BY id')
+    audit_count = await database.fetchval('SELECT count(*) FROM "LichSuThaoTac"')
+    path = f"/api/v1/nhan_vien/{created[0]['id']}"
+    detail = await api.client.get(path, headers=api.headers())
+
+    async def unchecked(_self, _username):
+        return None
+
+    # Bỏ kiểm tra trước để kiểm chứng nhánh unique constraint tại UPDATE.
+    monkeypatch.setattr(SqlAlchemyNhanVienRepository, "find_by_username", unchecked)
+    response = await api.client.patch(
+        path, headers={**api.headers(), "If-Match": detail.headers["etag"]},
+        json={"ten_dang_nhap": created[1]["ten_dang_nhap"]},
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "ten_dang_nhap_bi_trung"
+    assert await database.fetch('SELECT id, ten_dang_nhap FROM "NhanVien" ORDER BY id') == before
+    assert await database.fetchval('SELECT count(*) FROM "LichSuThaoTac"') == audit_count
+
+
 # UC-04 R6: hai INSERT không truyền mã nhận hai mã khác nhau đúng NV- + id sáu chữ số
 async def test_insert_without_code_uses_identity(database):
     rows = await database.fetch(

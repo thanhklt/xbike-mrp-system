@@ -22,7 +22,7 @@ function editAction({ own = false, password = "123456", writeError } = {}) {
   const environment = {
     editBaselineRef: { current: { data: record, etag: '"reviewed"' } }, snapshot: null,
     busy: false, isProfileChanged: () => false, values: {}, newPassword: password,
-    roleId: "1", roleReason: "", ApiError: Error, setSaveError: (error) => errors.push(error),
+    roleId: "1", roleReason: "", ApiError: Error, setSaveError: (error) => errors.push(error), validateUsername: () => true,
     editInitializedRef: { current: true }, onCancelEdit: () => {},
     confirm: (options) => { confirmation = options; }, setBusy: () => {},
     PROFILE_FIELDS: [], nullable: (value) => value || null,

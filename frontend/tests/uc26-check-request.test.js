@@ -9,6 +9,7 @@ import {
   checkImpact,
   checkLines,
   requestDetailEntries,
+  unitCell,
 } from "../src/features/production/requestForm.js";
 
 const source = readFileSync(new URL("../src/features/production/RequestsPage.jsx", import.meta.url), "utf8");
@@ -95,10 +96,11 @@ test("confirmation hides existing finished products for stock replenishment", ()
 test("shortage table preserves all six report fields and numeric columns", () => {
   assert.deepEqual(CHECK_COLUMNS, [
     { key: "ma_mat_hang", label: "Mã" }, { key: "ten_mat_hang", label: "Tên" },
-    { key: "don_vi_tinh", label: "Đơn vị tính" }, { key: "so_luong_can", label: "Cần", numeric: true },
+    { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell }, { key: "so_luong_can", label: "Cần", numeric: true },
     { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
     { key: "so_luong_thieu", label: "Thiếu", numeric: true },
   ]);
+  assert.equal(CHECK_COLUMNS[2].render({ don_vi_tinh: "chiec" }), "chiếc");
   const original = structuredClone(shortage);
   assert.deepEqual(checkLines(shortage), [{ ...line, id: 2 }]);
   assert.deepEqual(shortage, original);
