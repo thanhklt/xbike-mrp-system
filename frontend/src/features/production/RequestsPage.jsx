@@ -90,6 +90,7 @@ export function RequestsPage() {
       <Collection
         collection={collection}
         filters={requestListFilters(manager)}
+        searchPlaceholder="Tìm mã yêu cầu hoặc tên thành phẩm…"
         expandableFilters={!manager}
         columns={[
           {

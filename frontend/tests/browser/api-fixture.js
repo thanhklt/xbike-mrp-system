@@ -608,6 +608,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       if ((resource === "phieu_xuat" || resource === "chung_tu_hoan_thanh_sx") && role === "nhan_vien") {
         return respond({ error: { message: "Không có quyền truy cập danh sách" } }, 403);
       }
+      const foldSearch = (value) => String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
       let matching = records.filter((entry) =>
         !(resource === "yeu_cau_san_xuat" && role === "nhan_vien" &&
           (entry.trang_thai === "nhap" || entry.nhan_vien_duoc_giao_id !== user.id)) &&
@@ -617,7 +618,10 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
             : ["page", "page_size", "sort", "sort_by", "sort_order"].includes(key) ||
                 ["q", "search"].includes(key)
               ? !["q", "search"].includes(key) ||
-                JSON.stringify(entry).toLowerCase().includes(value.toLowerCase())
+                (resource === "yeu_cau_san_xuat"
+                  ? [entry.ma_yeu_cau_san_xuat, items.find((item) => item.id === entry.mat_hang_id)?.ten_mat_hang || ""]
+                    .some((text) => foldSearch(text).includes(foldSearch(value)))
+                  : JSON.stringify(entry).toLowerCase().includes(value.toLowerCase()))
               : String(entry[key]) === value,
         ),
       );

@@ -135,6 +135,7 @@ sequenceDiagram
             R->>S: list_entries(params, actor, request_id)
             S->>S: Thiếu sort, N dùng created_at, Q dùng -created_at
             S->>P: list_entries(params, N.id hoặc null với Q)
+            P->>P: Nếu q khác trắng, JOIN MatHang và lọc chứa mã/tên sau chuẩn hóa hoa/thường và dấu
             P->>D: COUNT theo phạm vi và bộ lọc, N loại nhap
             P->>D: SELECT cùng bộ lọc, ORDER BY cột rồi id cùng chiều, OFFSET/LIMIT
             S-->>C: 200 data[] + meta phân trang
@@ -142,7 +143,10 @@ sequenceDiagram
     end
 ```
 
-Filter `q` tìm mã yêu cầu bằng ILIKE tham số hóa, escape ký tự wildcard. Bộ lọc
+Filter `q` tìm chứa một phần mã yêu cầu hoặc tên thành phẩm, không phân biệt hoa/thường
+và dấu tiếng Việt (kể cả đ/Đ). JOIN MatHang và chuẩn hóa lower/NFD/translate trước
+COUNT và phân trang; dùng tham số hóa, escape ký tự wildcard `%`, `_`, `/` để tìm literal.
+Chuỗi chỉ có khoảng trắng không thu hẹp kết quả. Không thêm extension hoặc đổi schema DB. Bộ lọc
 `mat_hang_id`, `trang_thai`, `nhan_vien_duoc_giao_id`, `loai_yeu_cau` (`xuat_giao`/`nhap_kho`),
 `tu_ngay`, `den_ngay` kết hợp
 với phạm vi N. Ngày địa phương Asia/Ho_Chi_Minh chuyển sang khoảng UTC nửa mở.

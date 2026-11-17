@@ -1,6 +1,26 @@
 import { test, expect } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
+test("request search matches partial product names without case or accents and still finds codes", async ({ page }) => {
+  const state = await installApi(page, { role: "nhan_vien" });
+  state.resources.mat_hang.find((item) => item.id === 4).ten_mat_hang = "Xe Đạp Thành Phố";
+  await page.goto("/nv/yeu-cau");
+  const search = page.getByPlaceholder("Tìm mã yêu cầu hoặc tên thành phẩm…");
+  await search.fill("THANH PHO");
+  await search.press("Enter");
+  const table = page.getByRole("table", { name: "Danh sách", exact: true });
+  await expect(table.locator("tbody tr")).toHaveCount(1);
+  await expect(table).toContainText("YCSX-202611-000002");
+  await expect(table).toContainText("Xe Đạp Thành Phố");
+  await search.fill("khong co san pham nay");
+  await search.press("Enter");
+  await expect(table).toContainText("Chưa có dữ liệu phù hợp.");
+  await search.fill("ycsx-202611-000002");
+  await search.press("Enter");
+  await expect(table).toContainText("Xe Đạp Thành Phố");
+  expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
+});
+
 test("employee request filters collapse without losing values and submit supported parameters", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const state = await installApi(page, { role: "nhan_vien" });

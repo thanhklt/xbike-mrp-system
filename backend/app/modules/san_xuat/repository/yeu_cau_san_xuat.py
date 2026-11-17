@@ -3,7 +3,7 @@
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, false, func, select, text, update
+from sqlalchemy import delete, false, func, literal_column, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.bom.models import Bom, ChiTietBom
@@ -21,6 +21,15 @@ from app.modules.san_xuat.schemas import (
     YeuCauRead,
 )
 from app.shared.records import RecordPage
+
+
+def _search_text(value):
+    # PostgreSQL UTF-8 normalization avoids adding an unaccent extension/schema change.
+    return func.translate(
+        func.normalize(func.lower(value), literal_column("NFD")),
+        "đ\u0300\u0301\u0303\u0309\u0323\u0302\u0306\u031b",
+        "d",
+    )
 
 
 class SqlAlchemyYeuCauSanXuatRepository:
@@ -166,9 +175,14 @@ class SqlAlchemyYeuCauSanXuatRepository:
                     if isinstance(value, int) and value > 2**31 - 1
                     else getattr(YeuCauSanXuat, name) == value
                 )
-        if params.q:
+        if params.q and params.q.strip():
+            needle = params.q.strip().replace("/", "//").replace("%", "/%").replace("_", "/_")
+            query = query.join(MatHang, MatHang.id == YeuCauSanXuat.mat_hang_id)
             query = query.where(
-                YeuCauSanXuat.ma_yeu_cau_san_xuat.icontains(params.q, autoescape=True)
+                or_(
+                    _search_text(YeuCauSanXuat.ma_yeu_cau_san_xuat).contains(_search_text(needle), escape="/"),
+                    _search_text(MatHang.ten_mat_hang).contains(_search_text(needle), escape="/"),
+                )
             )
         local_zone = ZoneInfo("Asia/Ho_Chi_Minh")
         if params.tu_ngay:
