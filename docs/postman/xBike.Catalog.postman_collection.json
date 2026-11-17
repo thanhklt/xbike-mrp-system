@@ -1,0 +1,1809 @@
+{
+  "info": {
+    "_postman_id": "ffa0f2ae-dae1-480e-8221-1fbe24ca6227",
+    "name": "xBike - Catalog lifecycle scenario",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Exported from http://localhost:8000/api/v1/openapi.json on 2026-11-16 (Asia/Saigon). See README.md. No credentials included."
+  },
+  "item": [
+    {
+      "name": "Catalog scenario - run in order",
+      "description": "Requires manager credentials and allow_writes=true on a separate test database. Creates a component, a finished product, initial BOM and supplier; retains these records for inspection.",
+      "item": [
+        {
+          "name": "Login manager - save manager_token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/dang_nhap",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "dang_nhap"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_dang_nhap\": \"{{manager_username}}\",\n  \"mat_khau\": \"{{manager_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/auth/dang_nhap\n\nExpected HTTP 200. Role: public. "
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"test_run_id\", Date.now().toString());",
+                  "for (const resource of [\"mat_hang\", \"bom\", \"nha_cung_cap\"]) { for (const suffix of [\"id\", \"etag\", \"etag_id\"]) pm.environment.unset(resource + \"_\" + suffix); }",
+                  "pm.environment.unset(\"component_id\"); pm.environment.unset(\"finished_product_id\");",
+                  "pm.environment.unset(\"manager_token\");",
+                  "if (!pm.environment.get(\"manager_username\") || !pm.environment.get(\"manager_password\")) { console.warn(\"SKIP: fill manager_username and manager_password\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/LoginResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"LoginResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/TokenRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"LoginResponse\"},\"TokenRead\":{\"properties\":{\"access_token\":{\"type\":\"string\",\"title\":\"Access Token\"},\"token_type\":{\"type\":\"string\",\"const\":\"bearer\",\"title\":\"Token Type\",\"default\":\"bearer\"},\"expires_in\":{\"type\":\"integer\",\"title\":\"Expires In\"},\"nhan_vien\":{\"$ref\":\"#/definitions/NhanVienRead\"}},\"type\":\"object\",\"required\":[\"access_token\",\"expires_in\",\"nhan_vien\"],\"title\":\"TokenRead\"},\"NhanVienRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_nhan_vien\":{\"type\":\"string\",\"title\":\"Ma Nhan Vien\"},\"ho_ten\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Ho Ten\"},\"vai_tro_id\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}],\"title\":\"Vai Tro Id\"},\"ma_vai_tro\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"nhan_vien\",\"quan_ly\",\"quan_tri_vien\"]},{\"type\":\"null\"}],\"title\":\"Ma Vai Tro\"},\"trang_thai\":{\"type\":\"string\",\"enum\":[\"hoat_dong\",\"bi_khoa\"],\"title\":\"Trang Thai\"},\"ngay_sinh\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date\"},{\"type\":\"null\"}],\"title\":\"Ngay Sinh\"},\"so_dien_thoai\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"So Dien Thoai\"},\"email\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Email\"},\"ngay_vao_lam\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date\"},{\"type\":\"null\"}],\"title\":\"Ngay Vao Lam\"},\"he_so_luong\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"He So Luong\"},\"ten_dang_nhap\":{\"type\":\"string\",\"title\":\"Ten Dang Nhap\"}},\"additionalProperties\":false,\"type\":\"object\",\"required\":[\"id\",\"ma_nhan_vien\",\"ho_ten\",\"vai_tro_id\",\"ma_vai_tro\",\"trang_thai\",\"ngay_sinh\",\"so_dien_thoai\",\"email\",\"ngay_vao_lam\",\"he_so_luong\",\"ten_dang_nhap\"],\"title\":\"NhanVienRead\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"No cache\", () => { pm.expect(pm.response.headers.get(\"Cache-Control\")).to.eql(\"no-store\"); pm.expect(pm.response.headers.get(\"Pragma\")).to.eql(\"no-cache\"); });",
+                  "if (pm.response.code === 200) { const auth = result.data; pm.test(\"Access token\", () => { pm.expect(auth.access_token).to.be.a(\"string\").and.not.empty; pm.expect(auth.token_type).to.eql(\"bearer\"); pm.expect(auth.expires_in).to.be.above(0); }); pm.environment.set(\"manager_token\", auth.access_token); if (auth.nhan_vien) { pm.test(\"Account role\", () => pm.expect(auth.nhan_vien.ma_vai_tro).to.eql(\"quan_ly\")); pm.environment.set(\"manager_user_id\", auth.nhan_vien.id); if (\"manager\" === \"employee\") pm.environment.set(\"assigned_employee_id\", auth.nhan_vien.id); } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "01 Create component",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PM-C-{{test_run_id}}\",\n  \"ten_mat_hang\": \"Postman component {{test_run_id}}\",\n  \"loai_mat_hang\": \"linh_kien\",\n  \"don_vi_tinh\": \"cai\",\n  \"don_gia\": 10000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/mat_hang\n\nExpected HTTP 201. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-10/16 — specs/use_cases/bom/UC-16.md: tạo thành phẩm cùng BOM v1."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 201) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "if (pm.response.code === 201) pm.environment.set(\"component_id\", result.data.id);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "02 Create finished product with BOM",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PM-F-{{test_run_id}}\",\n  \"ten_mat_hang\": \"Postman finished {{test_run_id}}\",\n  \"loai_mat_hang\": \"thanh_pham\",\n  \"don_vi_tinh\": \"chiec\",\n  \"don_gia\": 50000,\n  \"bom\": {\n    \"chi_tiet\": [\n      {\n        \"mat_hang_id\": {{component_id}},\n        \"so_luong\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/mat_hang\n\nExpected HTTP 201. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-10/16 — specs/use_cases/bom/UC-16.md: tạo thành phẩm cùng BOM v1."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"component_id\")) { console.warn(\"SKIP: missing variable component_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 201) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "if (pm.response.code === 201) pm.environment.set(\"finished_product_id\", result.data.id);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "03 GET finished product and ETag",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "04 Duplicate SKU returns 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PM-F-{{test_run_id}}\",\n  \"ten_mat_hang\": \"Postman finished {{test_run_id}}\",\n  \"loai_mat_hang\": \"thanh_pham\",\n  \"don_vi_tinh\": \"chiec\",\n  \"don_gia\": 50000,\n  \"bom\": {\n    \"chi_tiet\": [\n      {\n        \"mat_hang_id\": {{component_id}},\n        \"so_luong\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/mat_hang\n\nExpected HTTP 409. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-10/16 — specs/use_cases/bom/UC-16.md: tạo thành phẩm cùng BOM v1."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"component_id\")) { console.warn(\"SKIP: missing variable component_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"trang_thai_khong_hop_le\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "05 Missing ten_mat_hang returns 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PM-F-{{test_run_id}}\",\n  \"loai_mat_hang\": \"thanh_pham\",\n  \"don_vi_tinh\": \"chiec\",\n  \"don_gia\": 50000,\n  \"bom\": {\n    \"chi_tiet\": [\n      {\n        \"mat_hang_id\": {{component_id}},\n        \"so_luong\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/mat_hang\n\nExpected HTTP 422. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-10/16 — specs/use_cases/bom/UC-16.md: tạo thành phẩm cùng BOM v1."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"component_id\")) { console.warn(\"SKIP: missing variable component_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 422\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/HTTPValidationError\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"HTTPValidationError\":{\"properties\":{\"detail\":{\"items\":{\"$ref\":\"#/definitions/ValidationError\"},\"type\":\"array\",\"title\":\"Detail\"}},\"type\":\"object\",\"title\":\"HTTPValidationError\"},\"ValidationError\":{\"properties\":{\"loc\":{\"items\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]},\"type\":\"array\",\"title\":\"Location\"},\"msg\":{\"type\":\"string\",\"title\":\"Message\"},\"type\":{\"type\":\"string\",\"title\":\"Error Type\"},\"input\":{\"title\":\"Input\"},\"ctx\":{\"type\":\"object\",\"title\":\"Context\"}},\"type\":\"object\",\"required\":[\"loc\",\"msg\",\"type\"],\"title\":\"ValidationError\"}}}));",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"du_lieu_khong_hop_le\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "06 Missing If-Match returns 428",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_mat_hang\": \"Postman updated {{test_run_id}}\",\n  \"don_gia\": 55000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/mat_hang/{id}\n\nExpected HTTP 428. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-11/12 — trạng thái thành phẩm đi cùng BOM, cùng transaction và audit."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 428\", () => pm.response.to.have.status(428));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"thieu_if_match\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "07 Stale If-Match returns 412",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "\"0000000000000000000000000000000000000000000000000000000000000000\""
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_mat_hang\": \"Postman updated {{test_run_id}}\",\n  \"don_gia\": 55000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/mat_hang/{id}\n\nExpected HTTP 412. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-11/12 — trạng thái thành phẩm đi cùng BOM, cùng transaction và audit."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 412\", () => pm.response.to.have.status(412));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"du_lieu_da_thay_doi\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "08 Rejected updates leave price unchanged",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "pm.test(\"Rejected PATCH did not change price\", () => pm.expect(result.data.don_gia).to.eql(50000));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "09 Update with current ETag",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "if-match",
+                "value": "{{mat_hang_etag}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_mat_hang\": \"Postman updated {{test_run_id}}\",\n  \"don_gia\": 55000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. Read the SAME resource ID first to capture its ETag. UC-11/12 — trạng thái thành phẩm đi cùng BOM, cùng transaction và audit."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_etag\")) { console.warn(\"SKIP: missing variable mat_hang_etag\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }",
+                  "if (String(pm.environment.get(\"mat_hang_etag_id\")) !== String(pm.environment.get(\"mat_hang_id\"))) { console.warn(\"SKIP: GET detail again to obtain an ETag for this ID\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "pm.test(\"Updated price\", () => pm.expect(result.data.don_gia).to.eql(55000));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "10 Read back updated product",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "pm.test(\"Persisted update\", () => { pm.expect(result.data.don_gia).to.eql(55000); pm.expect(result.data.ten_mat_hang).to.eql(pm.environment.replaceIn(\"Postman updated {{test_run_id}}\")); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "11 Find initial BOM",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bom?mat_hang_id={{finished_product_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bom"
+              ],
+              "query": [
+                {
+                  "key": "mat_hang_id",
+                  "value": "{{finished_product_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/bom\n\nExpected HTTP 200. Role: manager. UC-15 — specs/use_cases/bom/UC-15.md: xem phiên bản, lọc và phân trang."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"finished_product_id\")) { console.warn(\"SKIP: missing variable finished_product_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/BomListResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"BomListResponse\":{\"properties\":{\"data\":{\"items\":{\"$ref\":\"#/definitions/BomRead\"},\"type\":\"array\",\"title\":\"Data\"},\"meta\":{\"$ref\":\"#/definitions/ListResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"BomListResponse\"},\"BomRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"version\":{\"type\":\"integer\",\"title\":\"Version\"},\"created_at\":{\"type\":\"string\",\"format\":\"date-time\",\"title\":\"Created At\"},\"kich_hoat_gan_nhat_at\":{\"type\":\"string\",\"format\":\"date-time\",\"title\":\"Kich Hoat Gan Nhat At\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"da_duoc_su_dung\":{\"type\":\"boolean\",\"title\":\"Da Duoc Su Dung\"},\"chi_tiet\":{\"items\":{\"$ref\":\"#/definitions/ChiTietBomRead\"},\"type\":\"array\",\"title\":\"Chi Tiet\"}},\"type\":\"object\",\"required\":[\"id\",\"mat_hang_id\",\"version\",\"created_at\",\"kich_hoat_gan_nhat_at\",\"is_active\",\"da_duoc_su_dung\",\"chi_tiet\"],\"title\":\"BomRead\"},\"ChiTietBomRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"so_luong\":{\"type\":\"integer\",\"title\":\"So Luong\"}},\"type\":\"object\",\"required\":[\"id\",\"mat_hang_id\",\"so_luong\"],\"title\":\"ChiTietBomRead\"},\"ListResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"},\"page\":{\"type\":\"integer\",\"title\":\"Page\"},\"page_size\":{\"type\":\"integer\",\"title\":\"Page Size\"},\"total\":{\"type\":\"integer\",\"title\":\"Total\"},\"total_pages\":{\"type\":\"integer\",\"title\":\"Total Pages\"}},\"type\":\"object\",\"required\":[\"request_id\",\"page\",\"page_size\",\"total\",\"total_pages\"],\"title\":\"ListResponseMeta\"}}}));",
+                  "if (pm.response.code === 200) { const rows = Array.isArray(result.data) ? result.data : result.data?.items; if (rows?.length && !pm.environment.get(\"bom_id\")) pm.environment.set(\"bom_id\", rows[0].id); }",
+                  "pm.test(\"Pagination\", () => { const meta = result.meta || result.pagination; pm.expect(meta.page).to.be.at.least(1); pm.expect(meta.page_size).to.be.within(1, 100); pm.expect(meta.total).to.be.at.least(0); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "12 Read BOM and ETag",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bom/{{bom_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bom",
+                "{{bom_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/bom/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-15 — specs/use_cases/bom/UC-15.md; strong ETag dùng cho đúng ID này."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"bom_id\")) { console.warn(\"SKIP: missing variable bom_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/BomDetailResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"BomDetailResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/BomRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"BomDetailResponse\"},\"BomRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"version\":{\"type\":\"integer\",\"title\":\"Version\"},\"created_at\":{\"type\":\"string\",\"format\":\"date-time\",\"title\":\"Created At\"},\"kich_hoat_gan_nhat_at\":{\"type\":\"string\",\"format\":\"date-time\",\"title\":\"Kich Hoat Gan Nhat At\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"da_duoc_su_dung\":{\"type\":\"boolean\",\"title\":\"Da Duoc Su Dung\"},\"chi_tiet\":{\"items\":{\"$ref\":\"#/definitions/ChiTietBomRead\"},\"type\":\"array\",\"title\":\"Chi Tiet\"}},\"type\":\"object\",\"required\":[\"id\",\"mat_hang_id\",\"version\",\"created_at\",\"kich_hoat_gan_nhat_at\",\"is_active\",\"da_duoc_su_dung\",\"chi_tiet\"],\"title\":\"BomRead\"},\"ChiTietBomRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"so_luong\":{\"type\":\"integer\",\"title\":\"So Luong\"}},\"type\":\"object\",\"required\":[\"id\",\"mat_hang_id\",\"so_luong\"],\"title\":\"ChiTietBomRead\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"bom_id\", entity.id); if (etag && !false) { pm.environment.set(\"bom_etag\", etag); pm.environment.set(\"bom_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "13 Read BOM tree",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bom/{{bom_id}}/cau_truc",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bom",
+                "{{bom_id}}",
+                "cau_truc"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/bom/{id}/cau_truc\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-15 — specs/use_cases/bom/UC-15.md; cây một cấp của version đã chọn."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"bom_id\")) { console.warn(\"SKIP: missing variable bom_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/BomTreeResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"BomTreeResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/BomTreeRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"BomTreeResponse\"},\"BomTreeRead\":{\"properties\":{\"bom_id\":{\"type\":\"integer\",\"title\":\"Bom Id\"},\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"version\":{\"type\":\"integer\",\"title\":\"Version\"},\"children\":{\"items\":{\"$ref\":\"#/definitions/BomTreeNode\"},\"type\":\"array\",\"title\":\"Children\"}},\"type\":\"object\",\"required\":[\"bom_id\",\"mat_hang_id\",\"version\",\"children\"],\"title\":\"BomTreeRead\"},\"BomTreeNode\":{\"properties\":{\"mat_hang_id\":{\"type\":\"integer\",\"title\":\"Mat Hang Id\"},\"so_luong_tren_mot_don_vi_cha\":{\"type\":\"integer\",\"title\":\"So Luong Tren Mot Don Vi Cha\"},\"bom_id\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"null\"}],\"title\":\"Bom Id\"},\"children\":{\"items\":{\"$ref\":\"#/definitions/BomTreeNode\"},\"type\":\"array\",\"title\":\"Children\"}},\"type\":\"object\",\"required\":[\"mat_hang_id\",\"so_luong_tren_mot_don_vi_cha\",\"bom_id\",\"children\"],\"title\":\"BomTreeNode\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"BOM tree is returned\", () => pm.expect(result.data).to.be.an(\"object\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "14 Refresh item ETag before stopping",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "15 Stop finished product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "if-match",
+                "value": "{{mat_hang_etag}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "DELETE /api/v1/mat_hang/{id}\n\nExpected HTTP 204. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. Read the SAME resource ID first to capture its ETag. UC-12/19 — ngừng thành phẩm và công thức, không xóa cứng."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_etag\")) { console.warn(\"SKIP: missing variable mat_hang_etag\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }",
+                  "if (String(pm.environment.get(\"mat_hang_etag_id\")) !== String(pm.environment.get(\"mat_hang_id\"))) { console.warn(\"SKIP: GET detail again to obtain an ETag for this ID\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+                  "pm.test(\"204 has no body\", () => pm.expect(pm.response.text()).to.eql(\"\"));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "16 Stopped item is still readable",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "pm.test(\"Soft stop\", () => { pm.expect(result.data.is_active).to.eql(false); pm.expect(result.data.so_luong_ton).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "17 Reactivate finished product",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "if-match",
+                "value": "{{mat_hang_etag}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. Read the SAME resource ID first to capture its ETag. UC-11/12 — trạng thái thành phẩm đi cùng BOM, cùng transaction và audit."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_etag\")) { console.warn(\"SKIP: missing variable mat_hang_etag\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }",
+                  "if (String(pm.environment.get(\"mat_hang_etag_id\")) !== String(pm.environment.get(\"mat_hang_id\"))) { console.warn(\"SKIP: GET detail again to obtain an ETag for this ID\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "18 Reactivated item is active",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mat_hang/{{mat_hang_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mat_hang",
+                "{{mat_hang_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/mat_hang/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-09: specs/use_cases/catalog/UC-09.md, item/BOM context strong ETag."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"mat_hang_id\")) { console.warn(\"SKIP: missing variable mat_hang_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/MatHangSingleResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"MatHangSingleResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/MatHangRead\"},\"meta\":{\"$ref\":\"#/definitions/SingleMeta\"}},\"type\":\"object\",\"required\":[\"data\"],\"title\":\"MatHangSingleResponse\"},\"MatHangRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_mat_hang\":{\"type\":\"string\",\"title\":\"Ma Mat Hang\"},\"ten_mat_hang\":{\"type\":\"string\",\"title\":\"Ten Mat Hang\"},\"sku\":{\"type\":\"string\",\"title\":\"Sku\"},\"loai_mat_hang\":{\"type\":\"string\",\"enum\":[\"linh_kien\",\"thanh_pham\"],\"title\":\"Loai Mat Hang\"},\"don_vi_tinh\":{\"type\":\"string\",\"title\":\"Don Vi Tinh\"},\"mau_sac\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mau Sac\"},\"mo_ta\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Mo Ta\"},\"don_gia\":{\"type\":\"integer\",\"maximum\":9.223372036854776e+18,\"minimum\":0.0,\"title\":\"Don Gia\"},\"is_active\":{\"type\":\"boolean\",\"title\":\"Is Active\"},\"so_luong_ton\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Ton\"},\"so_luong_dang_giu\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Dang Giu\"},\"so_luong_con_dung\":{\"type\":\"integer\",\"minimum\":0.0,\"title\":\"So Luong Con Dung\"},\"ton_kho_updated_at\":{\"anyOf\":[{\"type\":\"string\",\"format\":\"date-time\"},{\"type\":\"null\"}],\"title\":\"Ton Kho Updated At\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_mat_hang\",\"ten_mat_hang\",\"sku\",\"loai_mat_hang\",\"don_vi_tinh\",\"mau_sac\",\"mo_ta\",\"don_gia\",\"is_active\",\"so_luong_ton\",\"so_luong_dang_giu\",\"so_luong_con_dung\",\"ton_kho_updated_at\"],\"title\":\"MatHangRead\"},\"SingleMeta\":{\"properties\":{\"request_id\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}],\"title\":\"Request Id\"}},\"type\":\"object\",\"title\":\"SingleMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"mat_hang_id\", entity.id); if (etag && !false) { pm.environment.set(\"mat_hang_etag\", etag); pm.environment.set(\"mat_hang_etag_id\", entity.id); } } }",
+                  "pm.test(\"Reactivated\", () => pm.expect(result.data.is_active).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "19 Create supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_ncc\": \"Postman {{test_run_id}}\",\n  \"so_dien_thoai\": \"0900000000\",\n  \"dia_chi\": \"Dia chi test\",\n  \"phuong\": \"Phuong test\",\n  \"tinh\": \"Tinh test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "POST /api/v1/nha_cung_cap\n\nExpected HTTP 201. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-14: specs/use_cases/catalog/UC-14.md."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/NhaCungCapDetailResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"NhaCungCapDetailResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/NhaCungCapRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"NhaCungCapDetailResponse\"},\"NhaCungCapRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_ncc\":{\"type\":\"string\",\"title\":\"Ma Ncc\"},\"ten_ncc\":{\"type\":\"string\",\"title\":\"Ten Ncc\"},\"so_dien_thoai\":{\"type\":\"string\",\"title\":\"So Dien Thoai\"},\"dia_chi\":{\"type\":\"string\",\"title\":\"Dia Chi\"},\"phuong\":{\"type\":\"string\",\"title\":\"Phuong\"},\"tinh\":{\"type\":\"string\",\"title\":\"Tinh\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_ncc\",\"ten_ncc\",\"so_dien_thoai\",\"dia_chi\",\"phuong\",\"tinh\"],\"title\":\"NhaCungCapRead\",\"description\":\"Current supplier information, Catalog UC-13/44.\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Location header\", () => pm.expect(pm.response.headers.get(\"Location\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 201) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"nha_cung_cap_id\", entity.id); if (etag && !false) { pm.environment.set(\"nha_cung_cap_etag\", etag); pm.environment.set(\"nha_cung_cap_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "20 Read supplier and ETag",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap/{{nha_cung_cap_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap",
+                "{{nha_cung_cap_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/nha_cung_cap/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-13: specs/use_cases/catalog/UC-13.md."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_id\")) { console.warn(\"SKIP: missing variable nha_cung_cap_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/NhaCungCapDetailResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"NhaCungCapDetailResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/NhaCungCapRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"NhaCungCapDetailResponse\"},\"NhaCungCapRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_ncc\":{\"type\":\"string\",\"title\":\"Ma Ncc\"},\"ten_ncc\":{\"type\":\"string\",\"title\":\"Ten Ncc\"},\"so_dien_thoai\":{\"type\":\"string\",\"title\":\"So Dien Thoai\"},\"dia_chi\":{\"type\":\"string\",\"title\":\"Dia Chi\"},\"phuong\":{\"type\":\"string\",\"title\":\"Phuong\"},\"tinh\":{\"type\":\"string\",\"title\":\"Tinh\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_ncc\",\"ten_ncc\",\"so_dien_thoai\",\"dia_chi\",\"phuong\",\"tinh\"],\"title\":\"NhaCungCapRead\",\"description\":\"Current supplier information, Catalog UC-13/44.\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"nha_cung_cap_id\", entity.id); if (etag && !false) { pm.environment.set(\"nha_cung_cap_etag\", etag); pm.environment.set(\"nha_cung_cap_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "21 Supplier missing If-Match returns 428",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap/{{nha_cung_cap_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap",
+                "{{nha_cung_cap_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_ncc\": \"Postman updated {{test_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/nha_cung_cap/{id}\n\nExpected HTTP 428. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-44: specs/use_cases/catalog/UC-44.md. If-Match is required (428)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_id\")) { console.warn(\"SKIP: missing variable nha_cung_cap_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 428\", () => pm.response.to.have.status(428));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/SupplierErrorResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"SupplierErrorResponse\":{\"properties\":{\"error\":{\"$ref\":\"#/definitions/SupplierError\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"error\",\"meta\"],\"title\":\"SupplierErrorResponse\"},\"SupplierError\":{\"properties\":{\"code\":{\"type\":\"string\",\"title\":\"Code\"},\"message\":{\"type\":\"string\",\"title\":\"Message\"},\"details\":{\"items\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"type\":\"array\",\"title\":\"Details\"}},\"type\":\"object\",\"required\":[\"code\",\"message\",\"details\"],\"title\":\"SupplierError\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"thieu_if_match\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "22 Supplier stale If-Match returns 412",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "If-Match",
+                "value": "\"0000000000000000000000000000000000000000000000000000000000000000\""
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap/{{nha_cung_cap_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap",
+                "{{nha_cung_cap_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_ncc\": \"Postman updated {{test_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/nha_cung_cap/{id}\n\nExpected HTTP 412. Role: manager. Negative case: request must be rejected before any business mutation. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. UC-44: specs/use_cases/catalog/UC-44.md. If-Match is required (428)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_id\")) { console.warn(\"SKIP: missing variable nha_cung_cap_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 412\", () => pm.response.to.have.status(412));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/SupplierErrorResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"SupplierErrorResponse\":{\"properties\":{\"error\":{\"$ref\":\"#/definitions/SupplierError\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"error\",\"meta\"],\"title\":\"SupplierErrorResponse\"},\"SupplierError\":{\"properties\":{\"code\":{\"type\":\"string\",\"title\":\"Code\"},\"message\":{\"type\":\"string\",\"title\":\"Message\"},\"details\":{\"items\":{\"additionalProperties\":{\"type\":\"string\"},\"type\":\"object\"},\"type\":\"array\",\"title\":\"Details\"}},\"type\":\"object\",\"required\":[\"code\",\"message\",\"details\"],\"title\":\"SupplierError\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"Error code\", () => pm.expect(result.error.code).to.eql(\"du_lieu_da_thay_doi\"));",
+                  "pm.test(\"Error message\", () => pm.expect(result.error.message).to.be.a(\"string\").and.not.empty);",
+                  "pm.test(\"Error details and request ID\", () => { pm.expect(result.error.details).to.be.an(\"array\"); pm.expect(result.meta.request_id).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "23 Update supplier with current ETag",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "if-match",
+                "value": "{{nha_cung_cap_etag}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap/{{nha_cung_cap_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap",
+                "{{nha_cung_cap_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ten_ncc\": \"Postman updated {{test_run_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "PATCH /api/v1/nha_cung_cap/{id}\n\nExpected HTTP 200. Role: manager. Sends writes only when allow_writes=true. Use a test database. Select this request individually; workflow actions and deletion are alternative branches. Read the SAME resource ID first to capture its ETag. UC-44: specs/use_cases/catalog/UC-44.md. If-Match is required (428)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP: set allow_writes=true on a test database to send this request\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_etag\")) { console.warn(\"SKIP: missing variable nha_cung_cap_etag\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_id\")) { console.warn(\"SKIP: missing variable nha_cung_cap_id\"); pm.execution.skipRequest(); }",
+                  "if (String(pm.environment.get(\"nha_cung_cap_etag_id\")) !== String(pm.environment.get(\"nha_cung_cap_id\"))) { console.warn(\"SKIP: GET detail again to obtain an ETag for this ID\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/NhaCungCapDetailResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"NhaCungCapDetailResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/NhaCungCapRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"NhaCungCapDetailResponse\"},\"NhaCungCapRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_ncc\":{\"type\":\"string\",\"title\":\"Ma Ncc\"},\"ten_ncc\":{\"type\":\"string\",\"title\":\"Ten Ncc\"},\"so_dien_thoai\":{\"type\":\"string\",\"title\":\"So Dien Thoai\"},\"dia_chi\":{\"type\":\"string\",\"title\":\"Dia Chi\"},\"phuong\":{\"type\":\"string\",\"title\":\"Phuong\"},\"tinh\":{\"type\":\"string\",\"title\":\"Tinh\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_ncc\",\"ten_ncc\",\"so_dien_thoai\",\"dia_chi\",\"phuong\",\"tinh\"],\"title\":\"NhaCungCapRead\",\"description\":\"Current supplier information, Catalog UC-13/44.\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"nha_cung_cap_id\", entity.id); if (etag && !false) { pm.environment.set(\"nha_cung_cap_etag\", etag); pm.environment.set(\"nha_cung_cap_etag_id\", entity.id); } } }"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "24 Read back supplier",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nha_cung_cap/{{nha_cung_cap_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "nha_cung_cap",
+                "{{nha_cung_cap_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "GET /api/v1/nha_cung_cap/{id}\n\nExpected HTTP 200. Role: manager. Read the SAME resource ID first to capture its ETag. UC-13: specs/use_cases/catalog/UC-13.md."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"manager_token\")) { console.warn(\"SKIP: login as manager first\"); pm.execution.skipRequest(); }",
+                  "if (!pm.environment.get(\"nha_cung_cap_id\")) { console.warn(\"SKIP: missing variable nha_cung_cap_id\"); pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is JSON\", () => { pm.response.to.have.header(\"Content-Type\"); pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\"); });",
+                  "const result = pm.response.json();",
+                  "pm.test(\"Response matches OpenAPI schema\", () => pm.response.to.have.jsonSchema({\"$ref\":\"#/definitions/NhaCungCapDetailResponse\",\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"definitions\":{\"NhaCungCapDetailResponse\":{\"properties\":{\"data\":{\"$ref\":\"#/definitions/NhaCungCapRead\"},\"meta\":{\"$ref\":\"#/definitions/ResponseMeta\"}},\"type\":\"object\",\"required\":[\"data\",\"meta\"],\"title\":\"NhaCungCapDetailResponse\"},\"NhaCungCapRead\":{\"properties\":{\"id\":{\"type\":\"integer\",\"title\":\"Id\"},\"ma_ncc\":{\"type\":\"string\",\"title\":\"Ma Ncc\"},\"ten_ncc\":{\"type\":\"string\",\"title\":\"Ten Ncc\"},\"so_dien_thoai\":{\"type\":\"string\",\"title\":\"So Dien Thoai\"},\"dia_chi\":{\"type\":\"string\",\"title\":\"Dia Chi\"},\"phuong\":{\"type\":\"string\",\"title\":\"Phuong\"},\"tinh\":{\"type\":\"string\",\"title\":\"Tinh\"}},\"type\":\"object\",\"required\":[\"id\",\"ma_ncc\",\"ten_ncc\",\"so_dien_thoai\",\"dia_chi\",\"phuong\",\"tinh\"],\"title\":\"NhaCungCapRead\",\"description\":\"Current supplier information, Catalog UC-13/44.\"},\"ResponseMeta\":{\"properties\":{\"request_id\":{\"type\":\"string\",\"title\":\"Request Id\"}},\"type\":\"object\",\"required\":[\"request_id\"],\"title\":\"ResponseMeta\"}}}));",
+                  "pm.test(\"ETag header\", () => pm.expect(pm.response.headers.get(\"ETag\")).to.be.a(\"string\").and.not.empty);",
+                  "if (pm.response.code === 200) { const entity = result.data?.yeu_cau || result.data?.phieu || result.data; const etag = pm.response.headers.get(\"ETag\"); if (entity?.id) { pm.environment.set(\"nha_cung_cap_id\", entity.id); if (etag && !false) { pm.environment.set(\"nha_cung_cap_etag\", etag); pm.environment.set(\"nha_cung_cap_etag_id\", entity.id); } } }",
+                  "pm.test(\"Supplier update persisted\", () => pm.expect(result.data.ten_ncc).to.eql(pm.environment.replaceIn(\"Postman updated {{test_run_id}}\")));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.environment.get(\"allow_writes\") !== \"true\") { console.warn(\"SKIP catalog scenario: set allow_writes=true for a test database\"); pm.execution.skipRequest(); }"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get(\"base_url\")) { console.warn(\"Select xBike Local environment\"); pm.execution.skipRequest(); }",
+          "if (!pm.environment.get(\"test_run_id\")) pm.environment.set(\"test_run_id\", Date.now().toString());",
+          "const now = new Date();",
+          "if (!pm.environment.get(\"today\")) pm.environment.set(\"today\", now.toLocaleDateString(\"en-CA\", {timeZone:\"Asia/Ho_Chi_Minh\"}));",
+          "if (!pm.environment.get(\"due_date\")) { const due = new Date(now.getTime() + 7*86400000); pm.environment.set(\"due_date\", due.toLocaleDateString(\"en-CA\", {timeZone:\"Asia/Ho_Chi_Minh\"})); }"
+        ]
+      }
+    }
+  ]
+}

@@ -23,7 +23,7 @@ Nguồn: commit `b228193`, không phải backend đang chạy. Chi tiết và th
 - [x] NV-MAIN-003 — Đã cập nhật luồng hoàn thành theo yêu cầu: server quản lý số lượng/giờ, tạo nháp rồi gửi, từ chối gửi lại trực tiếp; không có PATCH/DELETE/ve_nhap trong UI. Browser NV-03/NV-09 và unit UC-30 kiểm payload, xác nhận, ETag, lỗi/busy. Chưa chạy API/DB thật.
 - [x] NV-MAIN-004 — Theo ProfilePage/UC-08 main: hồ sơ chỉ đọc; tài khoản và đăng xuất ở Topbar, không có form đổi mật khẩu. Test workflows/profile và sidebar/logout kiểm trên fixture. Không tự mở quyền đổi mật khẩu NV.
 
-Theo dõi các thành phần trong thiết kế mà API hoặc thông tin đã chốt chưa đáp ứng. Tuân thủ [quy tắc frontend](./FRONTEND_RULES.md); tiếp tục các phần độc lập đã rõ, hỏi dev về phần chưa rõ và không tự bổ sung chức năng.
+Theo dõi các thành phần trong thiết kế mà API hoặc thông tin đã chốt chưa đáp ứng. Tuân thủ [hướng dẫn project](../AGENTS.md); tiếp tục các phần độc lập đã rõ, hỏi dev về phần chưa rõ và không tự bổ sung chức năng. File FRONTEND_RULES.md cũ đã được main xóa; các quyết định frontend trong lịch sử phiên vẫn được giữ khi hợp nhất.
 
 File được khởi tạo cùng quy tắc frontend và được cập nhật trong đợt triển khai Admin UI (`feature/UI-admin`). Các khác biệt admin đã ghi trong [đặc tả giao diện admin](./dac-ta-giao-dien-admin.md) là căn cứ để đối chiếu khi triển khai.
 

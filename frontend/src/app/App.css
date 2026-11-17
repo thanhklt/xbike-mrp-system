@@ -455,6 +455,10 @@ td.numeric {
   flex-wrap: wrap;
   padding-bottom: 20px;
 }
+/* Lỗi kiểm tra bộ lọc (Collection validate) cách bảng bên dưới như khoảng cách của .filters. */
+.filters + .notice {
+  margin-bottom: 20px;
+}
 .filters .field {
   flex: 1 1 155px;
 }
@@ -2767,6 +2771,13 @@ html[data-employee-theme="true"] dialog .notice-info {
   background: #1d1815;
   border-color: #352d26;
   color: #d6cbc0;
+}
+
+/* UC-43: khối JSON lịch sử trong popup giao diện quản trị dùng cặp màu ô nhập của dialog quản trị. */
+html[data-admin-theme="true"] dialog .audit-json {
+  background: #171310;
+  border-color: #3a312a;
+  color: #f4ede6;
 }
 
 .admin-shell .notice-warning,
