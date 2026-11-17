@@ -9,6 +9,9 @@ export const ITEM_LABELS = {
   ban_thanh_pham: "Bán thành phẩm",
   thanh_pham: "Thành phẩm",
 };
+const UNIT_LABELS = { cai: "cái", chiec: "chiếc", bo: "bộ", kg: "kg" };
+export const unitLabel = (value) => UNIT_LABELS[value] ?? value ?? "—";
+export const UNIT_OPTIONS = Object.entries(UNIT_LABELS).map(([value, label]) => ({ value, label }));
 export const STATUS_LABELS = {
   nhap: "Bản nháp",
   da_gui: "Đã giao",

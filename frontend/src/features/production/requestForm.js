@@ -1,5 +1,13 @@
 import { dateFilters } from "../../components/filterFields.js";
-import { dateTime, employeeName, formatDate, itemName, number, STATUS_LABELS } from "../../lib/format.js";
+import {
+  dateTime,
+  employeeName,
+  formatDate,
+  itemName,
+  number,
+  STATUS_LABELS,
+  unitLabel,
+} from "../../lib/format.js";
 
 export const REQUEST_TYPES = [
   { value: "xuat_giao", label: "Sản xuất để xuất giao" },
@@ -86,7 +94,7 @@ export function sendConfirmEntries(values, items, employees) {
     ["Loại yêu cầu", REQUEST_TYPE_LABELS[values.loai_yeu_cau]],
     ["Thành phẩm", itemName(items, values.mat_hang_id)],
     ["Số lượng cần", number(values.so_luong)],
-    ["Đơn vị tính", item?.don_vi_tinh ?? "—"],
+    ["Đơn vị tính", unitLabel(item?.don_vi_tinh)],
     ["Hạn hoàn thành", formatDate(values.han_hoan_thanh)],
     ["Nhân viên được giao", employeeName(employees, values.nhan_vien_duoc_giao_id)],
   ];
@@ -142,7 +150,7 @@ export function canStartProduction(record, manager, userId) {
 export const CANCEL_HOLD_COLUMNS = [
   { key: "ma_mat_hang", label: "Mã" },
   { key: "ten_mat_hang", label: "Tên" },
-  { key: "don_vi_tinh", label: "Đơn vị tính" },
+  { key: "don_vi_tinh", label: "Đơn vị tính", render: (row) => unitLabel(row.don_vi_tinh) },
   { key: "loai_giu", label: "Loại giữ" },
   { key: "so_luong", label: "Số lượng", numeric: true },
 ];
@@ -189,7 +197,7 @@ export function checkConfirmEntries(ketQua, loai) {
 export const CHECK_COLUMNS = [
   { key: "ma_mat_hang", label: "Mã" },
   { key: "ten_mat_hang", label: "Tên" },
-  { key: "don_vi_tinh", label: "Đơn vị tính" },
+  { key: "don_vi_tinh", label: "Đơn vị tính", render: (row) => unitLabel(row.don_vi_tinh) },
   { key: "so_luong_can", label: "Cần", numeric: true },
   { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
   { key: "so_luong_thieu", label: "Thiếu", numeric: true },

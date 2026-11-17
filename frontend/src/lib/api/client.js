@@ -37,13 +37,13 @@ export async function readResource(path, params, signal) {
   return normalizeResponse(await apiClient.get(path, { params: cleanParams(params), signal }));
 }
 
-/** A write uses the ETag the user reviewed, never a freshly fetched version. */
+/** A write uses the reviewed ETag. An explicit null body means no HTTP request body. */
 export async function writeResource({ path, method = "post", body = {}, etag, versioned = true }) {
   return normalizeResponse(
     await apiClient.request({
       url: path,
       method,
-      data: body,
+      data: body === null ? undefined : body,
       headers: versioned ? versionHeaders(etag) : {},
     }),
   );

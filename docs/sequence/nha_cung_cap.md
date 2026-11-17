@@ -1,6 +1,6 @@
 # Sequence — nha_cung_cap
 
-Đối chiếu code ngày 14/11/2026 theo [spec Catalog](../../specs/use_cases/catalog/README.md)
+Đối chiếu code ngày 17/11/2026 theo [spec Catalog](../../specs/use_cases/catalog/README.md)
 và [plan đã duyệt](../../specs/use_cases/catalog/PLAN.md). QTV = quan_tri_vien,
 QLK = quan_ly, NV = nhan_vien. Chỉ bốn endpoint dưới đây, không có DELETE.
 
@@ -14,7 +14,10 @@ Các mũi tên HTTP lỗi là response qua exception handler, repository không 
 [PNG](assets/nha_cung_cap/nha-cung-cap-1.png). UC-13.
 Query mặc định page=1/page_size=20, tối đa 100; sort id/ma_ncc/ten_ncc và tiền tố `-`.
 ID ASC là khóa phụ. q chỉ tìm literal mã/tên, không phân biệt hoa/thường;
-tinh/phuong so bằng sau chuẩn hóa whitespace ngoài và hoa/thường, giữ dấu.
+tinh/phuong tìm một phần, không phân biệt hoa/thường và dấu tiếng Việt theo UC-13
+R6/AC-6 đã duyệt 17/11/2026, hỗ trợ Unicode dựng sẵn/tổ hợp. Query bỏ whitespace
+ngoài; `%`, `_`, `/` được escape để tìm literal. Chỉ chuẩn hóa predicate, giữ nguyên
+địa chỉ trong DB/response. Không cần extension hoặc thay đổi schema.
 Các bộ lọc kết hợp AND; blank filter không áp dụng; phuong được dùng riêng.
 Không ghi dữ liệu/audit, không yêu cầu If-Match. COUNT và trang là hai truy vấn.
 
@@ -41,7 +44,8 @@ sequenceDiagram
             R->>S: list_suppliers(params, actor, request_id)
             S->>S: require_supplier_role
             S->>P: list_suppliers(params)
-            P->>DB: COUNT theo bộ lọc
+            P->>P: Tỉnh/phường contains literal, bỏ dấu và hoa/thường
+            P->>DB: COUNT, AND q/tỉnh/phường
             opt Trang còn dữ liệu
                 P->>DB: SELECT, AND filters, ORDER BY, LIMIT/OFFSET
             end

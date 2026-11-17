@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useChoices, useCollection, useDetail } from "../../lib/api/useResources.js";
-import { dateTime } from "../../lib/format.js";
+import { dateTime, unitLabel } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -31,6 +31,7 @@ export function AuditPage() {
   const employees = useChoices(API.employees);
   const employeeRows = useMemo(() => employees.data || [], [employees.data]);
   const actorLabel = useMemo(() => auditActorLookup(employeeRows), [employeeRows]);
+  const warehouse = base === "/kho/lich-su";
   const filters = useMemo(() => auditFilters(employeeRows), [employeeRows]);
   // Màn chỉ đọc: không có chế độ tạo mới, "/moi" quay về danh sách.
   if (id === "moi") return <Navigate to={base} replace />;
@@ -59,9 +60,12 @@ export function AuditPage() {
       {/* Tắt ô tìm kiếm: backend chỉ tìm mã thô trong loại đối tượng/thao tác/lý do, đã có bộ lọc chuyên biệt. */}
       <Collection
         collection={collection}
+        allowReset={warehouse}
+        pageSizes={warehouse ? [20, 50, 100] : undefined}
         search={false}
         validate={dateRangeError}
         filters={filters}
+        optionLabels={warehouse ? { sort: { id: "Tăng dần", "-id": "Giảm dần" } } : undefined}
         columns={[
           { key: "created_at", label: "Thời gian", render: (row) => dateTime(row.created_at) },
           {
@@ -122,7 +126,7 @@ function AuditDetail({ record, actorLabel }) {
                   [row.ma_mat_hang, row.ten_mat_hang].filter(Boolean).join(" · ") ||
                   `#${row.mat_hang_id}`,
               },
-              { key: "don_vi_tinh", label: "Đơn vị" },
+              { key: "don_vi_tinh", label: "Đơn vị", render: (row) => unitLabel(row.don_vi_tinh) },
               { key: "so_luong_can", label: "Cần", numeric: true },
               { key: "so_luong_con_dung", label: "Còn dùng", numeric: true },
               { key: "so_luong_thieu", label: "Thiếu", numeric: true },

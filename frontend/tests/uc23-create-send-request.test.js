@@ -136,14 +136,19 @@ test("assignee selector is required and retains active employee filtering", () =
 
 // UC-23 AC-1: R6 hộp xác nhận đủ sáu thông tin (câu không đổi tồn nằm ở impact, xem test gửi)
 test("send confirmation contains all six R6 values", () => {
-  assert.deepEqual(sendConfirmEntries(values, items, employees), [
-    ["Loại yêu cầu", "Sản xuất để xuất giao"],
-    ["Thành phẩm", "Mountain Pro"],
-    ["Số lượng cần", "10"],
-    ["Đơn vị tính", "xe"],
-    ["Hạn hoàn thành", "01/12/2026"],
-    ["Nhân viên được giao", "Nhân viên A"],
-  ]);
+  for (const [code, label] of [["xe", "xe"], ["chiec", "chiếc"], ["cai", "cái"], ["bo", "bộ"]]) {
+    const catalog = items.map((item) => ({ ...item, don_vi_tinh: code }));
+    const before = structuredClone(catalog);
+    assert.deepEqual(sendConfirmEntries(values, catalog, employees), [
+      ["Loại yêu cầu", "Sản xuất để xuất giao"],
+      ["Thành phẩm", "Mountain Pro"],
+      ["Số lượng cần", "10"],
+      ["Đơn vị tính", label],
+      ["Hạn hoàn thành", "01/12/2026"],
+      ["Nhân viên được giao", "Nhân viên A"],
+    ]);
+    assert.deepEqual(catalog, before);
+  }
 });
 
 // UC-23 AC-10: Body giữ loại nhap_kho, ba xe, hạn và nhân viên; không gửi trường thừa
@@ -215,9 +220,11 @@ test("send uses the creation etag and propagates failures to confirmation", () =
 
 // UC-23 AC-1: D4 hạn bắt buộc kiểu date nhưng không giới hạn ngày quá khứ
 test("deadline input is required without a minimum and past dates survive payload", () => {
-  const field = source.match(/<Field label="Hạn hoàn thành"[^>]*\/>/)?.[0];
+  const field = source.match(/<Field\s+label="Hạn hoàn thành"[^>]*\/>/)?.[0];
   assert.ok(field);
-  assert.match(field, /type="date" required/);
+  assert.match(field, /\btype="date"/);
+  assert.match(field, /\brequired\b/);
+  assert.match(field, /name="han_hoan_thanh"/);
   assert.match(field, /field\("han_hoan_thanh"\)/);
   assert.doesNotMatch(field, /\bmin=/);
   assert.equal(

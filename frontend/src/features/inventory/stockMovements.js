@@ -1,6 +1,6 @@
 // UC-42 Tra cứu lịch sử biến động kho — Main 3; R1 (specs/use_cases/reporting/UC-42.md)
 export const MOVEMENT_TYPES = [
-  { value: "nhap_linh_kien", label: "Nhập kho (phiếu nhập)" },
+  { value: "nhap_linh_kien", label: "Nhập kho" },
   { value: "xuat_linh_kien", label: "Xuất linh kiện" },
   { value: "nhap_san_pham_san_xuat", label: "Nhập thành phẩm sản xuất" },
   { value: "xuat_thanh_pham", label: "Xuất thành phẩm" },

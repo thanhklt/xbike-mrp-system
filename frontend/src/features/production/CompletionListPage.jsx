@@ -25,6 +25,8 @@ export function CompletionListPage() {
       />
       <Collection
         collection={collection}
+        allowReset
+        pageSizes={[20, 50, 100]}
         search={false}
         validate={dateRangeError}
         filters={[

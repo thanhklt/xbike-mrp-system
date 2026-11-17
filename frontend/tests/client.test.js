@@ -36,6 +36,19 @@ test("DELETE preserves required reason body and If-Match", async () => {
   assert.deepEqual(JSON.parse(request.data), { ly_do: "Nghỉ việc" });
   assert.equal(request.headers["If-Match"], '"v1"');
 });
+
+test("bodyless v4 endpoints send zero request bytes while empty action objects remain JSON", async () => {
+  const calls = [];
+  apiClient.defaults.adapter = async (config) => {
+    calls.push(config);
+    return { config, status: 204, headers: {}, data: "" };
+  };
+  await writeResource({ path: "/bom/1", method: "delete", body: null, etag: '"v1"' });
+  await writeResource({ path: "/bom/1/kich_hoat", body: {}, etag: '"v2"' });
+  assert.equal(calls[0].data, undefined);
+  assert.equal(calls[0].headers["If-Match"], '"v1"');
+  assert.equal(calls[1].data, "{}");
+});
 test("choices fetch every page instead of truncating at the server page limit", async () => {
   apiClient.defaults.adapter = async (config) =>
     respond(config, [{ id: config.params.page }], { total: 201, total_pages: 3 });

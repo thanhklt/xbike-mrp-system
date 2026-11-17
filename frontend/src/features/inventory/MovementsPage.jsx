@@ -5,6 +5,7 @@ import { API } from "../../lib/api/endpoints.js";
 import { useChoices, useCollection } from "../../lib/api/useResources.js";
 import { dateTime, number } from "../../lib/format.js";
 import { MOVEMENT_TYPES, SOURCE_LABELS, movementParams, signedQuantity } from "./stockMovements.js";
+import { dateRangeError } from "../../components/filterFields.js";
 
 // UC-42 Tra cứu lịch sử biến động kho — Main 2–4; R1–R3, A1, A2 (specs/use_cases/reporting/UC-42.md)
 export function MovementsPage() {
@@ -22,14 +23,17 @@ export function MovementsPage() {
           <Collection
             title="Các lần biến động kho"
             collection={collection}
+            allowReset
+            pageSizes={[20, 50, 100]}
             search={false}
+            validate={dateRangeError}
             filters={[
               {
                 name: "mat_hang_id",
                 label: "Mặt hàng",
                 as: "select",
                 options: [
-                  { value: "", label: "Tất cả mặt hàng" },
+                  { value: "", label: "Tất cả" },
                   ...(items.data ?? []).map((item) => ({
                     value: item.id,
                     label: `${item.ma_mat_hang} · ${item.ten_mat_hang}`,
@@ -40,14 +44,14 @@ export function MovementsPage() {
                 name: "loai_giao_dich",
                 label: "Loại nghiệp vụ",
                 as: "select",
-                options: [{ value: "", label: "Tất cả loại" }, ...MOVEMENT_TYPES],
+                options: [{ value: "", label: "Tất cả" }, ...MOVEMENT_TYPES],
               },
               {
                 name: "nhan_vien_id",
                 label: "Nhân viên",
                 as: "select",
                 options: [
-                  { value: "", label: "Tất cả nhân viên" },
+                  { value: "", label: "Tất cả" },
                   ...(employees.data ?? []).map((employee) => ({
                     value: employee.id,
                     label: `${employee.ma_nhan_vien} · ${employee.ho_ten ?? "—"}`,

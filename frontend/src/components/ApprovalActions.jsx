@@ -7,10 +7,18 @@ import { Button } from "./Button.jsx";
 import { SavedLines } from "./ResourceFields.jsx";
 import { InfoGrid } from "./RecordPanel.jsx";
 import { itemName } from "../lib/format.js";
-export function ApprovalActions({ kind, path, base, snapshot, items, dirty = false }) {
+export function ApprovalActions({
+  kind,
+  path,
+  base,
+  snapshot,
+  items,
+  dirty = false,
+  allowedActions,
+}) {
   const record = snapshot.data;
   const { user } = useAuth();
-  const permissions = documentPermissions(kind, user.ma_vai_tro, record, user.id);
+  const permissions = allowedActions ?? documentPermissions(kind, user.ma_vai_tro, record, user.id);
   const { confirm, notify } = useFeedback();
   const mutation = useWrite();
   const navigate = useNavigate();

@@ -11,8 +11,12 @@ export function Collection({
   search = true,
   title = "Danh sách",
   validate,
+  allowReset = false,
+  pageSizes,
+  optionLabels = {},
 }) {
   const [draft, setDraft] = useState(collection.params);
+  const [initial] = useState(collection.params);
   const [filterError, setFilterError] = useState(null);
   return (
     <Card title={title}>
@@ -39,13 +43,34 @@ export function Collection({
           <Field
             key={field.name}
             {...field}
+            options={field.options?.map((option) => ({
+              ...option,
+              label: optionLabels[field.name]?.[option.value] ?? option.label,
+            }))}
             value={draft[field.name] ?? ""}
             onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })}
           />
         ))}
-        <Button type="submit" variant="secondary">
-          Lọc
-        </Button>
+        <div className="filter-actions">
+          <Button type="submit" variant="secondary">
+            Lọc
+          </Button>
+          {allowReset && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const cleared = Object.fromEntries(
+                  Object.keys(draft).map((key) => [key, initial[key] ?? ""]),
+                );
+                setDraft(cleared);
+                setFilterError(null);
+                collection.filter(cleared);
+              }}
+            >
+              Xóa lọc
+            </Button>
+          )}
+        </div>
       </form>
       {filterError && (
         <div className="notice notice-error" role="alert">
@@ -58,6 +83,8 @@ export function Collection({
           meta={collection.query.data?.meta}
           busy={collection.query.isFetching}
           onPage={collection.setPage}
+          pageSizes={pageSizes}
+          onPageSize={collection.setPageSize}
         />
       </QueryState>
     </Card>

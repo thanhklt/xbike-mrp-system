@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCollection, useDetail } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { nullable } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
 import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
@@ -11,6 +10,11 @@ import { Field } from "../../components/Field.jsx";
 import { Button } from "../../components/Button.jsx";
 import { ErrorNotice } from "../../components/QueryState.jsx";
 const base = "/kho/nha-cung-cap";
+
+function supplierAddressLabel(address) {
+  return address?.replace(/\s*\(địa chỉ minh họa\)\s*$/u, "");
+}
+
 export function SuppliersPage() {
   const { id } = useParams();
   const collection = useCollection(API.suppliers, { sort: "id" });
@@ -29,6 +33,8 @@ export function SuppliersPage() {
       <div>
         <Collection
           collection={collection}
+          allowReset
+          pageSizes={[20, 50, 100]}
           filters={[
             { name: "tinh", label: "Tỉnh / thành" },
             { name: "phuong", label: "Phường / xã" },
@@ -46,7 +52,7 @@ export function SuppliersPage() {
               label: "Địa chỉ",
               render: (row) => (
                 <>
-                  {row.dia_chi}
+                  {supplierAddressLabel(row.dia_chi)}
                   <small>{[row.phuong, row.tinh].filter(Boolean).join(" · ")}</small>
                 </>
               ),
@@ -72,19 +78,11 @@ export function SuppliersPage() {
                     ["Mã NCC", snapshot.data.ma_ncc],
                     ["Tên", snapshot.data.ten_ncc],
                     ["Số điện thoại", snapshot.data.so_dien_thoai],
-                    ["Địa chỉ", snapshot.data.dia_chi],
+                    ["Địa chỉ", supplierAddressLabel(snapshot.data.dia_chi)],
                     ["Phường / xã", snapshot.data.phuong],
                     ["Tỉnh / thành", snapshot.data.tinh],
                   ]}
                 />
-                <div className="actions">
-                  <Button variant="secondary" reason="API hiện chỉ hỗ trợ xem và tạo nhà cung cấp.">
-                    Sửa
-                  </Button>
-                  <Button variant="secondary" reason="Chưa có API xóa nhà cung cấp.">
-                    Xóa…
-                  </Button>
-                </div>
                 <Link to={`/kho/phieu-nhap?ncc_id=${snapshot.data.id}`}>
                   Xem phiếu nhập của nhà cung cấp →
                 </Link>
@@ -102,7 +100,6 @@ function SupplierForm() {
   const navigate = useNavigate();
   const { save, busy, error } = useSave();
   const [values, setValues] = useState({
-    ma_ncc: "",
     ten_ncc: "",
     so_dien_thoai: "",
     dia_chi: "",
@@ -112,7 +109,7 @@ function SupplierForm() {
   function submit(event) {
     event.preventDefault();
     const body = Object.fromEntries(
-      Object.entries(values).map(([key, value]) => [key, nullable(value)]),
+      Object.entries(values).map(([key, value]) => [key, value.trim()]),
     );
     save({ path: API.suppliers, body, versioned: false }, (result) =>
       navigate(`${base}/${result.data.id}`),
@@ -123,27 +120,26 @@ function SupplierForm() {
       <ErrorNotice error={error} />
       <div className="form-grid">
         {[
-          ["ma_ncc", "Mã NCC", true],
-          ["ten_ncc", "Tên nhà cung cấp", true],
+          ["ten_ncc", "Tên nhà cung cấp"],
           ["so_dien_thoai", "Số điện thoại"],
           ["dia_chi", "Địa chỉ"],
           ["phuong", "Phường / xã"],
           ["tinh", "Tỉnh / thành"],
-        ].map(([name, label, required]) => (
+        ].map(([name, label]) => (
           <Field
             key={name}
             label={label}
-            required={required}
-            pattern={name === "ma_ncc" ? "NCC-[0-9]{6}" : undefined}
-            placeholder={name === "ma_ncc" ? "NCC-000001" : undefined}
+            required
             value={values[name]}
             onChange={(event) => setValues({ ...values, [name]: event.target.value })}
           />
         ))}
       </div>
-      <Button type="submit" disabled={busy}>
-        Tạo nhà cung cấp
-      </Button>
+      <div className="actions actions-end supplier-form-actions">
+        <Button type="submit" disabled={busy}>
+          Tạo nhà cung cấp
+        </Button>
+      </div>
     </form>
   );
 }

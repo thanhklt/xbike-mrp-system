@@ -39,7 +39,7 @@ test("summary displays twenty required and missing frames for two requests", () 
   assert.deepEqual(SUMMARY_COLUMNS.map(({ key }) => rows[0][key]), [
     "MH-000002", "Khung", "cái", 20, 0, 20, 2,
   ]);
-  assert.deepEqual(SUMMARY_COLUMNS, [
+  assert.deepEqual(SUMMARY_COLUMNS.map(({ render: _render, ...column }) => column), [
     { key: "ma_mat_hang", label: "Mã" },
     { key: "ten_mat_hang", label: "Tên" },
     { key: "don_vi_tinh", label: "Đơn vị tính" },

@@ -93,13 +93,14 @@ test("confirmation hides existing finished products for stock replenishment", ()
 
 // UC-26 AC-5: Bảng báo thiếu đủ 6 cột, cột số numeric và id ổn định
 test("shortage table preserves all six report fields and numeric columns", () => {
-  assert.deepEqual(CHECK_COLUMNS, [
+  assert.deepEqual(CHECK_COLUMNS.map(({ render: _render, ...column }) => column), [
     { key: "ma_mat_hang", label: "Mã" }, { key: "ten_mat_hang", label: "Tên" },
     { key: "don_vi_tinh", label: "Đơn vị tính" }, { key: "so_luong_can", label: "Cần", numeric: true },
     { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
     { key: "so_luong_thieu", label: "Thiếu", numeric: true },
   ]);
   const original = structuredClone(shortage);
+  assert.equal(CHECK_COLUMNS[2].render({ don_vi_tinh: "chiec" }), "chiếc");
   assert.deepEqual(checkLines(shortage), [{ ...line, id: 2 }]);
   assert.deepEqual(shortage, original);
   assert.deepEqual(checkLines({ ...shortage, linh_kien: [], so_luong_can_san_xuat: 0 }), []);

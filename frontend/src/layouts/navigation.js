@@ -14,31 +14,28 @@ const navigation = {
   quan_ly: [
     { title: "Chung", items: [["/kho", "Tổng quan"]] },
     {
-      title: "Quản lý kho",
+      title: "Danh mục",
       items: [
-        ["/kho/mat-hang", "Mặt hàng và tồn kho"],
+        ["/kho/mat-hang", "Mặt hàng & tồn kho"],
         ["/kho/nha-cung-cap", "Nhà cung cấp"],
+        ["/kho/bom", "Định mức BOM"],
+      ],
+    },
+    {
+      title: "Vận hành",
+      items: [
         ["/kho/phieu-nhap", "Phiếu nhập kho"],
-        ["/kho/giao-dich", "Lịch sử biến động kho"],
-      ],
-    },
-    {
-      title: "Sản xuất",
-      items: [
-        ["/kho/bom", "BOM"],
+        ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung LK"],
         ["/kho/yeu-cau", "Yêu cầu sản xuất"],
-        ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"],
-        ["/kho/chung-tu-hoan-thanh", "Chứng từ hoàn thành sản xuất"],
         ["/kho/phieu-xuat", "Phiếu xuất kho"],
+        ["/kho/chung-tu-hoan-thanh", "Hoàn thành sản xuất"],
       ],
     },
     {
-      title: "Kiểm soát",
+      title: "Theo dõi",
       items: [
-        ["/kho/dieu-chinh", "Điều chỉnh kho"],
-        ["/kho/ticket", "Ticket sự cố"],
-        ["/kho/thong-ke", "Báo cáo nhập – xuất – tồn"],
-        ["/kho/lich-su", "Lịch sử thao tác"],
+        ["/kho/thong-ke", "Nhập – xuất – tồn"],
+        ["/kho/giao-dich", "Biến động kho"],
       ],
     },
   ],

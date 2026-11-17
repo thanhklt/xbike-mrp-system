@@ -167,7 +167,9 @@ async function renderDashboard(name, records = []) {
           props.columns.map((column) => React.createElement("td", { key: column.key }, column.render ? column.render(record) : record[column.key]))))
           : React.createElement("tr", null, React.createElement("td", null, props.empty))));
     },
-    QuickStock: () => null, RecentAudit: () => null,
+    QuickStock: () => null,
+    PendingCompletions: () => React.createElement("section", null, "Chứng từ hoàn thành chờ xác nhận"),
+    WaitingComponentRequests: () => React.createElement("section", null, "Yêu cầu chờ bổ sung linh kiện"),
   };
   const Component = new Function(...Object.keys(ports), `${code}; return ${name};`)(...Object.values(ports));
   return { html: renderToStaticMarkup(React.createElement(Component)), state };
@@ -219,8 +221,8 @@ test("employee dashboard renders the approved empty state", async () => {
   assert.match(html, /Không có yêu cầu chờ bắt đầu sản xuất\./);
 });
 
-// UC-29 D6: Tổng quan QLK chỉ dùng metric yêu cầu, không đọc API chứng từ đã gỡ
-test("warehouse dashboard uses request metrics and removes completion queue", async () => {
+// Tổng quan QLK giữ metric UC-29 và thêm hai hàng đợi theo yêu cầu giao diện đã chốt.
+test("warehouse dashboard keeps request metrics and shows the two pending queues", async () => {
   const { html, state } = await renderDashboard("WarehouseDashboard");
   assert.deepEqual(state.queries, []);
   assert.deepEqual(state.metrics, [
@@ -228,7 +230,9 @@ test("warehouse dashboard uses request metrics and removes completion queue", as
     { label: "Yêu cầu đang thực hiện", path: API.requests, params: { trang_thai: "dang_thuc_hien" }, href: "/kho/yeu-cau" },
     { label: "Chờ bổ sung linh kiện", path: API.requests, params: { trang_thai: "cho_bo_sung_linh_kien" }, href: "/kho/yeu-cau" },
   ]);
-  assert.doesNotMatch(html, /Chứng từ hoàn thành|Hoàn thành chờ duyệt|Lệnh/);
+  assert.match(html, /Chứng từ hoàn thành chờ xác nhận/);
+  assert.match(html, /Yêu cầu chờ bổ sung linh kiện/);
+  assert.doesNotMatch(html, /Tra cứu tồn kho nhanh|Hoạt động gần đây|Lệnh/);
 });
 
 // UC-29 D6: Giữ Phiếu của tôi cho phiếu xuất v4, bỏ tab/tham chiếu v3, giữ nhãn audit cũ

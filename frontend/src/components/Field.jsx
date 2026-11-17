@@ -1,8 +1,13 @@
 import { useId } from "react";
+import { DateFilterInput } from "./DateFilterInput.jsx";
 export function Field({ label, hint, children, as = "input", options, ...props }) {
   const id = useId();
   const Control = as;
   const attributes = { id, "aria-describedby": hint ? `${id}-hint` : undefined, ...props };
+  const isFormattedDate =
+    as === "input" &&
+    props.type === "date" &&
+    ["tu_ngay", "den_ngay", "han_hoan_thanh", "ngay_nhap"].includes(props.name);
   return (
     <div className="field">
       <div className="field-label">
@@ -14,7 +19,9 @@ export function Field({ label, hint, children, as = "input", options, ...props }
           </span>
         )}
       </div>
-      {as === "input" ? (
+      {isFormattedDate ? (
+        <DateFilterInput {...attributes} label={label} />
+      ) : as === "input" ? (
         <input {...attributes} />
       ) : (
         <Control {...attributes}>

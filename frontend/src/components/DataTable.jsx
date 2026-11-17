@@ -37,7 +37,7 @@ export function DataTable({ columns, rows = [], empty = "Chưa có dữ liệu p
     </div>
   );
 }
-export function Pagination({ meta = {}, onPage, busy }) {
+export function Pagination({ meta = {}, onPage, busy, pageSizes, onPageSize }) {
   const { page = 1, page_size: pageSize = 20, total = 0, total_pages: totalPages = 0 } = meta;
   return (
     <div className="pagination">
@@ -47,6 +47,24 @@ export function Pagination({ meta = {}, onPage, busy }) {
           : "0 kết quả"}
       </span>
       <div className="actions">
+        {pageSizes && (
+          <label className="pagination-size">
+            Dòng / trang
+            <select
+              className="inline-select"
+              aria-label="Số dòng mỗi trang"
+              value={pageSize}
+              disabled={busy}
+              onChange={(event) => onPageSize(Number(event.target.value))}
+            >
+              {pageSizes.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <Button
           variant="secondary"
           disabled={busy || page <= 1}

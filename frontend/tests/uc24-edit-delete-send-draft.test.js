@@ -71,7 +71,7 @@ test("edit form requires every field and retains active product and employee sel
   }
   assert.match(source, /types=\{\["thanh_pham"\]\}/);
   assert.match(source, /<EmployeeSelect\s+employees=\{employees\.data\}/);
-  const deadline = source.match(/<Field label="Hạn hoàn thành"[^>]*\/>/)[0];
+  const deadline = source.match(/<Field\s+label="Hạn hoàn thành"[^>]*\/>/)[0];
   assert.doesNotMatch(deadline, /\bmin=/);
   assert.match(source, /const showForm = manager && \(!record \|\| \(editable && editing\)\)/);
   assert.match(source, /\{showForm && \([\s\S]*?<form className="stack" onSubmit=\{submit\}>/);

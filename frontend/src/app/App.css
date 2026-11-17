@@ -530,6 +530,18 @@ td .btn {
   background: #eaf0f5;
   color: #173958;
 }
+.badge-gray {
+  background: #e5e5e5;
+  color: #404040;
+}
+.badge-sky {
+  background: #e7f0ff;
+  color: #1d4e89;
+}
+.badge-teal {
+  background: #dff5f2;
+  color: #11645b;
+}
 .badge-green {
   background: #eaf7f0;
   color: #196446;

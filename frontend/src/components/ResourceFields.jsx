@@ -8,6 +8,7 @@ import {
   STATUS_LABELS,
   money,
   number,
+  unitLabel,
 } from "../lib/format.js";
 export { dateFilters } from "./filterFields.js";
 export const statusFilter = (statuses) => ({
@@ -150,7 +151,9 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                   </td>
                 )}
                 <td>
-                  {items.find((item) => item.id === Number(line.mat_hang_id))?.don_vi_tinh || "—"}
+                  {unitLabel(
+                    items.find((item) => item.id === Number(line.mat_hang_id))?.don_vi_tinh || null,
+                  )}
                 </td>
                 <td>
                   <Button

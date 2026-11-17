@@ -6,13 +6,12 @@ import { useFeedback } from "../components/FeedbackProvider.jsx";
 import { ROLE_LABELS, initials } from "../lib/format.js";
 import { navigationFor } from "./navigation.js";
 import { Sidebar } from "./Sidebar.jsx";
+import sidebarStyles from "./Sidebar.module.css";
+import "./Warehouse.css";
 
 function adminBreadcrumbs(pathname) {
   if (pathname === "/admin/tai-khoan/moi") {
-    return [
-      { label: "Quản lý tài khoản", to: "/admin/tai-khoan" },
-      { label: "Tạo tài khoản" },
-    ];
+    return [{ label: "Quản lý tài khoản", to: "/admin/tai-khoan" }, { label: "Tạo tài khoản" }];
   }
   if (pathname.startsWith("/admin/tai-khoan/")) {
     return [
@@ -23,10 +22,7 @@ function adminBreadcrumbs(pathname) {
   if (pathname === "/admin/tai-khoan") return [{ label: "Quản lý tài khoản" }];
   if (pathname === "/admin/vai-tro") return [{ label: "Quản lý vai trò" }];
   if (pathname.startsWith("/admin/lich-su/")) {
-    return [
-      { label: "Lịch sử thao tác", to: "/admin/lich-su" },
-      { label: "Chi tiết lịch sử" },
-    ];
+    return [{ label: "Lịch sử thao tác", to: "/admin/lich-su" }, { label: "Chi tiết lịch sử" }];
   }
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
   if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
@@ -41,6 +37,7 @@ export function MainLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isAdmin = user.ma_vai_tro === "quan_tri_vien";
+  const isWarehouse = user.ma_vai_tro === "quan_ly";
   const groups = navigationFor(user.ma_vai_tro);
   const name = user.ho_ten || user.ten_dang_nhap;
   const avatarText = initials(name);
@@ -51,10 +48,13 @@ export function MainLayout() {
     } else {
       delete document.documentElement.dataset.adminTheme;
     }
+    if (isWarehouse) document.documentElement.dataset.warehouseTheme = "true";
+    else delete document.documentElement.dataset.warehouseTheme;
     return () => {
       delete document.documentElement.dataset.adminTheme;
+      delete document.documentElement.dataset.warehouseTheme;
     };
-  }, [isAdmin]);
+  }, [isAdmin, isWarehouse]);
 
   // UC-02 Đăng xuất — Main 1–3, A3: hỏi xác nhận, chỉ đăng xuất khi đồng ý (specs/use_cases/identity_access/UC-02.md)
   function signOut() {
@@ -77,9 +77,7 @@ export function MainLayout() {
         <span className="avatar">{avatarText}</span>
         <span>
           <strong>{name}</strong>
-          <small>
-            {isAdmin ? "Quản trị viên hệ thống" : ROLE_LABELS[user.ma_vai_tro]}
-          </small>
+          <small>{isAdmin ? "Quản trị viên hệ thống" : ROLE_LABELS[user.ma_vai_tro]}</small>
         </span>
         <ChevronDown size={18} />
       </summary>
@@ -106,7 +104,6 @@ export function MainLayout() {
             groups={groups}
             mobileOpen={menuOpen}
             onNavigate={() => setMenuOpen(false)}
-            onSignOut={signOut}
             adminTheme
           />
           {menuOpen && (
@@ -161,7 +158,10 @@ export function MainLayout() {
   }
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${sidebarStyles.layout}${isWarehouse ? " warehouse-shell" : ""}`}
+      data-warehouse-page={isWarehouse ? pathname.split("/")[2] || "overview" : undefined}
+    >
       <a className="skip-link" href="#main-content">
         Đến nội dung chính
       </a>
@@ -177,10 +177,12 @@ export function MainLayout() {
           >
             {menuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
-          <div className="brand">
-            XBIKE
-            <small>Hệ thống quản lý kho & sản xuất</small>
-          </div>
+          {!isWarehouse && (
+            <div className="brand">
+              XBIKE
+              <small>Hệ thống quản lý kho & sản xuất</small>
+            </div>
+          )}
         </div>
         {userMenu}
       </header>
@@ -189,7 +191,7 @@ export function MainLayout() {
           groups={groups}
           mobileOpen={menuOpen}
           onNavigate={() => setMenuOpen(false)}
-          onSignOut={signOut}
+          warehouseTheme={isWarehouse}
         />
         <main id="main-content" className="page-body" tabIndex={-1}>
           <Outlet />
