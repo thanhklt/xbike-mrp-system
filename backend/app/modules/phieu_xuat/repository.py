@@ -122,12 +122,15 @@ class SqlAlchemyPhieuXuatRepository:
         record = await self.session.scalar(query)
         return await self._resource(record, lock=lock) if record is not None else None
 
-    async def lock_source(self, kind: str, request_id: int) -> IssueSource:
+    async def lock_source(self, kind: str, request_id: int, *, lock: bool = True) -> IssueSource:
         # Shared ordering with cancellation: source request, issue, items, reservations.
         row = (
             (
                 await self.session.execute(
-                    text('SELECT * FROM "YeuCauSanXuat" WHERE id=:id FOR UPDATE'),
+                    text(
+                        'SELECT * FROM "YeuCauSanXuat" WHERE id=:id'
+                        + (" FOR UPDATE" if lock else "")
+                    ),
                     {"id": request_id},
                 )
             )
@@ -204,16 +207,18 @@ class SqlAlchemyPhieuXuatRepository:
             )
         ) is not None
 
-    async def lock_parts(self, item_ids: list[int], *, posting: bool) -> list[IssuePart]:
-        records = (
-            await self.session.scalars(
-                select(MatHang)
-                .where(MatHang.id.in_(item_ids))
-                .order_by(MatHang.id)
-                .with_for_update(read=not posting)
-                .execution_options(populate_existing=True)
-            )
-        ).all()
+    async def lock_parts(
+        self, item_ids: list[int], *, posting: bool, lock: bool = True
+    ) -> list[IssuePart]:
+        query = (
+            select(MatHang)
+            .where(MatHang.id.in_(item_ids))
+            .order_by(MatHang.id)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            query = query.with_for_update(read=not posting)
+        records = (await self.session.scalars(query)).all()
         return [
             IssuePart(r.id, r.loai_mat_hang, r.is_active, r.don_gia, r.so_luong_ton)
             for r in records
@@ -351,7 +356,9 @@ class SqlAlchemyPhieuXuatRepository:
     # UC-28 Hủy yêu cầu sản xuất — D4 đọc phiếu của yêu cầu không khóa (specs/use_cases/production/UC-28.md)
     async def phieu_cua_yeu_cau(self, yeu_cau_id: int) -> list[dict]:
         rows = await self.session.execute(
-            select(PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai)
+            select(
+                PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai
+            )
             .where(PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id)
             .order_by(PhieuXuat.id)
         )

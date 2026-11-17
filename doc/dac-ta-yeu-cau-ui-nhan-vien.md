@@ -12,7 +12,7 @@ Dev yêu cầu sửa theo luồng main `b228193` sau rà soát trước push. Gi
 - Tra cứu tồn kho chỉ đọc, lọc theo hai loại main: Linh kiện/Thành phẩm. Giữ ô chi tiết hai cột, nhãn đơn vị có dấu ở phần hiển thị.
 - Các mục mô tả 6 menu, lệnh riêng, nhập giờ/số lượng hoàn thành, sửa/xóa/trả nháp và QLK lập phiếu ở phần lịch sử bên dưới đã được thay thế bởi quyết định này; không dùng checklist/test cũ làm bằng chứng bản main đã đạt.
 
-Giới hạn API còn mở: tìm lại ID phiếu theo yêu cầu và xem trước các dòng nhu cầu trước khi tạo nháp, ghi tại NV-MAIN-005/006 trong [MISSING.md](./MISSING.md). Không tự thêm endpoint hoặc giả lập thành công trong app. Lịch sử ảnh 16/11 và bộ preview đầu 17/11 không được xem là ảnh nghiệm thu bản sửa cuối.
+Cập nhật sau yêu cầu làm ưu tiên ngày 17/11: NV-MAIN-005/006 đã tích hợp hai GET chỉ đọc `phieu_xuat/theo_yeu_cau/{id}` và `phieu_xuat/xem_truoc/{id}?loai_phieu=...`. Chi tiết yêu cầu mở lại phiếu đã có; form tạo nháp hiện preview dòng server trước Lưu. Khi 409, tải lại nguồn/tham chiếu, không tự ghi lại. Không đổi schema DB hoặc quyền danh sách. Xem [MISSING.md](./MISSING.md) và [báo cáo kiểm chứng](./bao-cao-missing-nhan-vien.md). Lịch sử ảnh 16/11 và bộ preview đầu 17/11 không phải ảnh nghiệm thu bản sửa cuối.
 
 Ngày cập nhật: **12/11/2026**. Nhánh bàn giao: `feature/UI-nhanvien`.
 Căn cứ thiết kế chuẩn: **`C:\Users\binhb\Downloads\XBIKE_Employee_Portal_Preview (1).html`** (SHA256: `80582902F488AE1BD3D4E944BFAA05EE98483955D5FA002B5BFE1B82646B99CB`, lưu trong repository tại `doc/ui-nhan-vien-preview/employee-portal-preview.html`).

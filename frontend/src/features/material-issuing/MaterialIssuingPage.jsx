@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useCollection, useDetail, useResource } from "../../lib/api/useResources.js";
@@ -68,25 +69,41 @@ function IssueDetail({ snapshot, items, base, issueType }) {
   const needsCompletion = !record && type === "xuat_thanh_pham" && source.data?.data.so_luong_can_san_xuat > 0;
   const completion = useResource(`${API.requests}/${sourceId}/chung_tu_hoan_thanh`, {}, Boolean(needsCompletion));
   const { save, busy, error } = useSave();
+  const existing = useResource(`${API.issues}/theo_yeu_cau/${sourceId}`, {}, Boolean(!record && employee && sourceId));
+  const existingIssue = existing.data?.data.find((issue) => issue.loai_phieu === type);
+  const eligible = canCreateIssue(source.data?.data, type, user.id, completion.data?.data);
+  const preview = useResource(`${API.issues}/xem_truoc/${sourceId}`, { loai_phieu: type },
+    Boolean(!record && employee && sourceId && existing.isSuccess && !existingIssue && eligible));
+  const { refetch: reloadExisting } = existing;
+  const { refetch: reloadSource } = source;
+  useEffect(() => {
+    if (error?.status === 409 || preview.error?.status === 409) {
+      reloadExisting();
+      reloadSource();
+    }
+  }, [error, preview.error, reloadExisting, reloadSource]);
   const navigate = useNavigate();
   const firstLine = record?.chi_tiet[0];
   const firstItem = items.find((item) => item.id === firstLine?.mat_hang_id);
   if (!record) {
     if (!employee) return <Notice>Chỉ nhân viên được giao yêu cầu được lập phiếu xuất.</Notice>;
     if (!sourceId) return <Notice>Mở yêu cầu được giao để lập phiếu xuất.</Notice>;
-    return <QueryState query={source}>
+    return <QueryState query={source}><QueryState query={existing}>
       <ErrorNotice error={error} />
       {needsCompletion && <QueryState query={completion} />}
       <InfoGrid entries={[
         ["Yêu cầu sản xuất", source.data?.data.ma_yeu_cau_san_xuat], ["Loại phiếu", issueTypeLabel(type)],
         ["Thành phẩm", itemName(items, source.data?.data.mat_hang_id)], ["Số lượng yêu cầu", number(source.data?.data.so_luong)],
       ]} />
-      <Notice>Nội dung và số lượng phiếu lấy từ nhu cầu đã chốt của yêu cầu. Hệ thống trả chi tiết phiếu sau khi lưu nháp; nhân viên không nhập hoặc sửa từng dòng.</Notice>
-      <Button disabled={busy || !canCreateIssue(source.data?.data, type, user.id, completion.data?.data)}
+      {existingIssue ? <Link className="btn btn-secondary" to={`${base}/${existingIssue.id}`}>Mở phiếu {existingIssue.ma_phieu_xuat}</Link> : <>
+      <Notice>Nội dung và số lượng lấy từ nhu cầu đã chốt. Lưu nháp sẽ kiểm tra lại trạng thái yêu cầu; gửi phiếu là bước riêng.</Notice>
+      {eligible && <QueryState query={preview}><SavedLines lines={preview.data?.data.chi_tiet || []} items={items} units /></QueryState>}
+      <Button disabled={busy || !eligible || !preview.isSuccess || preview.isFetching}
         onClick={() => save({ path: API.issues, method: "post", versioned: false,
           body: { loai_phieu: type, yeu_cau_san_xuat_id: Number(sourceId) } },
         (result) => navigate(`${base}/${result.data.id}`))}>Lưu nháp</Button>
-    </QueryState>;
+      </>}
+    </QueryState></QueryState>;
   }
   return <div className="stack">
     <h3>{record.ma_phieu_xuat}</h3>

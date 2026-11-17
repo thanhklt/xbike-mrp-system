@@ -485,6 +485,27 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (path === "nhu_cau_bo_sung_linh_kien")
       return respond({ data: { yeu_cau: [], tong_hop: [] }, meta: {} });
     const [resource, rawId, action] = path.split("/");
+    if (resource === "phieu_xuat" && method === "GET" && ["theo_yeu_cau", "xem_truoc"].includes(rawId)) {
+      const source = state.resources.yeu_cau_san_xuat.find((entry) => entry.id === Number(action));
+      if (!["quan_ly", "nhan_vien"].includes(role) || (rawId === "xem_truoc" && role !== "nhan_vien"))
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      if (!source) return respond({ error: { message: "Không tìm thấy" } }, 404);
+      if (role === "nhan_vien" && source.nhan_vien_duoc_giao_id !== user.id)
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      const saved = state.resources.phieu_xuat.filter((entry) => entry.yeu_cau_san_xuat_id === source.id);
+      if (rawId === "theo_yeu_cau") return respond({ data: saved.map(({ id, ma_phieu_xuat, loai_phieu, trang_thai }) =>
+        ({ id, ma_phieu_xuat, loai_phieu, trang_thai })), meta: {} });
+      const type = call.params.loai_phieu;
+      if (!["xuat_linh_kien", "xuat_thanh_pham"].includes(type)) return respond({ error: { message: "Loại phiếu không hợp lệ" } }, 422);
+      const completed = state.resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === source.id);
+      if (source.trang_thai !== "dang_thuc_hien" || saved.some((entry) => entry.loai_phieu === type) ||
+        (type === "xuat_linh_kien" ? !(source.so_luong_can_san_xuat > 0) :
+          source.loai_yeu_cau !== "xuat_giao" || !(source.so_luong_can_san_xuat === 0 || completed?.trang_thai === "da_duyet")))
+        return respond({ error: { message: "Yêu cầu chưa đủ điều kiện hoặc đã có phiếu" } }, 409);
+      return respond({ data: { yeu_cau_san_xuat_id: source.id, loai_phieu: type,
+        chi_tiet: [{ mat_hang_id: type === "xuat_linh_kien" ? 1 : source.mat_hang_id,
+          so_luong: type === "xuat_linh_kien" ? source.so_luong_can_san_xuat : source.so_luong }] }, meta: {} });
+    }
     const records = state.resources[resource];
     if (!records) {
       state.unexpected.push(call);

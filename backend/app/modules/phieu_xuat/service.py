@@ -37,9 +37,12 @@ from app.modules.phieu_xuat.schemas import (
     PhieuXuatActionResponse,
     PhieuXuatCreate,
     PhieuXuatListResponse,
+    PhieuXuatPreviewRead,
+    PhieuXuatPreviewResponse,
     PhieuXuatQuery,
     PhieuXuatRead,
     PhieuXuatResponse,
+    PhieuXuatSourceResponse,
 )
 
 
@@ -117,6 +120,45 @@ class PhieuXuatService:
             raise NotFoundException()
         return result
 
+    async def source_issues(
+        self, source_id: int, actor: dict, request_id: str
+    ) -> PhieuXuatSourceResponse:
+        self._role(actor)
+        if source_id > INT_MAX:
+            raise NotFoundException()
+        await self.repository.begin_read_snapshot()
+        source = await self.repository.lock_source("xuat_linh_kien", source_id, lock=False)
+        if "quan_ly" not in actor["roles"]:
+            self._assigned(source, actor)
+        return PhieuXuatSourceResponse(
+            data=await self.repository.phieu_cua_yeu_cau(source_id),
+            meta=ResponseMeta(request_id=request_id),
+        )
+
+    async def preview(
+        self, source_id: int, kind: str, actor: dict, request_id: str
+    ) -> PhieuXuatPreviewResponse:
+        self._role(actor, "nhan_vien")
+        if source_id > INT_MAX:
+            raise NotFoundException()
+        await self.repository.begin_read_snapshot()
+        source = await self.repository.lock_source(kind, source_id, lock=False)
+        self._assigned(source, actor)
+        await self._validate(kind, source, lock=False)
+        if await self.repository.exists_for_source(source_id, kind):
+            raise ConflictException(message="Phiếu xuất đã tồn tại. Mở phiếu hiện có từ yêu cầu.")
+        return PhieuXuatPreviewResponse(
+            data=PhieuXuatPreviewRead(
+                yeu_cau_san_xuat_id=source_id,
+                loai_phieu=kind,
+                chi_tiet=[
+                    {"mat_hang_id": item, "so_luong": qty}
+                    for item, qty in sorted(source.demand.items())
+                ],
+            ),
+            meta=ResponseMeta(request_id=request_id),
+        )
+
     @staticmethod
     def _require_if_match(if_match: str | None) -> str:
         if not if_match or not if_match.strip():
@@ -152,9 +194,11 @@ class PhieuXuatService:
         if source.assigned_id != int(actor["sub"]):
             raise ForbiddenException()
 
-    async def _validate(self, kind: str, source: IssueSource) -> list[IssuePart]:
+    async def _validate(
+        self, kind: str, source: IssueSource, *, lock: bool = True
+    ) -> list[IssuePart]:
         self._source_state(kind, source)
-        parts = await self.repository.lock_parts(sorted(source.demand), posting=False)
+        parts = await self.repository.lock_parts(sorted(source.demand), posting=False, lock=lock)
         expected_kind = "linh_kien" if kind == "xuat_linh_kien" else "thanh_pham"
         if {part.id for part in parts} != set(source.demand) or any(
             part.kind != expected_kind for part in parts
@@ -390,9 +434,7 @@ class PhieuXuatService:
         return any(record.trang_thai == "da_duyet" for record in records)
 
     # UC-28 Hủy yêu cầu sản xuất — R4 xử lý phiếu và lịch sử trong transaction của yêu cầu (specs/use_cases/production/UC-28.md)
-    async def huy_phieu_chua_ghi_so(
-        self, yeu_cau_id: int, ly_do: str, actor_id: int
-    ) -> None:
+    async def huy_phieu_chua_ghi_so(self, yeu_cau_id: int, ly_do: str, actor_id: int) -> None:
         """UC-28 port: clean unposted issues inside the caller's cancellation transaction."""
         records = await self.repository.lock_by_sources(yeu_cau_id)
         if any(record.trang_thai == "da_duyet" for record in records):

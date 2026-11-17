@@ -8,8 +8,10 @@ Dev đã yêu cầu “sửa lại theo luồng main” sau báo cáo review. Qu
 - NV-MAIN-002: Đã chuyển quyền UI theo UC-34/37: NV được giao lập/gửi/gửi lại, QLK duyệt/từ chối. Payload tạo chỉ có loại phiếu + mã yêu cầu, không có `chi_tiet`; phiếu chỉ đọc; không PATCH/DELETE/ve_nhap.
 - NV-MAIN-003: Chứng từ hoàn thành theo yêu cầu, số lượng và giờ server quản lý, gửi lại trực tiếp. Giữ bước tạo nháp trước khi gửi.
 - NV-MAIN-004: Hồ sơ chỉ đọc và đăng xuất qua Topbar; không khôi phục form đổi mật khẩu cũ.
-- [ ] NV-MAIN-005 — Thiếu cách tra cứu phiếu xuất hiện có theo yêu cầu cho NV. UC-34/37 A2 yêu cầu mở phiếu đã có, nhưng `YeuCauRead` không chứa ID phiếu (`backend/app/modules/san_xuat/schemas.py`), GET `/phieu_xuat` chỉ QLK, GET `/phieu_xuat/{id}` cần biết ID. App mở được phiếu sau khi tạo hoặc qua URL có ID; tạo trùng hiển thị 409 và giữ form, không đoán ID hay gọi danh sách trái quyền. Cần backend cung cấp ID/endpoint lookup theo yêu cầu hoặc dev chốt cách truy cập khác; chưa bổ sung backend.
-- [ ] NV-MAIN-006 — Thiếu nguồn xem trước đầy đủ dòng phiếu linh kiện trước khi lưu nháp. `PhieuXuatCreate` chỉ nhận nguồn, các dòng được server chốt khi POST; `YeuCauRead` không chứa dòng nhu cầu, GET kiểm tra chỉ áp dụng trạng thái đã gửi/chờ bổ sung (service `_require_check_state`), khác trạng thái đang thực hiện khi lập phiếu. UI hiển thị yêu cầu/loại phiếu trước Lưu nháp và các dòng chỉ đọc từ response sau khi lưu, không giả dựng BOM. Nếu cần đúng bước preview dòng trước Lưu trong UC-34 thì cần endpoint đọc nhu cầu đã chốt; chưa có trong phạm vi này.
+- [x] NV-MAIN-005 — Đã bổ sung GET `/api/v1/phieu_xuat/theo_yeu_cau/{id}` cho NV được giao hoặc QLK; trả tham chiếu phiếu theo yêu cầu, kể cả yêu cầu đã hoàn thành. Không mở quyền danh sách toàn bộ phiếu. UI mở lại phiếu sau refresh; khi tạo cạnh tranh bị 409 sẽ tải lại nguồn/tham chiếu, cho mở phiếu hiện có và không tự POST lại. Đã kiểm bằng PostgreSQL thật, browser fixture và browser E2E thật; xem [báo cáo](./bao-cao-missing-nhan-vien.md).
+- [x] NV-MAIN-006 — Đã bổ sung GET `/api/v1/phieu_xuat/xem_truoc/{id}?loai_phieu=...` chỉ đọc cho NV được giao; dùng cùng nguồn nhu cầu và validation tạo phiếu. UI hiện dòng/số lượng/đơn vị trước Lưu nháp, có loading/error/retry và chặn lưu khi preview chưa thành công. GET không tạo nháp/giữ hàng/audit; POST kiểm lại trong transaction. Không đổi schema DB. Đã đối chiếu snapshot trước/sau GET, preview với POST và browser E2E thật.
+
+Cập nhật ưu tiên 17/11/2026: dev chọn làm API phiếu xuất và kiểm thử trước, giữ hiện tại với FE-MISS-003 (initials), FE-MISS-006 (không thêm badQty/note), FE-MISS-008 (không tự đặt ngưỡng tồn). Không coi các tính năng tạm giữ đó đã có API.
 
 
 ## Đối chiếu main ngày 16/11/2026 — chưa triển khai
@@ -206,7 +208,7 @@ Theo quyết định ngày 11/11/2026 của dev, giao diện nhân viên chuyể
   - Căn cứ đóng mục: thực hiện và ghi kết quả các kiểm tra còn mở; chưa tự đánh dấu hoàn tất.
 - [ ] NV-CHECK-002 — Kiểm chứng phân quyền hai tài khoản và E2E API/PostgreSQL thật (`AUTH-04`, `CHECK-04`).
   - Ảnh hưởng: chưa xác nhận toàn bộ luồng nhân viên trên backend/database thật, gồm cô lập dữ liệu theo người dùng và transaction.
-  - Bằng chứng hiện có: fixture browser redesign + điều hướng đạt 18/18 ở bản hiện tại. Fixture không chứng minh phân quyền hoặc transaction backend. Chưa có môi trường database test riêng được xác nhận để chạy phần này; không dùng database ứng dụng làm nơi thử ghi.
+  - Cập nhật 17/11: đã kiểm PostgreSQL test riêng và một browser E2E thật với hai NV/QLK: preview → tạo/mở lại/gửi/duyệt phiếu linh kiện → bắt đầu SX → lập/gửi/duyệt hoàn thành → xuất thành phẩm. Số dư/sổ kho/giữ hàng khớp sau luồng. Giữ `[ ]` vì chưa bao phủ browser E2E mọi nhánh thiếu vật tư, từ chối/gửi lại và phiên hết hạn. Xem báo cáo missing mới; không coi một kịch bản là toàn hệ thống đã đạt.
   - Căn cứ đóng mục: kiểm tra trên môi trường test phù hợp, ghi kết quả thực tế và giới hạn; không tự seed/reset hoặc thay đổi database đang có dữ liệu.
 - [ ] NV-CHECK-003 — Dev nghiệm thu UI và kết quả triển khai (`UI-13`, `CHECK-05`).
   - Cần dev xem UI/đặc tả và xác nhận nghiệm thu; kết quả worker review không thay cho nghiệm thu của dev.

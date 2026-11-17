@@ -80,6 +80,34 @@ class PhieuXuatResponse(BaseModel):
     meta: ResponseMeta
 
 
+class PhieuXuatReference(BaseModel):
+    id: int
+    ma_phieu_xuat: str
+    loai_phieu: IssueType
+    trang_thai: IssueState
+
+
+class PhieuXuatSourceResponse(BaseModel):
+    data: list[PhieuXuatReference]
+    meta: ResponseMeta
+
+
+class PhieuXuatPreviewQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    loai_phieu: IssueType
+
+
+class PhieuXuatPreviewRead(BaseModel):
+    yeu_cau_san_xuat_id: int
+    loai_phieu: IssueType
+    chi_tiet: list[ChiTietPhieuXuatCreate]
+
+
+class PhieuXuatPreviewResponse(BaseModel):
+    data: PhieuXuatPreviewRead
+    meta: ResponseMeta
+
+
 class PhieuXuatListResponse(BaseModel):
     data: list[PhieuXuatRead]
     meta: ListResponseMeta

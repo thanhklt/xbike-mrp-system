@@ -198,10 +198,12 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       const { data: ketQua } = await readResource(`${API.requests}/${record.id}/kiem_tra`);
       confirm({
         title: ketQua.lan_dau ? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất",
+        variant: "request-check",
         description: record.ma_yeu_cau_san_xuat,
         content: <>
           <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
-          <DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} />
+          <div className="request-check-table"><DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} /></div>
+          <RequestCheckCards rows={checkLines(ketQua)} />
         </>,
         impact: checkImpact(ketQua),
         onConfirm: async () => {
@@ -443,17 +445,32 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   );
 }
 
+function RequestCheckCards({ rows }) {
+  return <div className="request-check-cards">
+      {rows.length ? rows.map((line) => <section key={line.id} aria-label={`Linh kiện ${line.ma_mat_hang}`}>
+        <InfoGrid entries={CHECK_COLUMNS.map((column) => [column.label, line[column.key]])} />
+      </section>) : <Notice>Chưa có dữ liệu phù hợp.</Notice>}
+    </div>;
+}
+
 function IssueLinks({ record, userId }) {
+  const issues = useResource(`${API.issues}/theo_yeu_cau/${record.id}`, {}, record.nhan_vien_duoc_giao_id === userId);
   const completion = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {},
     Boolean(record.nhan_vien_duoc_giao_id === userId && record.started_at && record.so_luong_can_san_xuat > 0));
-  return <div className="actions actions-end">
-    {canCreateIssue(record, "xuat_linh_kien", userId, completion.data?.data) && (
+  if (record.nhan_vien_duoc_giao_id !== userId) return null;
+  const saved = issues.data?.data || [];
+  return <QueryState query={issues}><div className="actions actions-end">
+    {saved.map((issue) => <Link key={issue.id} className="btn btn-secondary"
+      to={`/nv/${issue.loai_phieu === "xuat_linh_kien" ? "xuat-nvl" : "xuat-tp"}/${issue.id}`}>
+      Mở phiếu {issue.ma_phieu_xuat}
+    </Link>)}
+    {!saved.some((issue) => issue.loai_phieu === "xuat_linh_kien") && canCreateIssue(record, "xuat_linh_kien", userId, completion.data?.data) && (
       <Link className="btn btn-secondary" to={`/nv/xuat-nvl/moi?yeu_cau_san_xuat_id=${record.id}`}>Lập phiếu xuất linh kiện</Link>
     )}
-    {canCreateIssue(record, "xuat_thanh_pham", userId, completion.data?.data) && (
+    {!saved.some((issue) => issue.loai_phieu === "xuat_thanh_pham") && canCreateIssue(record, "xuat_thanh_pham", userId, completion.data?.data) && (
       <Link className="btn btn-secondary" to={`/nv/xuat-tp/moi?yeu_cau_san_xuat_id=${record.id}`}>Lập phiếu xuất thành phẩm</Link>
     )}
-  </div>;
+  </div></QueryState>;
 }
 
 function CompletionSection({ record, items, manager, userId }) {

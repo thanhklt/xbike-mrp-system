@@ -91,12 +91,18 @@ test("manager sees issue list and approval but cannot create or edit; other empl
   await expect(dialog.getByRole("button", { name: /Gửi|Duyệt/ })).toHaveCount(0);
 });
 
-test("duplicate issue creation keeps the form open and shows conflict without inventing a list lookup", async ({ page }) => {
+test("concurrent creation offers existing issue after 409 without forbidden employee list", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
+  const saved = state.resources.phieu_xuat.slice();
+  state.resources.phieu_xuat = [];
   await page.goto("/nv/xuat-nvl/moi?yeu_cau_san_xuat_id=2");
+  await expect(page.getByRole("button", { name: "Lưu nháp", exact: true })).toBeEnabled();
+  state.resources.phieu_xuat = saved;
   await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Yêu cầu đã có phiếu xuất loại này");
   await expect(page).toHaveURL(/\/moi\?yeu_cau_san_xuat_id=2$/);
+  await page.getByRole("link", { name: `Mở phiếu ${saved[0].ma_phieu_xuat}`, exact: true }).click();
+  await expect(page).toHaveURL(/\/nv\/xuat-nvl\/1$/);
   expect(state.resources.phieu_xuat).toHaveLength(2);
   expect(state.calls.filter((c) => c.path === "phieu_xuat" && c.method === "GET")).toHaveLength(0);
 });
@@ -113,4 +119,43 @@ test("production product issue stays disabled until the linked completion is app
   await page.reload();
   await page.getByRole("button", { name: "Lưu nháp", exact: true }).click();
   await expect(page).toHaveURL(/\/nv\/xuat-tp\/1$/);
+});
+
+test("existing issue reopens from request after refresh including completed requests", async ({ page }) => {
+  const state = await installApi(page, { role: "nhan_vien" });
+  const issue = state.resources.phieu_xuat[0];
+  state.resources.yeu_cau_san_xuat[1].trang_thai = "hoan_thanh";
+  await page.goto("/nv/yeu-cau/2");
+  await page.reload();
+  await page.getByRole("link", { name: `Mở phiếu ${issue.ma_phieu_xuat}`, exact: true }).click();
+  await expect(page).toHaveURL(/\/nv\/xuat-nvl\/1$/);
+  expect(state.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  expect(state.calls.filter((call) => call.path === "phieu_xuat" && call.method === "GET")).toHaveLength(0);
+});
+
+test("preview loads quantities before save and error retries without creating draft", async ({ page }) => {
+  const state = await installApi(page, { role: "nhan_vien" });
+  state.resources.phieu_xuat = [];
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let fail = true;
+  await page.route("**/phieu_xuat/xem_truoc/2?*", async (route) => {
+    await gate;
+    if (fail) return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: { message: "Lỗi tải preview" } }) });
+    return route.fallback();
+  });
+  await page.goto("/nv/xuat-nvl/moi?yeu_cau_san_xuat_id=2");
+  const save = page.getByRole("button", { name: "Lưu nháp", exact: true });
+  await expect(save).toBeDisabled();
+  release();
+  await expect(page.getByRole("alert")).toContainText("Lỗi tải preview");
+  await expect(save).toBeDisabled();
+  fail = false;
+  await page.getByRole("button", { name: "Tải lại", exact: true }).click();
+  await expect(page.locator("dialog.record-dialog")).toContainText("8 cái");
+  await expect(save).toBeEnabled();
+  expect(state.resources.phieu_xuat).toHaveLength(0);
+  expect(state.calls.filter((call) => call.method === "POST")).toHaveLength(0);
+  await page.locator("dialog.record-dialog").getByRole("button", { name: "Đóng", exact: true }).click();
+  expect(state.calls.filter((call) => call.method === "POST")).toHaveLength(0);
 });

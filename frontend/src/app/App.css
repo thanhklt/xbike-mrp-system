@@ -2847,6 +2847,55 @@ html[data-employee-theme="true"] .confirmation {
   width: min(492px, calc(100vw - 32px));
 }
 
+.confirmation.confirmation-request-check,
+html[data-admin-theme="true"] .confirmation-request-check,
+html[data-employee-theme="true"] .confirmation-request-check {
+  width: min(980px, calc(100vw - 32px));
+}
+
+.confirmation-request-check .request-check-table table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.confirmation-request-check .request-check-table th,
+.confirmation-request-check .request-check-table td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-request-check .request-check-table tbody tr:hover {
+  background: #30261f;
+}
+
+.request-check-cards {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .confirmation-request-check .request-check-table {
+    display: none;
+  }
+  .confirmation-request-check .request-check-cards {
+    display: grid;
+    gap: 16px;
+  }
+  .request-check-cards > section {
+    padding: 14px;
+    border: 1px solid #493d33;
+    border-radius: 7px;
+  }
+  .request-check-cards .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .request-check-cards .info-grid > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
 html[data-admin-theme="true"] .confirmation::backdrop,
 html[data-admin-theme="true"] .record-dialog::backdrop,
 html[data-employee-theme="true"] .confirmation::backdrop,
