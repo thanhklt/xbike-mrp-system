@@ -68,6 +68,7 @@ class PhieuXuatRead(BaseModel):
     ly_do_tu_choi: str | None
     phien_ban: int
     chi_tiet: list[ChiTietPhieuXuatRead]
+    ma_yeu_cau_san_xuat: str | None = None
 
     @field_validator("created_at", "updated_at", "gui_at", "xu_ly_at")
     @classmethod
@@ -134,6 +135,37 @@ class PhieuXuatQuery(BaseModel):
     loai_phieu: IssueType | None = None
     trang_thai: IssueState | None = None
     nhan_vien_id: int | None = Field(default=None, gt=0, le=INT_MAX)
+    yeu_cau_san_xuat_id: int | None = Field(default=None, gt=0, le=INT_MAX)
+    tu_ngay: date | None = None
+    den_ngay: date | None = None
+
+    @field_validator("tu_ngay", "den_ngay", mode="before")
+    @classmethod
+    def date_only(cls, value):
+        if value is not None and not (isinstance(value, date) and not isinstance(value, datetime)):
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+                raise ValueError("Date must use YYYY-MM-DD")
+        return value
+
+    @model_validator(mode="after")
+    def valid_dates(self) -> Self:
+        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
+            raise ValueError("tu_ngay must not exceed den_ngay")
+        if self.den_ngay == date.max:
+            raise ValueError("den_ngay is outside supported range")
+        return self
+
+
+class PhieuXuatCuaToiQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    q: str | None = None
+    sort: Literal["id", "-id", "created_at", "-created_at", "ma_phieu_xuat", "-ma_phieu_xuat"] = (
+        "-created_at"
+    )
+    loai_phieu: IssueType | None = None
+    trang_thai: IssueState | None = None
     yeu_cau_san_xuat_id: int | None = Field(default=None, gt=0, le=INT_MAX)
     tu_ngay: date | None = None
     den_ngay: date | None = None

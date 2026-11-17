@@ -1,9 +1,12 @@
 """Production requests (v4)."""
 
+import re
 from datetime import date, datetime
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+INT_MAX = 2**31 - 1
 
 YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
@@ -172,10 +175,53 @@ class ChungTuListQuery(BaseModel):
     def strip_query_strings(cls, value):
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("tu_ngay", "den_ngay", mode="before")
+    @classmethod
+    def valid_iso_date(cls, value):
+        if value is not None and not (isinstance(value, date) and not isinstance(value, datetime)):
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+                raise ValueError("Date must use YYYY-MM-DD")
+        return value
+
     @model_validator(mode="after")
-    def validate_dates(self):
+    def validate_dates(self) -> Self:
         if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
             raise ValueError("tu_ngay phải nhỏ hơn hoặc bằng den_ngay")
+        if self.den_ngay == date.max:
+            raise ValueError("den_ngay is outside supported range")
+        return self
+
+
+class ChungTuCuaToiQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    mat_hang_id: int | None = Field(default=None, gt=0)
+    trang_thai: Literal["nhap", "cho_duyet", "da_duyet", "tu_choi"] | None = None
+    loai_yeu_cau: LoaiYeuCau | None = None
+    tu_ngay: date | None = None
+    den_ngay: date | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_query_strings(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("tu_ngay", "den_ngay", mode="before")
+    @classmethod
+    def valid_iso_date(cls, value):
+        if value is not None and not (isinstance(value, date) and not isinstance(value, datetime)):
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+                raise ValueError("Date must use YYYY-MM-DD")
+        return value
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> Self:
+        if self.tu_ngay and self.den_ngay and self.tu_ngay > self.den_ngay:
+            raise ValueError("tu_ngay phải nhỏ hơn hoặc bằng den_ngay")
+        if self.den_ngay == date.max:
+            raise ValueError("den_ngay is outside supported range")
         return self
 
 

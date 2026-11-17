@@ -1,9 +1,11 @@
-import { useId, useState } from "react";
-import { ArrowDownUp, CalendarDays, ChevronDown, ChevronUp, Filter, LayoutGrid, Layers, Search } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { ArrowDownUp, CalendarDays, ChevronDown, ChevronUp, Filter, LayoutGrid, Layers, RotateCcw, Search } from "lucide-react";
 import { Card } from "./Card.jsx";
 import { Button } from "./Button.jsx";
 import { Field } from "./Field.jsx";
 import { DateInput } from "./DateInput.jsx";
+import { CycleButton } from "./CycleButton.jsx";
+import { dateRangeError } from "./filterFields.js";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
 export function Collection({
@@ -16,30 +18,79 @@ export function Collection({
   validate,
   expandableFilters = false,
   filterIcon = false,
+  cycleFilters = false,
+  syncDraftWithParams = false,
 }) {
   const [draft, setDraft] = useState(collection.params);
   const [filterError, setFilterError] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const [resetCount, setResetCount] = useState(0);
+  const searchTimer = useRef(null);
   const advancedId = useId();
+
+  useEffect(() => {
+    if (syncDraftWithParams || cycleFilters) {
+      clearTimeout(searchTimer.current);
+      setDraft(collection.params);
+      setFilterError(null);
+    }
+  }, [collection.params, syncDraftWithParams, cycleFilters]);
+  useEffect(() => () => clearTimeout(searchTimer.current), []);
   const icons = { trang_thai: Layers, loai_yeu_cau: LayoutGrid, sort: ArrowDownUp, tu_ngay: CalendarDays, den_ngay: CalendarDays };
   function apply(next) {
-    const message = validate?.(next) ?? null;
+    clearTimeout(searchTimer.current);
+    const message = (cycleFilters ? dateRangeError(next) : null) ?? validate?.(next) ?? null;
     setFilterError(message);
     if (!message) collection.filter(next);
   }
+  function resetFilters() {
+    clearTimeout(searchTimer.current);
+    const next = search ? { q: "" } : {};
+    for (const field of filters) next[field.name] = field.options?.[0]?.value ?? "";
+    setDraft({ ...collection.params, ...next, page: 1 });
+    setFilterError(null);
+    setResetCount((count) => count + 1);
+    collection.reset(next);
+  }
   function renderFilter(field) {
     const Icon = expandableFilters && icons[field.name];
+    const labelContent = Icon ? <><Icon size={19} aria-hidden="true" />{field.label}</> : field.label;
+    if (cycleFilters && field.as === "select") {
+      const fieldId = `filter-${field.name}`;
+      const labelId = `${fieldId}-label`;
+      return (
+        <div key={field.name} className="field">
+          <div className="field-label">
+            <label id={labelId} htmlFor={fieldId}>{labelContent}</label>
+          </div>
+          <CycleButton
+            id={fieldId}
+            name={field.name}
+            aria-labelledby={labelId}
+            value={draft[field.name] ?? ""}
+            options={field.options}
+            disabled={field.disabled}
+            onChange={(event) => {
+              const next = { ...draft, [field.name]: event.target.value };
+              setDraft(next);
+              apply(next);
+            }}
+          />
+        </div>
+      );
+    }
     return (
       <Field
-        key={field.name}
+        key={field.type === "date" ? `${field.name}-${resetCount}` : field.name}
         {...field}
         {...(field.type === "date" ? { as: DateInput, type: undefined } : {})}
-        label={Icon ? <><Icon size={19} aria-hidden="true" />{field.label}</> : field.label}
+        label={labelContent}
         value={draft[field.name] ?? ""}
         onChange={(event) => {
           const next = { ...draft, [field.name]: event.target.value };
           setDraft(next);
           if (field.as === "select") apply(next);
+          else if (cycleFilters && field.type === "date") apply(next);
         }}
       />
     );
@@ -51,7 +102,14 @@ export function Collection({
         type="search"
         placeholder={searchPlaceholder}
         value={draft.q || ""}
-        onChange={(event) => setDraft({ ...draft, q: event.target.value })}
+        onChange={(event) => {
+          const next = { ...draft, q: event.target.value };
+          setDraft(next);
+          if (cycleFilters) {
+            clearTimeout(searchTimer.current);
+            searchTimer.current = setTimeout(() => apply(next), 300);
+          }
+        }}
       />
   );
   const searchField = expandableFilters && search ? (
@@ -60,6 +118,15 @@ export function Collection({
       <Search className="employee-filter-search-icon" size={20} aria-hidden="true" />
     </div>
   ) : searchInput;
+  const filterAction = cycleFilters ? (
+    <Button type="button" variant={expandableFilters ? "primary" : "secondary"} onClick={resetFilters}>
+      <RotateCcw size={20} aria-hidden="true" />Reset tìm kiếm
+    </Button>
+  ) : (
+    <Button type="submit" variant={expandableFilters ? "primary" : "secondary"}>
+      {(expandableFilters || filterIcon) && <Filter size={20} aria-hidden="true" />}Lọc
+    </Button>
+  );
   return (
     <Card title={title} className={expandableFilters ? "employee-request-collection" : ""}>
       <form
@@ -74,7 +141,7 @@ export function Collection({
             <div className="employee-filter-primary">
               {searchField}
               {filters.filter((field) => field.name === "trang_thai").map(renderFilter)}
-              <Button type="submit"><Filter size={20} aria-hidden="true" />Lọc</Button>
+              {filterAction}
             </div>
             <div id={advancedId} className="employee-filter-advanced" hidden={!expanded}>
               {filters.filter((field) => field.name !== "trang_thai").map(renderFilter)}
@@ -86,7 +153,7 @@ export function Collection({
               </button>
             </div>
           </>
-        ) : <>{searchField}{filters.map(renderFilter)}<Button type="submit" variant="secondary">{filterIcon && <Filter size={20} aria-hidden="true" />}Lọc</Button></>}
+        ) : <>{searchField}{filters.map(renderFilter)}{filterAction}</>}
       </form>
       {filterError && (
         <div className="notice notice-error" role="alert">
@@ -98,7 +165,10 @@ export function Collection({
         <Pagination
           meta={collection.query.data?.meta}
           busy={collection.query.isFetching}
-          onPage={collection.setPage}
+          onPage={(page) => {
+            if (cycleFilters && (draft.q || "") !== (collection.params.q || "")) apply(draft);
+            else collection.setPage(page);
+          }}
         />
       </QueryState>
     </Card>

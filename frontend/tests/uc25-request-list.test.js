@@ -97,7 +97,7 @@ test("collection filters preserve the approved order and existing date fields", 
 // UC-25 AC-1: D5 tiêu đề/phụ đề theo vai trò; cột Số lượng cần dạng số và đủ loại/hạn/trạng thái
 test("request page uses approved role headings and ordered list columns", () => {
   assert.match(page, /<PageHeader\s+title=\{manager \? "Yêu cầu sản xuất" : "Yêu cầu được giao"\}/);
-  assert.match(page, /subtitle=\{manager\s*\? "Lập yêu cầu sản xuất và gửi cho nhân viên được giao\."\s*:\s*"Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi\."\}/);
+  assert.match(page, /subtitle=\{manager\s*\?\s*"Lập yêu cầu sản xuất và gửi cho nhân viên được giao\."\s*:\s*"Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi\."\}/);
   assert.deepEqual([...columns.matchAll(/key: "([^"]+)"/g)].map(([, key]) => key), [
     "ma_yeu_cau_san_xuat", "mat_hang_id", "loai_yeu_cau", "han_hoan_thanh", "so_luong", "trang_thai", "action",
   ]);

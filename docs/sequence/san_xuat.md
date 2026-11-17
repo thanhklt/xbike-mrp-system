@@ -925,6 +925,57 @@ Chỉ đọc, không khóa, không commit, không audit. Lỗi nội bộ → 50
 QLK có menu sau Nhu cầu bổ sung linh kiện; route nằm trong RoleGate của `/kho`.
 Lịch sử thao tác giữ nguyên theo D8, gồm cả snapshot tạo Nháp; không sửa module audit.
 
+## GET /api/v1/chung_tu_hoan_thanh_sx/cua_toi
+
+Dành riêng cho Nhân viên (`nhan_vien`). Trả về danh sách chứng từ hoàn thành sản xuất thuộc các yêu cầu sản xuất mà nhân viên đó được phân công (`YeuCauSanXuat.nhan_vien_duoc_giao_id == actor["sub"]`).
+Khác với danh sách của Quản lý kho (vốn ẩn trạng thái `nhap`), danh sách của nhân viên bao gồm đầy đủ các trạng thái được phép: `nhap`, `cho_duyet`, `da_duyet`, `tu_choi`.
+Bộ lọc AND: `mat_hang_id`, `trang_thai`, `loai_yeu_cau`, `tu_ngay`, `den_ngay`. Tuyệt đối cấm truyền `nhan_vien_id` (trả 422 nếu có).
+Page mặc định 1, size 20, tối đa 100.
+Chỉ đọc, không khóa, không commit, không audit.
+
+```mermaid
+sequenceDiagram
+    actor NV as Nhân viên
+    participant FE as EmployeeCompletionPage và Collection
+    participant API as Router
+    participant Auth as JWT và require_roles
+    participant S as ChungTuHoanThanhService
+    participant C as ChungTuHoanThanhRepository
+    participant DB as PostgreSQL
+    NV->>FE: Mở danh sách hoặc chọn bộ lọc
+    FE->>API: GET /api/v1/chung_tu_hoan_thanh_sx/cua_toi, query phân trang và bộ lọc
+    API->>Auth: Xác thực và vai trò nhan_vien
+    alt Chưa đăng nhập hoặc QLK/Admin
+        Auth-->>NV: 401 hoặc 403
+    else Được phép
+        API->>API: Validate query, cấm dư/lặp/nhan_vien_id, kiểm tu_ngay không sau den_ngay
+        alt Query không hợp lệ hoặc chứa nhan_vien_id
+            API-->>NV: 422
+        else Query hợp lệ
+            API->>S: danh_sach_cua_toi(params, actor, request_id)
+            S->>S: Kiểm quyền nhan_vien cả khi gọi trực tiếp
+            S->>C: list_my_entries(params, actor_id)
+            C->>DB: COUNT chứng từ JOIN YeuCauSanXuat ON nhan_vien_duoc_giao_id = actor_id (GỒM cả Nháp)
+            DB-->>C: total gồm cả Nháp
+            alt offset lớn hơn hoặc bằng total
+                C-->>S: RecordPage rỗng, giữ total
+            else Còn dòng
+                C->>DB: SELECT cùng JOIN và WHERE, finish_time DESC, id DESC, OFFSET và LIMIT
+                DB-->>C: Chứng từ và mã yêu cầu, mặt hàng, loại yêu cầu
+                C-->>S: RecordPage ChungTuListItem và total
+            end
+            S-->>API: ChungTuListResponse, ListResponseMeta
+            API-->>FE: 200 data và meta, không ETag
+            alt Không khớp tiêu chí
+                FE-->>NV: Chưa có dữ liệu phù hợp, total và total_pages bằng 0
+            else Có dữ liệu
+                FE-->>NV: Hiển thị bảng chứng từ (kể cả Nháp), nút Xem mở đúng id chứng từ
+            end
+        end
+    end
+```
+
+
 ## GET /api/v1/chung_tu_hoan_thanh_sx/{id}
 
 Nguồn: UC-30 Main 6, A1, A3; D1, D3 và UC-33 D4. NV được giao đọc mọi trạng thái;

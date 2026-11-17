@@ -32,6 +32,7 @@ __all__ = [
 
 ERROR_STATUS = {
     "thong_tin_dang_nhap_khong_hop_le": 401,
+    "mat_khau_hien_tai_khong_dung": 400,
     "tai_khoan_bi_vo_hieu_hoa": 403,
     "NOT_FOUND": 404,
     "BAD_REQUEST": 400,

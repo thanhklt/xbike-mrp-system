@@ -2,26 +2,35 @@ import { useEffect, useRef, useState } from "react";
 import { Calendar } from "lucide-react";
 import { dmyToIso, isoToDmy, maskDmy } from "../lib/dateInput.js";
 
-export function DateInput({ value, onChange, id, name, children: _children, ...rest }) {
-  const [display, setDisplay] = useState(() => isoToDmy(value));
+export function DateInput({ value, onChange, id, name, shortYear = false, children: _children, ...rest }) {
+  const [display, setDisplay] = useState(() => isoToDmy(value, shortYear));
   const [invalid, setInvalid] = useState(false);
   const textRef = useRef(null);
   const pickerRef = useRef(null);
 
   useEffect(() => {
-    setDisplay(isoToDmy(value));
+    setDisplay(isoToDmy(value, shortYear));
     setInvalid(false);
     textRef.current?.setCustomValidity("");
-  }, [value]);
+  }, [value, shortYear]);
 
   function changeDisplay(text) {
-    const masked = maskDmy(text);
-    const iso = dmyToIso(masked);
+    const masked = maskDmy(text, shortYear);
+    const iso = dmyToIso(masked, shortYear);
     const isInvalid = masked !== "" && iso === null;
     setDisplay(masked);
     setInvalid(isInvalid);
-    textRef.current.setCustomValidity(isInvalid ? "Nhập ngày theo dd/mm/yyyy." : "");
+    const formatNotice = shortYear ? "Nhập ngày theo dd/mm/yy." : "Nhập ngày theo dd/mm/yyyy.";
+    textRef.current.setCustomValidity(isInvalid ? formatNotice : "");
     if (!isInvalid) onChange?.({ target: { value: iso ?? "" } });
+  }
+
+  function handlePickerChange(event) {
+    const iso = event.target.value;
+    setDisplay(isoToDmy(iso, shortYear));
+    setInvalid(false);
+    textRef.current?.setCustomValidity("");
+    onChange?.({ target: { value: iso || "" } });
   }
 
   function openPicker() {
@@ -45,8 +54,8 @@ export function DateInput({ value, onChange, id, name, children: _children, ...r
         name={name}
         type="text"
         inputMode="numeric"
-        placeholder="dd/mm/yyyy"
-        maxLength={10}
+        placeholder={shortYear ? "dd/mm/yy" : "dd/mm/yyyy"}
+        maxLength={shortYear ? 8 : 10}
         value={display}
         aria-invalid={invalid || undefined}
         onChange={(event) => changeDisplay(event.target.value)}
@@ -62,7 +71,7 @@ export function DateInput({ value, onChange, id, name, children: _children, ...r
         aria-hidden="true"
         disabled={rest.disabled}
         value={value || ""}
-        onChange={(event) => changeDisplay(isoToDmy(event.target.value))}
+        onChange={handlePickerChange}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronRight, Home, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
@@ -62,6 +62,20 @@ function employeeBreadcrumbs(pathname) {
       { label: "Chi tiết tồn kho" },
     ];
   }
+  if (pathname === "/nv/phieu-xuat") return [{ label: "Phiếu xuất" }];
+  if (pathname.startsWith("/nv/phieu-xuat/")) {
+    return [
+      { label: "Phiếu xuất", to: "/nv/phieu-xuat" },
+      { label: "Chi tiết phiếu xuất" },
+    ];
+  }
+  if (pathname === "/nv/chung-tu-hoan-thanh") return [{ label: "Chứng từ hoàn thành" }];
+  if (pathname.startsWith("/nv/chung-tu-hoan-thanh/")) {
+    return [
+      { label: "Chứng từ hoàn thành", to: "/nv/chung-tu-hoan-thanh" },
+      { label: "Chi tiết chứng từ hoàn thành" },
+    ];
+  }
   if (pathname === "/nv/phieu") return [{ label: "Phiếu của tôi" }];
   if (pathname.startsWith("/nv/xuat-nvl")) return [{ label: "Phiếu xuất linh kiện" }];
   if (pathname.startsWith("/nv/xuat-tp")) return [{ label: "Phiếu xuất thành phẩm" }];
@@ -73,6 +87,7 @@ export function MainLayout() {
   const { user, logout } = useAuth();
   const { confirm } = useFeedback();
   const [menuOpen, setMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isAdmin = user.ma_vai_tro === "quan_tri_vien";
@@ -80,6 +95,15 @@ export function MainLayout() {
   const groups = navigationFor(user.ma_vai_tro);
   const name = user.ho_ten || user.ten_dang_nhap;
   const avatarText = initials(name);
+
+  useEffect(() => {
+    function closeOutside(event) {
+      const menu = userMenuRef.current;
+      if (menu?.open && !menu.contains(event.target)) menu.open = false;
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, []);
 
   useEffect(() => {
     if (isAdmin) {
@@ -112,7 +136,7 @@ export function MainLayout() {
   }
 
   const userMenu = (
-    <details className="user-menu">
+    <details className="user-menu" ref={userMenuRef}>
       <summary aria-label={`Tài khoản: ${name}`}>
         <span className="avatar" aria-hidden="true">{avatarText}</span>
         <span>

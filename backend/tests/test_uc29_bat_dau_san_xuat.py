@@ -294,7 +294,7 @@ async def test_removed_v3_routes_return_404(resource):
         assert not any(path.startswith(f"/api/v1/{resource}") for path in app.openapi()["paths"])
     else:
         assert {path for path in app.openapi()["paths"] if path.startswith(f"/api/v1/{resource}")} == {
-            f"/api/v1/{resource}", f"/api/v1/{resource}/{{id}}", f"/api/v1/{resource}/{{id}}/gui",
+            f"/api/v1/{resource}", f"/api/v1/{resource}/cua_toi", f"/api/v1/{resource}/{{id}}", f"/api/v1/{resource}/{{id}}/gui",
             f"/api/v1/{resource}/{{id}}/duyet",  # UC-31
             f"/api/v1/{resource}/{{id}}/tu_choi",  # UC-32
         }

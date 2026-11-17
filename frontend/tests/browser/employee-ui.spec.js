@@ -12,6 +12,20 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     // Heading
     await expect(page.getByRole("heading", { name: "Tổng quan", exact: true })).toBeVisible();
 
+    // UI Removals: Subtitle is removed, tracking card is removed, legend is removed for employee
+    await expect(page.locator(".employee-shell header p")).toBeHidden();
+    await expect(page.getByText("Yêu cầu sản xuất được giao và công việc cần theo dõi.")).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Theo dõi công việc" })).toBeHidden();
+    await expect(page.getByText("Mở yêu cầu được giao để kiểm tra linh kiện")).toBeHidden();
+    await expect(page.getByText("NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm")).toBeHidden();
+
+    // Manager dashboard retains legend
+    const mgrPage = await page.context().newPage();
+    await installApi(mgrPage, { role: "quan_ly" });
+    await mgrPage.goto("/kho");
+    await expect(mgrPage.getByText("NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm")).toBeVisible();
+    await mgrPage.close();
+
     // 3 KPI metrics in order
     const metricLabels = await page
       .locator(".employee-stats .metric > span")
@@ -77,6 +91,64 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     expect(errorState.unexpected).toEqual([]);
   });
 
+  test("NV-01b completed exclusion from Sidebar badge and KPI with gated completed query", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const now = new Date().toISOString();
+    // Mixed requests fixture:
+    // - Assigned to current user (id 3):
+    //   1 da_gui, 2 dang_thuc_hien, 2 hoan_thanh = 5 assigned total, 2 completed = 3 active
+    // - Assigned to other employee (id 2): 2 requests
+    // - Draft: 1 request
+    const mixedRequests = [
+      { id: 101, ma_yeu_cau_san_xuat: "YCSX-202611-000101", mat_hang_id: 4, so_luong: 5, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "da_gui", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: null, so_luong_dung_thanh_pham: null, so_luong_can_san_xuat: null, kiem_tra_lan_dau_at: null, started_at: null, completed_at: null, phien_ban: 1 },
+      { id: 102, ma_yeu_cau_san_xuat: "YCSX-202611-000102", mat_hang_id: 4, so_luong: 8, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "dang_thuc_hien", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: 1, so_luong_dung_thanh_pham: 0, so_luong_can_san_xuat: 8, kiem_tra_lan_dau_at: now, started_at: now, completed_at: null, phien_ban: 1 },
+      { id: 103, ma_yeu_cau_san_xuat: "YCSX-202611-000103", mat_hang_id: 4, so_luong: 10, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "dang_thuc_hien", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: 1, so_luong_dung_thanh_pham: 0, so_luong_can_san_xuat: 10, kiem_tra_lan_dau_at: now, started_at: now, completed_at: null, phien_ban: 1 },
+      { id: 104, ma_yeu_cau_san_xuat: "YCSX-202611-000104", mat_hang_id: 4, so_luong: 3, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "hoan_thanh", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: 1, so_luong_dung_thanh_pham: 0, so_luong_can_san_xuat: 3, kiem_tra_lan_dau_at: now, started_at: now, completed_at: now, phien_ban: 2 },
+      { id: 105, ma_yeu_cau_san_xuat: "YCSX-202611-000105", mat_hang_id: 4, so_luong: 6, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "hoan_thanh", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: 1, so_luong_dung_thanh_pham: 0, so_luong_can_san_xuat: 6, kiem_tra_lan_dau_at: now, started_at: now, completed_at: now, phien_ban: 2 },
+      // Other employee
+      { id: 106, ma_yeu_cau_san_xuat: "YCSX-202611-000106", mat_hang_id: 4, so_luong: 2, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 2, trang_thai: "da_gui", created_at: now, updated_at: now, gui_at: now, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: null, so_luong_dung_thanh_pham: null, so_luong_can_san_xuat: null, kiem_tra_lan_dau_at: null, started_at: null, completed_at: null, phien_ban: 1 },
+      // Draft
+      { id: 107, ma_yeu_cau_san_xuat: "YCSX-202611-000107", mat_hang_id: 4, so_luong: 1, nhan_vien_id: 2, nhan_vien_duoc_giao_id: 3, trang_thai: "nhap", created_at: now, updated_at: now, gui_at: null, loai_yeu_cau: "xuat_giao", han_hoan_thanh: "2026-12-01", bom_id: null, so_luong_dung_thanh_pham: null, so_luong_can_san_xuat: null, kiem_tra_lan_dau_at: null, started_at: null, completed_at: null, phien_ban: 1 },
+    ];
+
+    let resolveCompletedGate;
+    const completedGate = new Promise((resolve) => {
+      resolveCompletedGate = resolve;
+    });
+
+    await installApi(page, {
+      role: "nhan_vien",
+      intercept: async (call, st) => {
+        st.resources.yeu_cau_san_xuat = mixedRequests;
+        if (call.path === "yeu_cau_san_xuat" && call.params?.trang_thai === "hoan_thanh") {
+          await completedGate;
+        }
+        return null;
+      },
+    });
+
+    await page.goto("/nv");
+
+    // While completed query is pending (gated):
+    // - Sidebar badge on /nv/yeu-cau is omitted (NOT showing total 5)
+    const sidebarLink = page.locator('#main-navigation a[href="/nv/yeu-cau"]');
+    await expect(sidebarLink.locator("[class*='badge']")).toHaveCount(0);
+
+    // - Dashboard KPI "Yêu cầu được giao" shows dash — (NOT 5)
+    const firstMetric = page.locator(".employee-stats .metric strong").first();
+    await expect(firstMetric).toHaveText("—");
+
+    // Resolve completed query successfully
+    resolveCompletedGate();
+
+    // After completed query resolves:
+    // Total assigned (5) - completed (2) = 3 active assigned requests
+    await expect(firstMetric).toHaveText("3");
+    await expect(sidebarLink.locator("[class*='badge']")).toHaveText("3");
+  });
+
   test("NV-02 assigned request details, check materials and start production", async ({
     page,
   }) => {
@@ -97,6 +169,10 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await expect(dialog1.getByRole("heading", { name: "Chi tiết yêu cầu" })).toBeVisible();
     await expect(dialog1.locator(".badge")).toContainText("Đang thực hiện");
     expect(await dialog1.locator(".info-grid > div").first().evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgb(36, 28, 23)");
+
+    // Business code & authenticated user name in popup detail
+    await expect(dialog1.locator(".info-grid")).toContainText("Đặng Quốc Bình — NV-000003");
+    await expect(dialog1.locator(".info-grid")).toContainText("Xe đạp City Ride — MH-000004");
 
     // Checking materials case on request 1 (da_gui)
     await page.goto("/nv/yeu-cau/1");
@@ -202,8 +278,9 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     const state = await installApi(page, { role: "nhan_vien" });
     await page.goto("/nv/yeu-cau");
 
-    // Employee request page stays read-only.
+    // Employee request page stays read-only with approved subtitle.
     await expect(page.getByRole("heading", { name: "Yêu cầu được giao", exact: true })).toBeVisible();
+    await expect(page.locator("main .page-heading p.muted")).toHaveText("Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi.");
     await expect(page.getByRole("link", { name: "Tạo yêu cầu sản xuất" })).toHaveCount(0);
     await expect(page.getByRole("table")).toBeVisible();
     await page.screenshot({ path: "test-results/employee-requests-1440x900.png", fullPage: true });
@@ -234,6 +311,8 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await page.goto("/nv/ton-kho");
 
     await expect(page.getByRole("heading", { name: "Tra cứu tồn kho" })).toBeVisible();
+    await expect(page.locator("main .page-heading p.muted")).toHaveCount(0);
+    await expect(page.locator("text=Số lượng tồn được đọc từ dữ liệu mặt hàng")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Thêm mặt hàng" })).toHaveCount(0);
 
     const headers = await page.locator("table th").evaluateAll((ths) => ths.map((th) => th.textContent.trim()));
@@ -466,7 +545,9 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     }));
     expect(cardColors).toEqual({ background: "rgb(42, 29, 20)", text: "rgb(255, 255, 255)" });
     const nav = page.getByRole("navigation", { name: "Điều hướng nghiệp vụ" });
-    await expect(nav.getByRole("link")).toHaveCount(3);
+    await expect(nav.getByRole("link")).toHaveCount(5);
+    await expect(nav.getByRole("link", { name: "Phiếu xuất" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Chứng từ hoàn thành" })).toBeVisible();
     await expect(page.locator(".user-menu summary")).toBeVisible();
 
     await page.goto("/nv/xuat-nvl");

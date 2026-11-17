@@ -58,7 +58,6 @@ sequenceDiagram
         end
     end
 ```
-
 - Admin nhận hồ sơ đầy đủ, có `ten_dang_nhap`. QLK nhận `id`, `ma_nhan_vien`, `ho_ten`, `vai_tro_id`, `ma_vai_tro`, `trang_thai`, `ngay_sinh`, `so_dien_thoai`, `email`, `ngay_vao_lam`, `he_so_luong`; không có `ten_dang_nhap` hoặc mật khẩu/hash (D1, R4). Nhân viên không được xem danh sách. Trang `/admin/tai-khoan` vẫn chỉ QTV vào được.
 - Response QLK bổ sung các trường hồ sơ, tương thích ngược với caller hiện tại như `ProductionPage`; tham số query, phân trang và quyền NV giữ nguyên.
 - `q` tìm không phân biệt hoa/thường theo mã/họ tên; escape `%` và `_`, không nội suy SQL. Sort thêm `id` để ổn định phân trang.
@@ -118,7 +117,6 @@ sequenceDiagram
         end
     end
 ```
-
 Admin và chính chủ đọc hồ sơ đầy đủ, có `ten_dang_nhap`; QLK đọc người khác nhận cùng tập trường như danh sách QLK ở trên, trừ `ten_dang_nhap` và mật khẩu/hash (D1, R4). Thay đổi bổ sung trường hồ sơ cho QLK tương thích ngược với caller hiện tại; ETag được tính từ projection mới. Thiếu account đích được kiểm tra trước phạm vi truy cập. Nullable profile được giữ là null; `he_so_luong` được serialize thành JSON string. Không response nào có mật khẩu/hash, `tai_khoan_id`, JWT hoặc `loai_nhan_vien`.
 GET không ghi audit hoặc commit. Ngoài các nhánh trên, lỗi không dự kiến được handler chung trả 500 an toàn. Module có đủ 8 endpoint bên dưới. Quyết định ngày 01/11/2026 thay DELETE xóa thật bằng soft delete, bỏ POST /vo_hieu_hoa và giữ /mo_khoa.
 
@@ -233,7 +231,6 @@ sequenceDiagram
         end
     end
 ```
-
 Location trỏ GET chi tiết mới; ETag từ hồ sơ trả về, meta có `request_id`. Response QTV đủ hồ sơ và vai trò, không chứa mật khẩu/hash hoặc `ly_do`. Không cấp JWT khi tạo; tài khoản mới đăng nhập qua UC-01 và xuất hiện trong danh sách UC-03. Đóng phần nhập trước khi lưu không gửi POST.
 
 - Tài khoản và audit `tao` dùng chung transaction. Audit có người thực hiện, đối tượng mới, thời điểm do DB đặt, lý do tùy chọn; không lưu mật khẩu thô/hash.
@@ -327,7 +324,6 @@ sequenceDiagram
         end
     end
 ```
-
 Body rỗng hoặc giá trị không đổi là no-op, không thêm audit. Hai request cùng ETag chỉ một request thay đổi thành công; request sau nhận 412.
 Audit `sua` lưu tên đăng nhập trước/sau cùng transaction cập nhật. Đổi tên không tăng phiên bản đăng nhập hoặc đổi mật khẩu; token cũ vẫn dùng được vì `sub` là ID. ETag thay đổi theo hồ sơ mới.
 
@@ -407,7 +403,6 @@ sequenceDiagram
         end
     end
 ```
-
 Thứ tự khóa cố định trong transaction: dòng `VaiTro` QTV → actor → đích. Các thao tác khóa cùng chờ dòng vai trò, sau đó đọc lại quyền actor, trạng thái đích và số QTV hoạt động; không khóa được QTV cuối cùng kể cả khi có thao tác đồng thời. Actor mất hiệu lực sau chờ khóa trả 401/403 và rollback. QTV được khóa QTV khác hoặc tự khóa khi vẫn còn QTV khác đang hoạt động; QTV cuối nhận 409 `quan_tri_vien_cuoi_cung` (“Không khóa được Quản trị viên đang hoạt động cuối cùng”).
 
 Gọi lại với ETag cũ trả 412 `du_lieu_da_thay_doi`; thiếu `If-Match` trả 428 `thieu_if_match`; ETag hiện tại nhưng đã khóa trả 409 `trang_thai_khong_hop_le`, không thêm audit. JWT đã cấp bị từ chối 403 `tai_khoan_bi_vo_hieu_hoa` ở request tiếp theo do xác thực đọc lại trạng thái tài khoản từ DB. FE kiểm tra lại phiên ngay sau tự khóa để kết thúc phiên và chuyển về đăng nhập; không cấp token mới.
@@ -512,7 +507,6 @@ sequenceDiagram
         end
     end
 ```
-
 Thứ tự khóa dùng chung với UC-05: dòng `VaiTro` QTV → actor → đích `FOR UPDATE`. Khóa đích chặn giao việc đồng thời vì luồng giao việc khóa nhân viên `FOR SHARE`. Đếm yêu cầu bằng SQL Core trên `"YeuCauSanXuat"`, không dùng ORM v3: `nhan_vien_duoc_giao_id=id` và `trang_thai IN ('nhap','da_gui','cho_bo_sung_linh_kien','dang_thuc_hien')`. `hoan_thanh`, `da_huy` và yêu cầu của người khác không chặn. R4 áp dụng cả NV đang khóa; R3 chỉ tính QTV `hoat_dong`.
 
 Mỗi lần đổi thành công ghi đúng một audit `doi_vai_tro`, cùng transaction với cập nhật vai trò/phiên bản: actor, đích, thời điểm do DB tạo, hồ sơ `du_lieu_truoc/sau` có `vai_tro_id`, `ma_vai_tro`, lý do tùy chọn. `trang_thai_truoc/sau=null` vì trạng thái tài khoản không đổi. Trùng vai trò trả 409, không audit hoặc tăng phiên bản; lỗi lưu rollback cả ba. Response 200 gồm hồ sơ đầy đủ và ETag mới, không trả phiên bản đăng nhập.
@@ -594,7 +588,6 @@ sequenceDiagram
         end
     end
 ```
-
 Audit `thao_tac=mo_khoa` thuộc enum v4; ghi actor, đích, `bi_khoa → hoat_dong`, lý do trim hoặc null và snapshot hồ sơ trước/sau an toàn. Thời điểm `created_at` do DB đặt. Trạng thái và audit commit cùng transaction; lỗi append/commit rollback, không thêm lịch sử, trạng thái và phiên bản giữ nguyên. Đích đã hoạt động trả 409 `trang_thai_khong_hop_le`, ETag cũ trả 412 `du_lieu_da_thay_doi`, thiếu If-Match trả 428 `thieu_if_match`; các nhánh này không ghi audit.
 
 Không cấp JWT mới, không đổi password/role và không tăng `phien_ban_dang_nhap`. Token có từ trước khi khóa mang phiên bản cũ nên vẫn bị từ chối 401 sau mở khóa, kể cả còn hạn và đúng `pwdv`. Người dùng đăng nhập lại bằng mật khẩu hiện có sẽ nhận token với `pbdn` hiện tại và vai trò cũ. Response 200 là hồ sơ đầy đủ cho QTV, `meta.request_id` và ETag mới, không trả phiên bản đăng nhập.
@@ -637,7 +630,6 @@ sequenceDiagram
         end
     end
 ```
-
 GET không ghi audit hoặc commit. Chi tiết xác thực dùng get_auth_identity như hai GET nhân viên ở trên.
 
 ## POST /api/v1/nhan_vien/{id}/dat_lai_mat_khau — Admin đặt lại mật khẩu
@@ -725,8 +717,81 @@ sequenceDiagram
         end
     end
 ```
-
 - Auth và input là dependency FastAPI; khi cùng sai, sơ đồ không quy định ưu tiên lỗi. Các khóa nằm trong cùng transaction/session, kể cả khi khóa đích trùng dòng admin.
 - Audit: `nhan_vien_id=admin`, `doi_tuong_id=id đích`, `loai_doi_tuong=nhan_vien`, `thao_tac=doi_mat_khau`, `du_lieu_truoc=null`, `du_lieu_sau={"da_doi_mat_khau": true}`, `ly_do=null`; không mật khẩu/hash/token; thời điểm do `LichSuThaoTac.created_at` mặc định `now()`. Append dùng service audit thực sự có trong code; transaction do service nhân viên sở hữu.
 - Response là hồ sơ đầy đủ cho admin, không phân trang, không trả mật khẩu/hash. ETag có thể không đổi vì biểu diễn hồ sơ không chứa hash. Mọi token cũ của đích bị 401 qua kiểm tra `pwdv`/`pbdn` ở request sau; phiên bản tăng đúng 1 trong cùng UPDATE với hash và cùng transaction với audit; tài khoản khóa vẫn bị khóa.
 - FE lưu hồ sơ → vai trò → reset; tự đổi mật khẩu thành công gọi `logout("Đã đổi mật khẩu. Vui lòng đăng nhập lại.")` rồi dừng trước cache/refetch, chuyển về `/dang-nhap`; đổi cho người khác giữ phiên QTV, cập nhật cache và báo thành công. Không tự đăng nhập lại hoặc cấp token mới. Đóng phần nhập/hủy xác nhận không gửi request (A5); lưu lỗi giữ mật khẩu, phiên bản và lịch sử cũ (A6).
+
+## POST /api/v1/nhan_vien/me/doi_mat_khau — Nhân viên tự đổi mật khẩu
+
+Nguồn nghiệp vụ: [UC-08 — Đổi mật khẩu tài khoản](../../specs/use_cases/identity_access/UC-08.md), Quyết định phê duyệt ngày 17/11/2026.
+Chỉ dành riêng cho tài khoản có vai trò `nhan_vien` tự đổi mật khẩu cho chính mình trên giao diện Hồ sơ (`/ho-so`). Không nhận query hoặc target ID trong body/path.
+Body: `mat_khau_hien_tai`, `mat_khau_moi` (tối thiểu 6 ký tự, không trim; `extra="forbid"`).
+Xác nhận mật khẩu thực hiện ở frontend.
+
+Kiểm tra mật khẩu hiện tại:
+- Nếu mật khẩu hiện tại không khớp: trả về HTTP 400 mã lỗi `mat_khau_hien_tai_khong_dung`. Phiên đăng nhập được giữ nguyên, form không bị xóa để người dùng sửa lại.
+- HTTP 401 chỉ trả về khi JWT không hợp lệ, hết hạn hoặc sai `pbdn`/`pwdv`.
+- HTTP 403 khi gọi bởi vai trò khác ngoài `nhan_vien`.
+
+Xử lý thành công:
+- Khóa dòng nhân viên bằng `lock_credentials_by_id`, kiểm tra trạng thái hoạt động.
+- Cập nhật mật khẩu mới bằng `set_password_hash` (hàm này tự động tăng `phien_ban_dang_nhap = phien_ban_dang_nhap + 1`).
+- Ghi lịch sử thao tác `doi_mat_khau` đã sanitized (`du_lieu_sau={"da_doi_mat_khau": True}`).
+- Commit transaction, trả về HTTP 204 No Content (body rỗng).
+- Mọi phiên đăng nhập cũ bị hủy (do tăng `phien_ban_dang_nhap` và cập nhật hash); frontend tự động đăng xuất và điều hướng về trang đăng nhập.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor NV as Nhân viên
+    participant FE as ProfilePage (ChangePasswordCard)
+    participant R as nhan_vien.router và dependencies
+    participant A as auth.service
+    participant N as nhan_vien.service
+    participant P as nhan_vien.repository
+    participant U as audit.service
+    participant DB as PostgreSQL
+    NV->>FE: Nhập mật khẩu hiện tại, mật khẩu mới, xác nhận mật khẩu -> Bấm "Đổi mật khẩu"
+    FE->>FE: Kiểm tra mật khẩu mới khớp xác nhận và độ dài >= 6
+    FE->>R: POST /api/v1/nhan_vien/me/doi_mat_khau + Bearer JWT + {mat_khau_hien_tai, mat_khau_moi}
+    R->>A: current_payload(token)
+    A->>N: get_auth_identity(id, pwdv, session_version=pbdn)
+    N->>P: get_credentials_by_id(id)
+    P->>DB: SELECT NhanVien và VaiTro
+    DB-->>N: Account qua repository
+    alt Thiếu / token lỗi / pbdn cũ
+        R-->>FE: 401 chua_xac_thuc
+    else Role khác nhan_vien
+        R-->>FE: 403 khong_co_quyen
+    else Xác thực hợp lệ
+        R->>R: Validate body (reject query / extra fields / mat_khau_moi < 6)
+        alt Body không hợp lệ
+            R-->>FE: 422 du_lieu_khong_hop_le
+        else Body hợp lệ
+            R->>N: change_password_self(input, actor, request_id)
+            N->>DB: BEGIN TRANSACTION
+            N->>P: lock_credentials_by_id(actor["sub"])
+            P->>DB: SELECT ... FOR UPDATE
+            DB-->>P: Credentials
+            alt Tài khoản bị khóa
+                N->>DB: ROLLBACK
+                N-->>FE: 403 tai_khoan_bi_khoa
+            else Mật khẩu hiện tại không khớp
+                N->>N: verify_password(mat_khau_hien_tai, mat_khau_hash) == False
+                N->>DB: ROLLBACK
+                N-->>FE: 400 mat_khau_hien_tai_khong_dung (Giữ nguyên phiên đăng nhập)
+            else Mật khẩu hiện tại đúng
+                N->>N: get_password_hash(mat_khau_moi)
+                N->>P: set_password_hash(actor_id, new_hash)
+                P->>DB: UPDATE NhanVien SET mat_khau = new_hash, phien_ban_dang_nhap = phien_ban_dang_nhap + 1
+                N->>U: append(CreationAudit doi_mat_khau sanitized)
+                U->>DB: INSERT INTO LichSuThaoTac
+                N->>DB: COMMIT
+                N-->>R: None (204)
+                R-->>FE: 204 No Content
+                FE->>FE: logout("Đã đổi mật khẩu. Vui lòng đăng nhập lại.") -> Điều hướng về /dang-nhap
+            end
+        end
+    end
+```

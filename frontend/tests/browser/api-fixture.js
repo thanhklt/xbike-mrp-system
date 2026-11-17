@@ -492,6 +492,192 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       });
     if (path === "nhu_cau_bo_sung_linh_kien")
       return respond({ data: { yeu_cau: [], tong_hop: [] }, meta: {} });
+    if (path === "nhan_vien/me/doi_mat_khau" && method === "POST") {
+      if (role !== "nhan_vien") {
+        return respond({ error: { message: "Không có quyền" } }, 403);
+      }
+      const { mat_khau_hien_tai, mat_khau_moi } = body;
+      if (!mat_khau_hien_tai || !mat_khau_moi || mat_khau_moi.length < 6) {
+        return respond({ error: { message: "Dữ liệu không hợp lệ" } }, 422);
+      }
+      if (mat_khau_hien_tai !== (state.currentPassword || "123456")) {
+        return respond({ error: { code: "mat_khau_hien_tai_khong_dung", message: "Mật khẩu hiện tại không chính xác" } }, 400);
+      }
+      state.currentPassword = mat_khau_moi;
+      state.sessionVersion = (state.sessionVersion || 1) + 1;
+      return respond(null, 204);
+    }
+    if (path === "phieu_xuat/cua_toi" && method === "GET") {
+      if (role !== "nhan_vien") {
+        return respond({ error: { message: "Không có quyền truy cập danh sách" } }, 403);
+      }
+      const allowedKeys = new Set(["page", "page_size", "loai_phieu", "trang_thai", "yeu_cau_san_xuat_id", "tu_ngay", "den_ngay", "q", "sort"]);
+      for (const k of Object.keys(call.params)) {
+        if (!allowedKeys.has(k)) {
+          return respond({ error: { message: `Tham số không hợp lệ: ${k}` } }, 422);
+        }
+      }
+      if (call.params.den_ngay === "9999-12-31") {
+        return respond({ error: { message: "den_ngay ngoài khoảng hỗ trợ" } }, 422);
+      }
+      if (call.params.tu_ngay && call.params.den_ngay && call.params.tu_ngay > call.params.den_ngay) {
+        return respond({ error: { message: "tu_ngay phải nhỏ hơn hoặc bằng den_ngay" } }, 422);
+      }
+      if (call.params.yeu_cau_san_xuat_id !== undefined) {
+        const ycsxId = Number(call.params.yeu_cau_san_xuat_id);
+        if (Number.isNaN(ycsxId) || ycsxId <= 0) {
+          return respond({ error: { message: "yeu_cau_san_xuat_id phải lớn hơn 0" } }, 422);
+        }
+        if (ycsxId > 2147483647) {
+          return respond({
+            data: [],
+            meta: { total: 0, page: 1, page_size: Number(call.params.page_size || 20), total_pages: 0, request_id: "req-issue-cua-toi" },
+          });
+        }
+      }
+
+      const myRequests = state.resources.yeu_cau_san_xuat.filter((entry) => entry.nhan_vien_duoc_giao_id === user.id);
+      const myRequestIds = new Set(myRequests.map((r) => r.id));
+      const requestMap = new Map(myRequests.map((r) => [r.id, r]));
+
+      let matching = state.resources.phieu_xuat.filter((issue) => myRequestIds.has(issue.yeu_cau_san_xuat_id));
+
+      if (call.params.q) {
+        const query = call.params.q.toLowerCase();
+        matching = matching.filter((issue) => (issue.ma_phieu_xuat || "").toLowerCase().includes(query));
+      }
+      if (call.params.loai_phieu) {
+        matching = matching.filter((issue) => issue.loai_phieu === call.params.loai_phieu);
+      }
+      if (call.params.trang_thai) {
+        matching = matching.filter((issue) => issue.trang_thai === call.params.trang_thai);
+      }
+      if (call.params.yeu_cau_san_xuat_id) {
+        matching = matching.filter((issue) => issue.yeu_cau_san_xuat_id === Number(call.params.yeu_cau_san_xuat_id));
+      }
+      if (call.params.tu_ngay) {
+        matching = matching.filter((issue) => (issue.created_at || "") >= call.params.tu_ngay);
+      }
+      if (call.params.den_ngay) {
+        matching = matching.filter((issue) => (issue.created_at || "").slice(0, 10) <= call.params.den_ngay);
+      }
+
+      const sortParam = call.params.sort || "-created_at";
+      matching.sort((a, b) => {
+        if (sortParam === "id") return a.id - b.id;
+        if (sortParam === "-id") return b.id - a.id;
+        if (sortParam === "ma_phieu_xuat") return (a.ma_phieu_xuat || "").localeCompare(b.ma_phieu_xuat || "");
+        if (sortParam === "-ma_phieu_xuat") return (b.ma_phieu_xuat || "").localeCompare(a.ma_phieu_xuat || "");
+        if (sortParam === "created_at") {
+          const timeDiff = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+          return timeDiff !== 0 ? timeDiff : a.id - b.id;
+        }
+        const timeDiff = new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        return timeDiff !== 0 ? timeDiff : b.id - a.id;
+      });
+
+      const pageNumber = Number(call.params.page || 1);
+      const pageSize = Number(call.params.page_size || 20);
+      const total = matching.length;
+      const paged = matching.slice((pageNumber - 1) * pageSize, pageNumber * pageSize).map((issue) => ({
+        ...issue,
+        ma_yeu_cau_san_xuat: requestMap.get(issue.yeu_cau_san_xuat_id)?.ma_yeu_cau_san_xuat || null,
+      }));
+
+      return respond({
+        data: paged,
+        meta: {
+          total,
+          page: pageNumber,
+          page_size: pageSize,
+          total_pages: Math.max(1, Math.ceil(total / pageSize)),
+          request_id: "req-issue-cua-toi",
+        },
+      });
+    }
+    if (path === "chung_tu_hoan_thanh_sx/cua_toi" && method === "GET") {
+      if (role !== "nhan_vien") {
+        return respond({ error: { message: "Không có quyền truy cập danh sách" } }, 403);
+      }
+      const allowedKeys = new Set(["page", "page_size", "mat_hang_id", "trang_thai", "loai_yeu_cau", "tu_ngay", "den_ngay"]);
+      for (const k of Object.keys(call.params)) {
+        if (!allowedKeys.has(k)) {
+          return respond({ error: { message: `Tham số không hợp lệ: ${k}` } }, 422);
+        }
+      }
+      if (call.params.den_ngay === "9999-12-31") {
+        return respond({ error: { message: "den_ngay ngoài khoảng hỗ trợ" } }, 422);
+      }
+      if (call.params.tu_ngay && call.params.den_ngay && call.params.tu_ngay > call.params.den_ngay) {
+        return respond({ error: { message: "tu_ngay phải nhỏ hơn hoặc bằng den_ngay" } }, 422);
+      }
+      if (call.params.mat_hang_id !== undefined) {
+        const mhId = Number(call.params.mat_hang_id);
+        if (Number.isNaN(mhId) || mhId <= 0) {
+          return respond({ error: { message: "mat_hang_id phải lớn hơn 0" } }, 422);
+        }
+        if (mhId > 2147483647) {
+          return respond({
+            data: [],
+            meta: { total: 0, page: 1, page_size: Number(call.params.page_size || 20), total_pages: 0, request_id: "req-comp-cua-toi" },
+          });
+        }
+      }
+      const myRequests = state.resources.yeu_cau_san_xuat.filter((entry) => entry.nhan_vien_duoc_giao_id === user.id);
+      const myRequestIds = new Set(myRequests.map((r) => r.id));
+      const requestMap = new Map(myRequests.map((r) => [r.id, r]));
+
+      let matching = state.resources.chung_tu_hoan_thanh_sx.filter((comp) => myRequestIds.has(comp.yeu_cau_san_xuat_id));
+
+      if (call.params.trang_thai) {
+        matching = matching.filter((comp) => comp.trang_thai === call.params.trang_thai);
+      }
+      if (call.params.loai_yeu_cau) {
+        matching = matching.filter((comp) => requestMap.get(comp.yeu_cau_san_xuat_id)?.loai_yeu_cau === call.params.loai_yeu_cau);
+      }
+      if (call.params.mat_hang_id) {
+        const mhId = Number(call.params.mat_hang_id);
+        matching = matching.filter((comp) => comp.mat_hang_id === mhId || requestMap.get(comp.yeu_cau_san_xuat_id)?.mat_hang_id === mhId);
+      }
+      if (call.params.tu_ngay) {
+        matching = matching.filter((comp) => (comp.finish_time || comp.created_at || "") >= call.params.tu_ngay);
+      }
+      if (call.params.den_ngay) {
+        matching = matching.filter((comp) => (comp.finish_time || comp.created_at || "").slice(0, 10) <= call.params.den_ngay);
+      }
+
+      matching.sort((a, b) => {
+        if (!a.finish_time && !b.finish_time) return b.id - a.id;
+        if (!a.finish_time) return 1;
+        if (!b.finish_time) return -1;
+        const timeDiff = new Date(b.finish_time) - new Date(a.finish_time);
+        return timeDiff !== 0 ? timeDiff : b.id - a.id;
+      });
+
+      const pageNumber = Number(call.params.page || 1);
+      const pageSize = Number(call.params.page_size || 20);
+      const total = matching.length;
+      const paged = matching.slice((pageNumber - 1) * pageSize, pageNumber * pageSize).map((comp) => {
+        const req = requestMap.get(comp.yeu_cau_san_xuat_id);
+        return {
+          ...comp,
+          ma_yeu_cau_san_xuat: req?.ma_yeu_cau_san_xuat || null,
+          mat_hang_id: comp.mat_hang_id || req?.mat_hang_id || null,
+          loai_yeu_cau: req?.loai_yeu_cau || null,
+        };
+      });
+
+      return respond({
+        data: paged,
+        meta: {
+          total,
+          page: pageNumber,
+          page_size: pageSize,
+          total_pages: Math.max(1, Math.ceil(total / pageSize)),
+          request_id: "req-comp-cua-toi",
+        },
+      });
+    }
     const [resource, rawId, action] = path.split("/");
     if (resource === "phieu_xuat" && method === "GET" && ["theo_yeu_cau", "xem_truoc"].includes(rawId)) {
       const source = state.resources.yeu_cau_san_xuat.find((entry) => entry.id === Number(action));

@@ -5,7 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 
-from app.core.request_context import get_request_id, reject_query
+from app.core.request_context import (
+    get_request_id,
+    reject_body,
+    reject_query,
+    reject_repeated_query,
+)
 from app.dependencies import (
     get_chung_tu_hoan_thanh_service,
     get_yeu_cau_san_xuat_service,
@@ -13,6 +18,7 @@ from app.dependencies import (
 )
 from app.modules.san_xuat.schemas import (
     ChungTuCreate,
+    ChungTuCuaToiQuery,
     ChungTuDetailResponse,
     ChungTuListQuery,
     ChungTuListResponse,
@@ -91,6 +97,20 @@ async def tao_chung_tu(
 
 
 # UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 6; D3 xem chi tiết (specs/use_cases/production/UC-30.md)
+@chung_tu_hoan_thanh_router.get(
+    "/cua_toi",
+    response_model=ChungTuListResponse,
+    dependencies=[Depends(reject_repeated_query), Depends(reject_body)],
+)
+async def danh_sach_chung_tu_cua_toi(
+    params: Annotated[ChungTuCuaToiQuery, Query()],
+    actor: CheckActor,
+    service: CompletionService,
+    request_id: RequestId,
+) -> ChungTuListResponse:
+    return await service.danh_sach_cua_toi(params, actor, request_id)
+
+
 @chung_tu_hoan_thanh_router.get(
     "/{id}", response_model=ChungTuDetailResponse,
     dependencies=[Depends(reject_query)], responses={200: {"headers": {"ETag": COMPLETION_ETAG_HEADER}}},

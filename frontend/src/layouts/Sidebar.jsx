@@ -48,6 +48,7 @@ const sectionIcons = {
   "phieu-xuat": PackageMinus,
   "duyet-hoan-thanh": ClipboardCheck,
   "hoan-thanh": ClipboardCheck,
+  "chung-tu-hoan-thanh": FileCheck,
   "dieu-chinh": SlidersHorizontal,
   ticket: Ticket,
   "thong-ke": BarChart3,
@@ -64,7 +65,7 @@ function SidebarLink({ path, label, onNavigate, darkTheme, badge }) {
         ? ClipboardList
         : path === "/nv/lenh-sx"
           ? Factory
-          : path === "/nv/hoan-thanh"
+          : path === "/nv/hoan-thanh" || path === "/nv/chung-tu-hoan-thanh"
             ? FileCheck
             : path === "/nv/phieu-xuat"
               ? Package
@@ -102,6 +103,29 @@ export function Sidebar({
     { page: 1, page_size: 1 },
     employeeTheme && canAccessPath("nhan_vien", pathname),
   );
+  const completedRequests = useResource(
+    API.requests,
+    { page: 1, page_size: 1, trang_thai: "hoan_thanh" },
+    employeeTheme && canAccessPath("nhan_vien", pathname),
+  );
+  const totalAssigned = assignedRequests.data?.meta?.total;
+  const completedAssigned = completedRequests.data?.meta?.total;
+  const isAssignedPending = assignedRequests.isPending || assignedRequests.isLoading;
+  const isCompletedPending = completedRequests.isPending || completedRequests.isLoading;
+  const isAssignedError = Boolean(assignedRequests.isError || assignedRequests.error);
+  const isCompletedError = Boolean(completedRequests.isError || completedRequests.error);
+
+  const hasValidBadgeCounts =
+    !isAssignedPending &&
+    !isCompletedPending &&
+    !isAssignedError &&
+    !isCompletedError &&
+    typeof totalAssigned === "number" &&
+    typeof completedAssigned === "number";
+
+  const activeAssignedCount = hasValidBadgeCounts
+    ? Math.max(0, totalAssigned - completedAssigned)
+    : undefined;
   const [collapsed, setCollapsed] = useState(false);
   const toggleLabel = collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng";
   return (
@@ -159,7 +183,7 @@ export function Sidebar({
                 label={label}
                 onNavigate={onNavigate}
                 darkTheme={darkTheme}
-                badge={employeeTheme && path === "/nv/yeu-cau" ? assignedRequests.data?.meta.total : undefined}
+                badge={employeeTheme && path === "/nv/yeu-cau" ? activeAssignedCount : undefined}
               />
             ))}
           </div>

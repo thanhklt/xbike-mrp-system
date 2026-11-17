@@ -43,7 +43,7 @@ export function MaterialsPage({ mode = "manage" }) {
       ) : (
         <PageHeader
           title={title}
-          subtitle="Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."
+          subtitle={mode === "employee" ? undefined : "Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."}
           action={
             !readOnly && (
               <Link className="btn btn-primary" to={`${base}/moi`}>
@@ -53,16 +53,12 @@ export function MaterialsPage({ mode = "manage" }) {
           }
         />
       )}
-      {mode === "employee" && (
-        <Notice>
-          Số lượng tồn được đọc từ dữ liệu mặt hàng. Nhân viên chỉ xem, không thể chỉnh sửa trực tiếp tồn kho.
-        </Notice>
-      )}
       <div className={mode === "employee" ? "employee-inventory" : undefined}>
         <Collection
           collection={collection}
           title={mode === "employee" ? "Danh sách tồn kho" : "Danh sách"}
           filterIcon={mode === "employee"}
+          cycleFilters={mode === "employee"}
           searchPlaceholder={mode === "employee" ? "Tìm mã hoặc tên mặt hàng…" : undefined}
           validate={(draft) =>
             draft.loai_mat_hang === "linh_kien" && (draft.is_active ?? "") !== ""

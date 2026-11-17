@@ -12,6 +12,7 @@ from app.core.errors import (
     InactiveAccountException,
     InvalidAssignee,
     InvalidCredentialsException,
+    InvalidCurrentPasswordException,
     InvalidWorkflowState,
     LastActiveAdminException,
     NotFoundException,
@@ -362,6 +363,43 @@ class NhanVienService:
                 )
             )
         return self._result(employee, actor, request_id)
+
+    async def change_password_self(
+        self,
+        current_password: str,
+        new_password: str,
+        actor: dict,
+        request_id: str,
+    ) -> None:
+        if "nhan_vien" not in actor.get("roles", []):
+            raise ForbiddenException(message="Chỉ nhân viên được thực hiện thao tác này")
+        employee_id = int(actor["sub"])
+        new_hash = await asyncio.to_thread(get_password_hash, new_password)
+        async with self.transaction:
+            credentials = await self.repository.lock_credentials_by_id(employee_id)
+            if credentials is None:
+                raise UnauthorizedException(message="Employee no longer exists")
+            _require_active(credentials)
+            _require_current_password(credentials, actor.get("pwdv"))
+            actor_pbdn = actor.get("pbdn", 0)
+            if type(actor_pbdn) is not int or actor_pbdn != credentials.phien_ban_dang_nhap:
+                raise UnauthorizedException(message="Please sign in again")
+            if "nhan_vien" not in credentials.roles:
+                raise ForbiddenException(message="Chỉ nhân viên được thực hiện thao tác này")
+            if not await asyncio.to_thread(verify_password, current_password, credentials.password_hash):
+                raise InvalidCurrentPasswordException()
+            await self.repository.set_password_hash(employee_id, new_hash)
+            await self.audit.append(
+                CreationAudit(
+                    nhan_vien_id=employee_id,
+                    loai_doi_tuong="nhan_vien",
+                    doi_tuong_id=employee_id,
+                    thao_tac="doi_mat_khau",
+                    du_lieu_truoc=None,
+                    du_lieu_sau={"da_doi_mat_khau": True},
+                    ly_do=None,
+                )
+            )
 
     # UC-07 Đổi vai trò — Main 4–6; R3–R8, A2–A6, A9: kiểm tra và lưu cùng transaction (specs/use_cases/identity_access/UC-07.md)
     async def change_role(

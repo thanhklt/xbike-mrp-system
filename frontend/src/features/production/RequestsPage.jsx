@@ -70,7 +70,13 @@ export function RequestsPage() {
   const collection = useCollection(API.requests, {});
   const detail = useDetail(API.requests, id);
   const catalog = useCatalog();
-  const employees = useChoices(API.employees, {}, manager);
+  const rawEmployees = useChoices(API.employees, {}, manager);
+  const employees = manager
+    ? rawEmployees
+    : {
+        ...rawEmployees,
+        data: user ? [{ ...user, isCurrentUser: true }] : [],
+      };
   const items = catalog.data?.data || [];
   return (
     <>
@@ -92,6 +98,7 @@ export function RequestsPage() {
         filters={requestListFilters(manager)}
         searchPlaceholder="Tìm mã yêu cầu hoặc tên thành phẩm…"
         expandableFilters={!manager}
+        cycleFilters={!manager}
         columns={[
           {
             key: "ma_yeu_cau_san_xuat",
@@ -461,10 +468,11 @@ function IssueLinks({ record, userId }) {
   if (record.nhan_vien_duoc_giao_id !== userId) return null;
   const saved = issues.data?.data || [];
   return <QueryState query={issues}><div className="actions actions-end">
-    {saved.map((issue) => <Link key={issue.id} className="btn btn-secondary"
-      to={`/nv/${issue.loai_phieu === "xuat_linh_kien" ? "xuat-nvl" : "xuat-tp"}/${issue.id}`}>
-      Mở phiếu {issue.ma_phieu_xuat}
-    </Link>)}
+    {saved.length > 0 && (
+      <Link className="btn btn-secondary" to={`/nv/phieu-xuat?yeu_cau_san_xuat_id=${record.id}`}>
+        Xem phiếu xuất
+      </Link>
+    )}
     {!saved.some((issue) => issue.loai_phieu === "xuat_linh_kien") && canCreateIssue(record, "xuat_linh_kien", userId, completion.data?.data) && (
       <Link className="btn btn-secondary" to={`/nv/xuat-nvl/moi?yeu_cau_san_xuat_id=${record.id}`}>Lập phiếu xuất linh kiện</Link>
     )}
@@ -553,7 +561,7 @@ function CompletionSection({ record, items, manager, userId }) {
     confirm({
       title: completion.trang_thai === "tu_choi" ? "Gửi lại chứng từ hoàn thành" : "Gửi chứng từ hoàn thành",
       description: completion.ma_phieu,
-      content: <InfoGrid entries={completionConfirmEntries(completion, record, items)} />,
+      content: <InfoGrid entries={completionConfirmEntries(completion, record, items, !manager)} />,
       impact: "Chưa cộng tồn thành phẩm.",
       onConfirm: async () => {
         await completionMutation.mutateAsync({

@@ -581,7 +581,7 @@ def test_application_registers_only_uc30_completion_routes():
 
     paths = app.openapi()["paths"]
     assert {path: set(methods) for path, methods in paths.items() if path.startswith(URL)} == {
-        URL: {"post", "get"}, f"{URL}/{{id}}": {"get"}, f"{URL}/{{id}}/gui": {"post"},
+        URL: {"post", "get"}, f"{URL}/cua_toi": {"get"}, f"{URL}/{{id}}": {"get"}, f"{URL}/{{id}}/gui": {"post"},
         f"{URL}/{{id}}/duyet": {"post"},
         f"{URL}/{{id}}/tu_choi": {"post"},
     }

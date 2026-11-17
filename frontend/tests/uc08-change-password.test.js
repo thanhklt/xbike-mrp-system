@@ -112,16 +112,16 @@ test("resetting another account preserves the administrator session", async () =
   assert.equal(action.refetches(), 1);
 });
 
-// UC-08 AC-6: Hồ sơ chỉ còn thông tin nhân viên; gỡ endpoint và nhãn tự đổi mật khẩu
-test("profile offers no password form and no self-service endpoint", () => {
+// UC-08 (17/11/2026): Cho phép nhân viên tự đổi mật khẩu trên trang Hồ sơ qua /api/v1/nhan_vien/me/doi_mat_khau
+test("profile offers employee self password form with dedicated self-service endpoint", () => {
   const profile = read("../src/features/auth/ProfilePage.jsx");
-  const endpoints = read("../src/lib/api/endpoints.js");
   const layout = read("../src/layouts/MainLayout.jsx");
-  const profileCode = profile.replace(/^\s*\/\/.*$/gm, "");
-  assert.doesNotMatch(profileCode, /API\.password|Đổi mật khẩu|<form|type="password"/);
+  assert.match(profile, /ChangePasswordCard/);
+  assert.match(profile, /Đổi mật khẩu/);
   assert.match(profile, /<Card title="Hồ sơ nhân viên">/);
   assert.match(profile, /<PageHeader title="Hồ sơ"/);
-  assert.doesNotMatch(endpoints, /doi_mat_khau|\bpassword:/);
+  assert.match(profile, /confirm\(\{/);
+  assert.match(profile, /Xác nhận đổi mật khẩu/);
   assert.match(layout, /pathname === "\/ho-so"\) return \[\{ label: "Hồ sơ" \}\]/);
   assert.doesNotMatch(layout, /Hồ sơ & đổi mật khẩu/);
 });

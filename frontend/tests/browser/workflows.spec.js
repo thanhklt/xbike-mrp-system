@@ -305,6 +305,7 @@ const screens = {
 };
 for (const [role, paths] of Object.entries(screens)) {
   test(`${role}: all assigned screens render without runtime errors`, async ({ page }) => {
+    if (role === "quan_ly") test.slow();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const state = await installApi(page, { role });

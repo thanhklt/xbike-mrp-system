@@ -80,6 +80,55 @@ sequenceDiagram
     Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
 ```
 
+## GET /api/v1/phieu_xuat/cua_toi
+
+Dành riêng cho Nhân viên (`nhan_vien`). Trả về danh sách phiếu xuất kho thuộc các yêu cầu sản xuất mà nhân viên đó được phân công (`YeuCauSanXuat.nhan_vien_duoc_giao_id == actor["sub"]`).
+Bộ lọc AND: `q` (tìm kiếm mã phiếu), `loai_phieu`, `trang_thai`, `yeu_cau_san_xuat_id`, `tu_ngay`, `den_ngay`, `sort` (mặc định `-created_at`). Tuyệt đối không cho phép truyền `nhan_vien_id` (trả 422 nếu có query này).
+Page mặc định 1, size 20, tối đa 100.
+Transaction snapshot: REPEATABLE READ READ ONLY, không tạo row lock hay ghi dữ liệu.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Client Nhân viên
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
+    participant S as PhieuXuatService
+    participant P as SqlAlchemyPhieuXuatRepository
+    participant DB as PostgreSQL
+    C->>R: GET /api/v1/phieu_xuat/cua_toi + JWT + query
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Read current employee and role
+    break Missing / invalid / revoked credentials
+        R-->>C: 401
+    end
+    break Locked account or role other than nhan_vien
+        R-->>C: 403
+    end
+    R->>R: Validate query, reject repeated keys, GET body and nhan_vien_id
+    break Invalid / unknown filters, extra fields or nhan_vien_id query
+        R-->>C: 422
+    end
+    R->>S: list_my_issues(query, actor, request_id)
+    S->>S: Require nhan_vien role
+    S->>P: begin_read_snapshot
+    P->>DB: Roll back auth read TX, start REPEATABLE READ READ ONLY
+    S->>P: list_my_issues(query, actor_id)
+    P->>DB: JOIN YeuCauSanXuat ON YeuCauSanXuat.nhan_vien_duoc_giao_id = actor_id
+    P->>DB: COUNT with AND filters
+    P->>DB: Page headers sorted with ID tie-break
+    opt Nonempty page
+        P->>DB: Load lines for page issues
+    end
+    P-->>S: RecordPage of detached read DTOs
+    S-->>R: data + pagination + request_id
+    R-->>C: 200, including valid empty page
+    Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
+```
+
+
 ## GET /api/v1/phieu_xuat/{id}
 
 Missing ID hoặc lớn hơn PostgreSQL INTEGER trả 404; không đưa ID quá dải vào asyncpg.

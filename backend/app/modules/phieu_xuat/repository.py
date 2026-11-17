@@ -11,9 +11,11 @@ from app.modules.phieu_xuat.models import ChiTietPhieuXuat, PhieuXuat
 from app.modules.phieu_xuat.ports import IssuePart, IssueSource, PhieuXuatSnapshot
 from app.modules.phieu_xuat.schemas import (
     PhieuXuatCreate,
+    PhieuXuatCuaToiQuery,
     PhieuXuatQuery,
     PhieuXuatRead,
 )
+from app.modules.san_xuat.models import YeuCauSanXuat
 from app.shared.records import RecordPage
 
 
@@ -48,7 +50,12 @@ class SqlAlchemyPhieuXuatRepository:
         return grouped
 
     @staticmethod
-    def _build(record: PhieuXuat, lines: list[ChiTietPhieuXuat]) -> PhieuXuatRead:
+    def _build(
+        record: PhieuXuat,
+        lines: list[ChiTietPhieuXuat],
+        *,
+        ma_yeu_cau_san_xuat: str | None = None,
+    ) -> PhieuXuatRead:
         return PhieuXuatRead.model_validate(
             {
                 **{
@@ -56,6 +63,7 @@ class SqlAlchemyPhieuXuatRepository:
                     for column in PhieuXuat.__table__.columns
                 },
                 "chi_tiet": lines,
+                "ma_yeu_cau_san_xuat": ma_yeu_cau_san_xuat,
             }
         )
 
@@ -77,7 +85,7 @@ class SqlAlchemyPhieuXuatRepository:
         self, params: PhieuXuatQuery, employee_id: int | None
     ) -> RecordPage[PhieuXuatRead]:
         query = select(PhieuXuat)
-        if params.q:
+        if getattr(params, "q", None):
             query = query.where(PhieuXuat.ma_phieu_xuat.icontains(params.q, autoescape=True))
         for name in (
             "loai_phieu",
@@ -110,6 +118,55 @@ class SqlAlchemyPhieuXuatRepository:
         ).all()
         lines = await self._lines([record.id for record in records], lock=False)
         return RecordPage([self._build(record, lines[record.id]) for record in records], total)
+
+    async def list_my_issues(
+        self, params: PhieuXuatCuaToiQuery, employee_id: int
+    ) -> RecordPage[PhieuXuatRead]:
+        query = (
+            select(PhieuXuat, YeuCauSanXuat.ma_yeu_cau_san_xuat)
+            .join(YeuCauSanXuat, PhieuXuat.yeu_cau_san_xuat_id == YeuCauSanXuat.id)
+            .where(YeuCauSanXuat.nhan_vien_duoc_giao_id == employee_id)
+        )
+        if getattr(params, "q", None):
+            query = query.where(PhieuXuat.ma_phieu_xuat.icontains(params.q, autoescape=True))
+        for name in (
+            "loai_phieu",
+            "trang_thai",
+            "yeu_cau_san_xuat_id",
+        ):
+            if (value := getattr(params, name)) is not None:
+                query = query.where(getattr(PhieuXuat, name) == value)
+        for day, end in ((params.tu_ngay, False), (params.den_ngay, True)):
+            if day:
+                boundary = func.timezone(
+                    "Asia/Ho_Chi_Minh",
+                    literal(
+                        datetime.combine(day + timedelta(days=int(end)), time.min), type_=DateTime()
+                    ),
+                )
+                query = query.where(
+                    PhieuXuat.created_at < boundary if end else PhieuXuat.created_at >= boundary
+                )
+        total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        if (offset := (params.page - 1) * params.page_size) >= total:
+            return RecordPage([], total)
+        sort_value = getattr(params, "sort", "-created_at") or "-created_at"
+        column = getattr(PhieuXuat, sort_value.lstrip("-"))
+        order = column.desc() if sort_value.startswith("-") else column.asc()
+        results = (
+            await self.session.execute(
+                query.order_by(order, PhieuXuat.id.desc())
+                .offset(offset)
+                .limit(params.page_size)
+            )
+        ).all()
+        records = [row[0] for row in results]
+        codes = {row[0].id: row[1] for row in results}
+        lines = await self._lines([record.id for record in records], lock=False)
+        return RecordPage(
+            [self._build(record, lines[record.id], ma_yeu_cau_san_xuat=codes.get(record.id)) for record in records],
+            total,
+        )
 
     async def get_issue(self, issue_id: int, *, lock: bool = True) -> PhieuXuatRead | None:
         query = (

@@ -11,6 +11,7 @@ from app.core.request_context import reject_query as validate_detail_query
 from app.dependencies import get_current_user_payload, get_nhan_vien_service
 from app.modules.nhan_vien.schemas import (
     DatLaiMatKhauInput,
+    DoiMatKhauMeInput,
     DoiVaiTroInput,
     EmployeeSort,
     EmployeeStatus,
@@ -88,6 +89,27 @@ async def list_entries(
     request_id: Annotated[str, Depends(get_request_id)],
 ) -> NhanVienListResponse:
     return await service.list_employees(params, actor, request_id)
+
+
+@router.post(
+    "/me/doi_mat_khau",
+    status_code=204,
+    dependencies=[Depends(validate_detail_query)],
+    responses={204: {"description": "Đổi mật khẩu thành công"}},
+)
+async def change_password_self(
+    params: DoiMatKhauMeInput,
+    actor: Actor,
+    service: Service,
+    request_id: RequestId,
+) -> Response:
+    await service.change_password_self(
+        params.mat_khau_hien_tai.get_secret_value(),
+        params.mat_khau_moi.get_secret_value(),
+        actor,
+        request_id,
+    )
+    return Response(status_code=204)
 
 
 # UC-03 Xem danh sách tài khoản — R4: chi tiết theo vai trò và chính chủ (specs/use_cases/identity_access/UC-03.md)

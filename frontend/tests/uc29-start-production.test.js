@@ -103,7 +103,14 @@ test("started detail shows the saved Vietnam time in the approved position", () 
 test("menus point to requests and remove retired production entries", () => {
   assert.deepEqual(navigationFor("nhan_vien"), [
     { title: "Chung", items: [["/nv", "Tổng quan"]] },
-    { title: "Sản xuất", items: [["/nv/yeu-cau", "Việc được giao"]] },
+    {
+      title: "Sản xuất",
+      items: [
+        ["/nv/yeu-cau", "Việc được giao"],
+        ["/nv/phieu-xuat", "Phiếu xuất"],
+        ["/nv/chung-tu-hoan-thanh", "Chứng từ hoàn thành"],
+      ],
+    },
     { title: "Theo dõi", items: [["/nv/ton-kho", "Tra cứu tồn kho"]] },
   ]);
   const managerItems = navigationFor("quan_ly").flatMap((group) => group.items);
@@ -131,7 +138,7 @@ test("retired pages and APIs are gone and order wildcard routes redirect", async
       assert.equal(leaf.props.replace, true);
     }
   }
-  for (const path of ["/nv/hoan-thanh", "/nv/hoan-thanh/1", "/nv/phieu", "/nv/phieu-xuat/1"]) {
+  for (const path of ["/nv/hoan-thanh", "/nv/hoan-thanh/1", "/nv/phieu"]) {
     const leaf = matchRoutes(config, path).at(-1).route.element;
     assert.equal(leaf.type, Navigate);
     assert.equal(leaf.props.to, "/nv/yeu-cau");

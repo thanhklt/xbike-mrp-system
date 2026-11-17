@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useCollection, useDetail, useResource } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { dateTime, itemName, money, number, unitLabel } from "../../lib/format.js";
+import { dateTime, itemDisplayName, itemName, money, number, unitLabel } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -92,11 +92,10 @@ function IssueDetail({ snapshot, items, base, issueType }) {
       <ErrorNotice error={error} />
       {needsCompletion && <QueryState query={completion} />}
       <InfoGrid entries={[
-        ["Yêu cầu sản xuất", source.data?.data.ma_yeu_cau_san_xuat], ["Loại phiếu", issueTypeLabel(type)],
-        ["Thành phẩm", itemName(items, source.data?.data.mat_hang_id)], ["Số lượng yêu cầu", number(source.data?.data.so_luong)],
+        ["Yêu cầu sản xuất", source.data?.data?.ma_yeu_cau_san_xuat || (source.isPending ? "Đang tải…" : "Yêu cầu sản xuất")], ["Loại phiếu", issueTypeLabel(type)],
+        ["Thành phẩm", itemDisplayName(items, source.data?.data?.mat_hang_id)], ["Số lượng yêu cầu", number(source.data?.data?.so_luong)],
       ]} />
       {existingIssue ? <Link className="btn btn-secondary" to={`${base}/${existingIssue.id}`}>Mở phiếu {existingIssue.ma_phieu_xuat}</Link> : <>
-      <Notice>Nội dung và số lượng lấy từ nhu cầu đã chốt. Lưu nháp sẽ kiểm tra lại trạng thái yêu cầu; gửi phiếu là bước riêng.</Notice>
       {eligible && <QueryState query={preview}><SavedLines lines={preview.data?.data.chi_tiet || []} items={items} units /></QueryState>}
       <Button disabled={busy || !eligible || !preview.isSuccess || preview.isFetching}
         onClick={() => save({ path: API.issues, method: "post", versioned: false,
@@ -109,15 +108,14 @@ function IssueDetail({ snapshot, items, base, issueType }) {
     <h3>{record.ma_phieu_xuat}</h3>
     <InfoGrid entries={[
       ["Mã phiếu xuất", record.ma_phieu_xuat], ["Trạng thái", <Badge status={record.trang_thai} />],
-      ["Yêu cầu sản xuất", <Link to={`/${employee ? "nv" : "kho"}/yeu-cau/${sourceId}`}>YCSX #{sourceId}</Link>],
+      ["Yêu cầu sản xuất", <Link to={`/${employee ? "nv" : "kho"}/yeu-cau/${sourceId}`}>{source.data?.data?.ma_yeu_cau_san_xuat || (source.isPending ? "Đang tải…" : "Yêu cầu sản xuất")}</Link>],
       ["Ngày lập", dateTime(record.created_at)],
-      [type === "xuat_linh_kien" ? "Mặt hàng đầu" : "Mã thành phẩm", firstItem?.sku || firstItem?.ma_mat_hang || "—"],
+      [type === "xuat_linh_kien" ? "Mặt hàng đầu" : "Mã thành phẩm", firstItem ? `${firstItem.ten_mat_hang} — ${firstItem.ma_mat_hang || firstItem.sku}` : "—"],
       ["Số lượng xuất", record.chi_tiet.length === 1 ? `${number(firstLine.so_luong)} ${unitLabel(firstItem?.don_vi_tinh) || ""}` : `${record.chi_tiet.length} dòng mặt hàng`],
       ["Loại phiếu", issueTypeLabel(type)], ["Tổng tiền server chốt", money(record.tong_tien)],
       ...(record.ly_do_tu_choi ? [["Lý do từ chối", record.ly_do_tu_choi]] : []),
     ]} />
     <SavedLines lines={record.chi_tiet} items={items} prices />
-    <Notice>Gửi hoặc gửi lại chưa trừ tồn; hàng vẫn được giữ cho yêu cầu. Quản lý kho duyệt phiếu để ghi xuất kho.</Notice>
     <QueryState query={source}>
       <ApprovalActions kind="issue" path={API.issues} snapshot={snapshot} items={items}
         assignedId={source.data?.data.nhan_vien_duoc_giao_id} />

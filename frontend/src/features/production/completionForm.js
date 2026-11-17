@@ -53,11 +53,15 @@ export function completionEntries(completion) {
 }
 
 // UC-30 Lập và gửi chứng từ hoàn thành sản xuất — Main 7; A3 nội dung xác nhận (specs/use_cases/production/UC-30.md)
-export function completionConfirmEntries(completion, record, items) {
+export function completionConfirmEntries(completion, record, items, isEmployee = false) {
   const item = items.find((entry) => Number(entry.id) === Number(record.mat_hang_id));
+  const productText =
+    isEmployee && item?.ma_mat_hang
+      ? `${item.ten_mat_hang} — ${item.ma_mat_hang}`
+      : itemName(items, record.mat_hang_id);
   return [
     ["Mã chứng từ", completion.ma_phieu],
-    ["Thành phẩm", itemName(items, record.mat_hang_id)],
+    ["Thành phẩm", productText],
     ["Số lượng hoàn thành", number(completion.so_luong_hoan_thanh)],
     ["Đơn vị tính", unitLabel(item?.don_vi_tinh)],
   ];
@@ -70,7 +74,7 @@ export function canApproveCompletion(completion, record, manager) {
 
 // UC-31 Duyệt chứng từ hoàn thành sản xuất — Main 3 năm dòng xác nhận (specs/use_cases/production/UC-31.md)
 export function approveConfirmEntries(completion, record, items) {
-  const [document, ...details] = completionConfirmEntries(completion, record, items);
+  const [document, ...details] = completionConfirmEntries(completion, record, items, false);
   return [document, ["Loại yêu cầu", REQUEST_TYPE_LABELS[record.loai_yeu_cau]], ...details];
 }
 
