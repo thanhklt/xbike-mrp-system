@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { auditParams } from "../../lib/api/contract.js";
 import { useChoices, useCollection, useDetail } from "../../lib/api/useResources.js";
-import { dateTime } from "../../lib/format.js";
+import { dateTime, unitLabel } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -15,6 +15,7 @@ import { Badge } from "../../components/Badge.jsx";
 import { DataTable } from "../../components/DataTable.jsx";
 import { auditActionLabel, auditObjectLabel } from "../dashboard/auditFormat.js";
 import {
+  adminAuditFilters,
   auditFilters,
   auditActorLookup,
   auditDetailEntries,
@@ -25,27 +26,29 @@ import {
 export function AuditPage() {
   const { id } = useParams();
   const { user } = useAuth();
-  const base = user.ma_vai_tro === "quan_tri_vien" ? "/admin/lich-su" : "/kho/lich-su";
+  const isAdmin = user.ma_vai_tro === "quan_tri_vien";
+  const base = isAdmin ? "/admin/lich-su" : "/kho/lich-su";
   const collection = useCollection(API.audit, { sort: "-created_at" }, auditParams);
   const detail = useDetail(API.audit, id);
   const employees = useChoices(API.employees);
   const employeeRows = useMemo(() => employees.data || [], [employees.data]);
   const actorLabel = useMemo(() => auditActorLookup(employeeRows), [employeeRows]);
-  const filters = useMemo(() => auditFilters(employeeRows), [employeeRows]);
+  const filters = useMemo(
+    () => (isAdmin ? adminAuditFilters() : auditFilters(employeeRows)),
+    [isAdmin, employeeRows],
+  );
   // Màn chỉ đọc: không có chế độ tạo mới, "/moi" quay về danh sách.
   if (id === "moi") return <Navigate to={base} replace />;
   return (
     <>
-      <PageHeader
-        title="Lịch sử thao tác"
-        subtitle="Tra cứu người thực hiện, thời điểm và dữ liệu trước/sau của các thao tác đã lưu."
-      />
+      <PageHeader variant="large" title="Lịch sử thao tác" />
       {/* Cùng bố cục với QueryState khi lỗi: thông báo và nút "Tải lại" gọi refetch, chỉ đọc. */}
       {employees.isError && (
         <div className="stack">
           <Notice tone="warning">
-            Không thể tải danh sách nhân viên. Bộ lọc Người thực hiện tạm chỉ có Tất cả và người
-            thực hiện hiển thị theo ID.
+            {isAdmin
+              ? "Không thể tải danh sách nhân viên. Người thực hiện hiển thị theo ID."
+              : "Không thể tải danh sách nhân viên. Bộ lọc Người thực hiện tạm chỉ có Tất cả và người thực hiện hiển thị theo ID."}
           </Notice>
           <Button
             variant="secondary"
@@ -122,7 +125,7 @@ function AuditDetail({ record, actorLabel }) {
                   [row.ma_mat_hang, row.ten_mat_hang].filter(Boolean).join(" · ") ||
                   `#${row.mat_hang_id}`,
               },
-              { key: "don_vi_tinh", label: "Đơn vị" },
+              { key: "don_vi_tinh", label: "Đơn vị", render: (row) => unitLabel(row.don_vi_tinh) },
               { key: "so_luong_can", label: "Cần", numeric: true },
               { key: "so_luong_con_dung", label: "Còn dùng", numeric: true },
               { key: "so_luong_thieu", label: "Thiếu", numeric: true },

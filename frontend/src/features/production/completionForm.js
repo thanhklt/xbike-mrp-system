@@ -1,4 +1,4 @@
-import { dateTime, employeeLabel, itemName, number } from "../../lib/format.js";
+import { dateTime, employeeLabel, itemName, number, unitLabel } from "../../lib/format.js";
 import { dateFilters } from "../../components/filterFields.js";
 import { REQUEST_TYPES, REQUEST_TYPE_LABELS } from "./requestForm.js";
 
@@ -59,7 +59,7 @@ export function completionConfirmEntries(completion, record, items) {
     ["Mã chứng từ", completion.ma_phieu],
     ["Thành phẩm", itemName(items, record.mat_hang_id)],
     ["Số lượng hoàn thành", number(completion.so_luong_hoan_thanh)],
-    ["Đơn vị tính", item?.don_vi_tinh || "—"],
+    ["Đơn vị tính", unitLabel(item?.don_vi_tinh)],
   ];
 }
 

@@ -85,7 +85,7 @@ function page(rows = [row]) {
   const DataTable = tableFactory(tablePorts, "DataTable");
   const Pagination = tableFactory(tablePorts, "Pagination");
   const Collection = collectionFactory({
-    React: jsx, useState, Field, Button, DataTable, Pagination, QueryState,
+    React: jsx, useState, Field, Button, DataTable, Pagination, QueryState, DateInput: () => null,
     Card: ({ children }) => React.createElement("section", null, children),
   }, "Collection");
   const Component = pageFactory({

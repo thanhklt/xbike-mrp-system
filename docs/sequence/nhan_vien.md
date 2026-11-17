@@ -238,7 +238,7 @@ Location trỏ GET chi tiết mới; ETag từ hồ sơ trả về, meta có `re
 
 - Tài khoản và audit `tao` dùng chung transaction. Audit có người thực hiện, đối tượng mới, thời điểm do DB đặt, lý do tùy chọn; không lưu mật khẩu thô/hash.
 - Trigger `cap_ma_nhan_vien()` cấp mã từ `id` identity (`NV-` + 6 chữ số). Hai QTV tạo đồng thời nhận id khác nhau nên không tranh cùng mã. `id > 999999` ném P0001 chứa `NV-NNNNNN`; repository chuyển thành 409 `trang_thai_khong_hop_le`, “Đã hết mã nhân viên khả dụng”; rollback, không ghi lịch sử. Trigger chặn UPDATE đổi `id` hoặc mã. Sequence có thể có khoảng trống sau rollback.
-- Username trùng trước cấp mã hoặc lúc INSERT đều trả 409 `ten_dang_nhap_bi_trung`, “Tên đăng nhập đã tồn tại”. Username/mã bất biến sau tạo.
+- Username trùng trước cấp mã hoặc lúc INSERT đều trả 409 `ten_dang_nhap_bi_trung`, “Tên đăng nhập đã tồn tại”. Mã nhân viên bất biến sau tạo. Tên đăng nhập sửa được qua `PATCH /nhan_vien/{id}` (quyết định dev 17/11/2026); trùng tên → 409 `ten_dang_nhap_bi_trung`.
 - Hợp đồng API UC-04 giữ nguyên: client không gửi `ma_nhan_vien` (gửi sẽ nhận 422), mật khẩu từ 6 ký tự, `ly_do` tùy chọn. `init.sql`/`seed.sql` chỉ cập nhật bootstrap cho DB mới/trống; database đã khởi tạo không tự nhận trigger và chưa được thay đổi trong tác vụ này.
 
 Kiểm chứng UC-04 trên PostgreSQL 16 riêng: trigger, ORM/API, đăng nhập theo ba vai trò,
@@ -248,7 +248,7 @@ Chi tiết test/AC và kết quả ở [plan UC-04 bổ sung](../plans/UC-04-ma-
 
 ## PATCH /api/v1/nhan_vien/{id} — Sửa hồ sơ
 
-NhanVienPatch chỉ nhận ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong. Bỏ qua giữ nguyên; null xóa giá trị nullable. Username, mã, mật khẩu, role, trạng thái và field dư trả 422. Bắt buộc If-Match.
+NhanVienPatch nhận ten_dang_nhap, ho_ten, ngay_sinh, so_dien_thoai, email, ngay_vao_lam, he_so_luong. Bỏ qua giữ nguyên; null xóa giá trị nullable. Tên đăng nhập nếu gửi phải khác null, trim và dài 1–255 ký tự; rỗng/sai trả 422. Mã, mật khẩu, role, trạng thái và field dư trả 422. Bắt buộc If-Match.
 
 ```mermaid
 sequenceDiagram
@@ -292,9 +292,24 @@ sequenceDiagram
             T->>DB: ROLLBACK
             R-->>C: 401/403 sau recheck hoặc 404 / 428 / 412
         else Điều kiện hợp lệ
+            opt Tên đăng nhập thay đổi thực tế
+                N->>P: find_by_username(tên mới)
+                P->>DB: SELECT theo ten_dang_nhap
+                break Trùng tài khoản khác
+                    N->>T: __aexit__(DuplicateUsernameException)
+                    T->>DB: ROLLBACK
+                    R-->>C: 409 ten_dang_nhap_bi_trung
+                end
+            end
             opt Có trường thay đổi thực tế
                 N->>P: update_profile(id, changes)
                 P->>DB: UPDATE hồ sơ và đọc lại record
+                break Unique ten_dang_nhap vi phạm khi UPDATE
+                    P-->>N: DuplicateUsernameException
+                    N->>T: __aexit__(error)
+                    T->>DB: ROLLBACK
+                    R-->>C: 409 ten_dang_nhap_bi_trung
+                end
             end
             opt Có thay đổi thực tế
                 N->>AU: append sua nếu có thay đổi
@@ -314,6 +329,7 @@ sequenceDiagram
 ```
 
 Body rỗng hoặc giá trị không đổi là no-op, không thêm audit. Hai request cùng ETag chỉ một request thay đổi thành công; request sau nhận 412.
+Audit `sua` lưu tên đăng nhập trước/sau cùng transaction cập nhật. Đổi tên không tăng phiên bản đăng nhập hoặc đổi mật khẩu; token cũ vẫn dùng được vì `sub` là ID. ETag thay đổi theo hồ sơ mới.
 
 
 ## DELETE /api/v1/nhan_vien/{id} — Khóa tài khoản (UC-05)

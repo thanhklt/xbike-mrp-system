@@ -466,6 +466,51 @@ td.numeric {
 .filters select {
   min-height: 42px;
 }
+.date-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.date-input:focus-within {
+  outline: 2px solid var(--muted);
+  outline-offset: 2px;
+}
+.field .date-input input[type="text"] {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+.date-input button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  align-self: stretch;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--muted);
+}
+.field .date-input .date-input-picker {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .table-scroll {
   overflow-x: auto;
 }
@@ -1450,6 +1495,16 @@ html[data-admin-theme="true"] {
   color: #f4ede6;
 }
 
+.admin-shell th {
+  background: var(--soft);
+  color: var(--muted);
+  border-bottom-color: var(--border);
+}
+
+.admin-shell tbody tr:hover {
+  background: #261f1a;
+}
+
 .admin-shell-body {
   min-height: 100dvh;
   align-items: stretch;
@@ -1581,11 +1636,22 @@ html[data-admin-theme="true"] {
   gap: 16px;
 }
 
+.admin-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .admin-page-heading h1 {
   font-size: 40px;
   font-weight: 700;
   line-height: 1.12;
   letter-spacing: -0.015em;
+}
+
+.admin-shell .admin-page-heading h1 {
   color: #fff;
 }
 
@@ -2146,19 +2212,6 @@ html[data-admin-theme="true"] {
   background: #261f1a;
 }
 
-.admin-col-check {
-  width: 48px;
-  min-width: 48px;
-  text-align: center;
-}
-
-.admin-col-check input[type="checkbox"] {
-  width: 19px;
-  height: 19px;
-  accent-color: #df6d27;
-  cursor: pointer;
-}
-
 .admin-col-stt {
   width: 60px;
   min-width: 60px;
@@ -2294,6 +2347,21 @@ html[data-admin-theme="true"] {
   padding: 8px 22px;
   border-radius: 12px;
   font-size: 16px;
+}
+
+.admin-toolbar-filters .admin-filter-reset {
+  flex: 0 0 auto;
+  min-height: 52px;
+  white-space: nowrap;
+}
+/* Nhóm lọc có nút Đặt lại: nới kích thước tối thiểu để vẫn vừa một dòng ở 1440px. */
+.admin-toolbar-filters:has(.admin-filter-reset) .admin-search-box {
+  flex-basis: 200px;
+}
+.admin-toolbar-filters:has(.admin-filter-reset) .admin-select-shell {
+  flex: 1 1 170px;
+  min-width: 150px;
+  max-width: 240px;
 }
 
 .admin-action-btn:hover:not(:disabled),

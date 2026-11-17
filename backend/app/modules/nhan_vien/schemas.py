@@ -149,12 +149,20 @@ SalaryCoefficient = Annotated[
 class NhanVienPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    ten_dang_nhap: str | None = Field(default=None, min_length=1, max_length=255)
     ho_ten: str | None = None
     ngay_sinh: ProfileDate = None
     so_dien_thoai: str | None = None
     email: str | None = None
     ngay_vao_lam: ProfileDate = None
     he_so_luong: SalaryCoefficient = None
+
+    @field_validator("ten_dang_nhap")
+    @classmethod
+    def require_username_when_present(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Tên đăng nhập không được để trống")
+        return value
 
 
 class NhanVienCreate(NhanVienPatch):

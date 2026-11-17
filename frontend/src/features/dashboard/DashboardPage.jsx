@@ -13,6 +13,7 @@ import {
   formatAuditTime,
   itemName,
   number,
+  quantity,
 } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Card } from "../../components/Card.jsx";
@@ -655,9 +656,7 @@ function QuickStock() {
                   <strong>{item.ten_mat_hang}</strong>
                   <small>{item.ma_mat_hang}</small>
                 </div>
-                <strong>
-                  {number(item.so_luong_ton)} {item.don_vi_tinh}
-                </strong>
+                <strong>{quantity(item.so_luong_ton, item.don_vi_tinh)}</strong>
               </div>
             ))
           ) : (

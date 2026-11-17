@@ -50,12 +50,19 @@ test("employee sidebar focuses on assigned work without revoking read-only docum
   }
 });
 
-test("admin sidebar displays the 3 spec navigation items while keeping /admin/lich-su permitted", () => {
+test("admin sidebar displays all 6 approved navigation items in order with read-only catalog access", () => {
   const items = navigationFor("quan_tri_vien").flatMap((group) => group.items);
   assert.deepEqual(items, [
     ["/admin", "Tổng quan"],
     ["/admin/tai-khoan", "Quản lý tài khoản"],
     ["/admin/vai-tro", "Quản lý vai trò"],
+    ["/admin/mat-hang", "Tra cứu mặt hàng"],
+    ["/admin/nha-cung-cap", "Tra cứu nhà cung cấp"],
+    ["/admin/lich-su", "Lịch sử thao tác"],
   ]);
   assert.equal(canAccessPath("quan_tri_vien", "/admin/lich-su"), true);
+  assert.equal(canAccessPath("quan_tri_vien", "/admin/mat-hang/1"), true);
+  assert.equal(canAccessPath("quan_tri_vien", "/admin/nha-cung-cap/1"), true);
+  assert.equal(canAccessPath("quan_tri_vien", "/kho/mat-hang"), false);
+  assert.equal(canAccessPath("quan_tri_vien", "/kho/nha-cung-cap"), false);
 });

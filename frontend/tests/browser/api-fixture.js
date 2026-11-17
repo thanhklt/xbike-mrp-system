@@ -161,6 +161,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       don_gia: 250000,
       is_active: true,
       so_luong_ton: 120,
+      so_luong_dang_giu: 40,
+      so_luong_con_dung: 80,
       ton_kho_updated_at: "2026-11-05T01:00:00Z",
     },
     {
@@ -175,6 +177,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       don_gia: 80000,
       is_active: true,
       so_luong_ton: 55,
+      so_luong_dang_giu: 5,
+      so_luong_con_dung: 50,
       ton_kho_updated_at: null,
     },
     {
@@ -189,6 +193,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       don_gia: 300000,
       is_active: true,
       so_luong_ton: 12,
+      so_luong_dang_giu: 2,
+      so_luong_con_dung: 10,
       ton_kho_updated_at: null,
     },
     {
@@ -203,6 +209,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       don_gia: 2500000,
       is_active: true,
       so_luong_ton: 18,
+      so_luong_dang_giu: 0,
+      so_luong_con_dung: 18,
       ton_kho_updated_at: null,
     },
   ];
@@ -569,6 +577,14 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         { error: { code: "du_lieu_da_thay_doi", message: "Dữ liệu đã thay đổi" }, meta: {} },
         412,
       );
+    if (resource === "nhan_vien" && method === "PATCH" && body.ten_dang_nhap !== undefined) {
+      body.ten_dang_nhap = body.ten_dang_nhap.trim();
+      if (records.some((entry) => entry.id !== id && entry.ten_dang_nhap === body.ten_dang_nhap))
+        return respond(
+          { error: { code: "ten_dang_nhap_bi_trung", message: "Tên đăng nhập đã tồn tại" }, meta: {} },
+          409,
+        );
+    }
     if (resource === "nhan_vien" && action === "dat_lai_mat_khau" && method === "POST") {
       if (id === user.id) state.accessToken = "browser-test-token-renewed";
       return respond({ data: record, meta: {} }, 200, { etag: version() });
