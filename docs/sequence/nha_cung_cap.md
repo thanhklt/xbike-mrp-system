@@ -14,7 +14,7 @@ Các mũi tên HTTP lỗi là response qua exception handler, repository không 
 [PNG](assets/nha_cung_cap/nha-cung-cap-1.png). UC-13.
 Query mặc định page=1/page_size=20, tối đa 100; sort id/ma_ncc/ten_ncc và tiền tố `-`.
 ID ASC là khóa phụ. q chỉ tìm literal mã/tên, không phân biệt hoa/thường;
-tinh/phuong so bằng sau chuẩn hóa whitespace ngoài và hoa/thường, giữ dấu.
+tinh/phuong chứa chuỗi con sau chuẩn hóa whitespace ngoài, không phân biệt hoa/thường, giữ dấu, `%`/`_` literal.
 Các bộ lọc kết hợp AND; blank filter không áp dụng; phuong được dùng riêng.
 Không ghi dữ liệu/audit, không yêu cầu If-Match. COUNT và trang là hai truy vấn.
 
