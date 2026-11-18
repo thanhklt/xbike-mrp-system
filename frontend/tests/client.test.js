@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apiClient, readAll, readResource, writeResource } from "../src/lib/api/client.js";
+import { apiClient, readAll, readResource, TOKEN_KEY, writeResource } from "../src/lib/api/client.js";
 const store = new Map();
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
@@ -73,3 +73,41 @@ test("BOM and supplier creates do not send If-Match", async () => {
   };
   await writeResource({ path: "/bom", versioned: false });
 });
+
+const expiredMessage = "Could not validate credentials";
+const disabledMessage = "Tài khoản đã bị vô hiệu hóa";
+for (const { name, status, data, detail } of [
+  {
+    name: "authenticated 401 ends the session without a message",
+    status: 401,
+    data: { detail: expiredMessage },
+    detail: undefined,
+  },
+  {
+    name: "disabled account 403 ends the session with its message",
+    status: 403,
+    data: { error: { code: "tai_khoan_bi_vo_hieu_hoa", message: disabledMessage } },
+    detail: disabledMessage,
+  },
+]) {
+  test(name, async (t) => {
+    const eventName = "xbike:session-ended";
+    const details = [];
+    const onSessionEnded = (event) => details.push(event.detail);
+    const originalAdapter = apiClient.defaults.adapter;
+    store.set(TOKEN_KEY, "test-token");
+    window.addEventListener(eventName, onSessionEnded);
+    t.after(() => {
+      window.removeEventListener(eventName, onSessionEnded);
+      store.delete(TOKEN_KEY);
+      apiClient.defaults.adapter = originalAdapter;
+    });
+    apiClient.defaults.adapter = async (config) => {
+      assert.equal(config.headers.Authorization, "Bearer test-token");
+      throw Object.assign(new Error("Request failed"), { config, response: { status, data } });
+    };
+
+    await assert.rejects(readResource("/auth/me"), { status });
+    assert.deepEqual(details, [detail]);
+  });
+}

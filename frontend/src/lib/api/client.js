@@ -23,11 +23,15 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
     const failure = toApiError(error);
+    const accountDisabled = failure.code === "tai_khoan_bi_vo_hieu_hoa";
     if (
-      (failure.status === 401 || failure.code === "tai_khoan_bi_vo_hieu_hoa") &&
+      (failure.status === 401 || accountDisabled) &&
       error.config?.headers?.Authorization
     ) {
-      window.dispatchEvent(new CustomEvent("xbike:session-ended", { detail: failure.message }));
+      const event = accountDisabled
+        ? new CustomEvent("xbike:session-ended", { detail: failure.message })
+        : new Event("xbike:session-ended");
+      window.dispatchEvent(event);
     }
     return Promise.reject(failure);
   },
