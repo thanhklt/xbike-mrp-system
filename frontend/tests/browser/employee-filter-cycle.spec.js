@@ -1,30 +1,30 @@
 import { expect, test } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
-test("employee status button cycles immediately through every choice and wraps without a list", async ({ page }) => {
+test("employee status dropdown selects any choice directly and supports the keyboard", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/yeu-cau");
   const status = page.locator("#filter-trang_thai");
   const choices = [
+    ["Hoàn thành", "hoan_thanh"],
     ["Đã giao", "da_gui"],
+    ["Đã hủy", "da_huy"],
     ["Chờ bổ sung linh kiện", "cho_bo_sung_linh_kien"],
     ["Đang thực hiện", "dang_thuc_hien"],
-    ["Hoàn thành", "hoan_thanh"],
-    ["Đã hủy", "da_huy"],
-    ["Tất cả", undefined],
+    ["Tất cả", ""],
   ];
+  await expect(page.getByRole("combobox", { name: "Trạng thái", exact: true })).toBeVisible();
   for (const [label, value] of choices) {
-    await status.click();
-    await expect(status).toContainText(label);
-    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await status.selectOption(value);
+    await expect(status.locator("option:checked")).toHaveText(label);
     await expect.poll(() => state.calls.filter((call) => call.path === "yeu_cau_san_xuat")
-      .at(-1)?.params.trang_thai).toBe(value);
+      .at(-1)?.params.trang_thai).toBe(value || undefined);
   }
   await status.focus();
-  await page.keyboard.press("Enter");
-  await expect(status).toContainText("Đã giao");
-  await page.keyboard.press("Space");
-  await expect(status).toContainText("Chờ bổ sung linh kiện");
+  await page.keyboard.press("ArrowDown");
+  await expect(status).toHaveValue("da_gui");
+  await page.keyboard.press("End");
+  await expect(status).toHaveValue("da_huy");
   await expect(status).toBeFocused();
   expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
 });
@@ -42,13 +42,13 @@ test("employee live search debounces and reset cancels pending text and restores
   await expect.poll(() => state.calls.filter((call) => call.path === "mat_hang" && call.params.q).length).toBe(1);
   expect(state.calls.find((call) => call.path === "mat_hang" && call.params.q).params.q).toBe("Khung xe");
 
-  await page.locator("#filter-sort").click();
+  await page.locator("#filter-sort").selectOption("ten_mat_hang");
   await expect.poll(() => state.calls.filter((call) => call.path === "mat_hang").at(-1)?.params.sort).toBe("ten_mat_hang");
   await search.fill("must-not-run-after-reset");
   await page.getByRole("button", { name: "Reset tìm kiếm", exact: true }).click();
   await page.clock.fastForward(400);
   await expect(search).toHaveValue("");
-  await expect(page.locator("#filter-sort")).toContainText("ID tăng dần");
+  await expect(page.locator("#filter-sort")).toHaveValue("id");
   await expect.poll(() => state.calls.filter((call) => call.path === "mat_hang").at(-1)?.params.sort).toBe("id");
   expect(state.calls.some((call) => call.params.q === "must-not-run-after-reset")).toBe(false);
   const last = state.calls.filter((call) => call.path === "mat_hang").at(-1).params;
@@ -57,20 +57,20 @@ test("employee live search debounces and reset cancels pending text and restores
   expect(state.unexpected).toEqual([]);
 });
 
-test("inventory type and sort buttons wrap to their first choices", async ({ page }) => {
+test("inventory dropdowns select nonadjacent choices and return to their defaults", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/ton-kho");
   await expect(page.getByRole("table")).toBeVisible();
   const initialCodes = await page.locator("tbody tr td:first-child small").allTextContents();
   expect(initialCodes.length).toBeGreaterThan(0);
   for (const [field, values] of [
-    ["loai_mat_hang", ["linh_kien", "thanh_pham", ""]],
-    ["is_active", ["true", "false", ""]],
-    ["sort", ["ten_mat_hang", "-don_gia", "id"]],
+    ["loai_mat_hang", ["thanh_pham", "linh_kien", ""]],
+    ["is_active", ["false", "true", ""]],
+    ["sort", ["-don_gia", "ten_mat_hang", "id"]],
   ]) {
     for (const value of values) {
-      await page.locator(`#filter-${field}`).click();
-      await expect(page.locator(`input[name='${field}']`)).toHaveValue(value);
+      await page.locator(`#filter-${field}`).selectOption(value);
+      await expect(page.locator(`select[name='${field}']`)).toHaveValue(value);
       if (value && value !== "id") {
         await expect.poll(() => state.calls.filter((call) => call.path === "mat_hang").at(-1)?.params[field]).toBe(value);
       }
@@ -128,14 +128,14 @@ test("issue reset clears filters and page while preserving request context, acti
     ["tab", "xuat_thanh_pham"], ["yeu_cau_san_xuat_id", "1"],
   ]);
   await expect(search).toHaveValue("");
-  await expect(page.locator("#filter-trang_thai")).toContainText("Tất cả");
+  await expect(page.locator("#filter-trang_thai")).toHaveValue("");
   await expect(page.getByLabel("Từ ngày", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Đến ngày", { exact: true })).toHaveValue("");
   await expect(page.locator("tbody")).toContainText("PX-TP-102");
   await expect(page.locator("tbody")).not.toContainText("PX-LK-101");
   await page.goBack();
   await expect(search).toHaveValue("PX");
-  await expect(page.locator("#filter-trang_thai")).toContainText("Chờ duyệt");
+  await expect(page.locator("#filter-trang_thai")).toHaveValue("cho_duyet");
   await expect(page.getByLabel("Từ ngày", { exact: true })).toHaveValue("01/11/2026");
   await page.goForward();
   await expect(search).toHaveValue("");
@@ -147,13 +147,13 @@ test("issue reset clears filters and page while preserving request context, acti
   expect(query.page).toBe("1");
 });
 
-test("completion filters cycle and reset removes dates, page and other query filters without unsupported search", async ({ page }) => {
+test("completion dropdown and reset remove dates, page and other query filters without unsupported search", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/chung-tu-hoan-thanh?mat_hang_id=4&loai_yeu_cau=nhap_kho&page=2");
   const status = page.locator("#filter-trang_thai");
-  for (const label of ["Bản nháp", "Chờ duyệt", "Đã duyệt", "Từ chối", "Tất cả"]) {
-    await status.click();
-    await expect(status).toContainText(label);
+  for (const value of ["da_duyet", "nhap", "tu_choi", "cho_duyet", ""]) {
+    await status.selectOption(value);
+    await expect(status).toHaveValue(value);
   }
   await page.getByLabel("Từ ngày", { exact: true }).fill("01/11/2026");
   await page.getByLabel("Đến ngày", { exact: true }).fill("30/11/2026");
@@ -188,7 +188,7 @@ test("paging while search is waiting applies the keyword on page one instead of 
   expect(state.calls.filter((call) => call.path === "mat_hang").at(-1).params.page).toBe("1");
 });
 
-test("all employee cycle and reset controls fit 375px", async ({ page }) => {
+test("all employee dropdowns and reset controls fit 375px", async ({ page }) => {
   await installApi(page, { role: "nhan_vien" });
   await page.setViewportSize({ width: 375, height: 812 });
   for (const route of ["/nv/yeu-cau", "/nv/ton-kho", "/nv/phieu-xuat", "/nv/chung-tu-hoan-thanh"]) {
@@ -196,9 +196,9 @@ test("all employee cycle and reset controls fit 375px", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Reset tìm kiếm", exact: true })).toBeVisible();
     const expand = page.getByRole("button", { name: "Hiện thêm", exact: true });
     if (await expand.count()) await expand.click();
-    const controls = page.locator(".btn-dropdown-trigger");
+    const controls = page.locator(".filters .admin-select-shell select");
+    await expect(controls.first()).toBeVisible();
     for (const control of await controls.all()) {
-      await control.click();
       const bounds = await control.boundingBox();
       expect(bounds.x).toBeGreaterThanOrEqual(0);
       expect(bounds.x + bounds.width).toBeLessThanOrEqual(375);

@@ -4,7 +4,6 @@ import { Card } from "./Card.jsx";
 import { Button } from "./Button.jsx";
 import { Field } from "./Field.jsx";
 import { DateInput } from "./DateInput.jsx";
-import { CycleButton } from "./CycleButton.jsx";
 import { dateRangeError } from "./filterFields.js";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
@@ -82,25 +81,30 @@ export function Collection({
     }));
     if (cycleFilters && field.as === "select") {
       const fieldId = `filter-${field.name}`;
-      const labelId = `${fieldId}-label`;
+      const SelectIcon = icons[field.name] || Filter;
       return (
         <div key={field.name} className="field">
           <div className="field-label">
-            <label id={labelId} htmlFor={fieldId}>{labelContent}</label>
+            <label htmlFor={fieldId}>{field.label}</label>
           </div>
-          <CycleButton
-            id={fieldId}
-            name={field.name}
-            aria-labelledby={labelId}
-            value={draft[field.name] ?? ""}
-            options={options}
-            disabled={field.disabled}
-            onChange={(event) => {
-              const next = { ...draft, [field.name]: event.target.value };
-              setDraft(next);
-              apply(next);
-            }}
-          />
+          <div className="admin-select-shell">
+            <SelectIcon size={18} aria-hidden="true" />
+            <select
+              id={fieldId}
+              name={field.name}
+              value={draft[field.name] ?? ""}
+              disabled={field.disabled}
+              onChange={(event) => {
+                const next = { ...draft, [field.name]: event.target.value };
+                setDraft(next);
+                apply(next);
+              }}
+            >
+              {options?.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       );
     }
