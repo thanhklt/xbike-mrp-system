@@ -14,6 +14,12 @@ async function confirm(page) {
   await expect(dialog).toHaveCount(0);
 }
 
+function issueRow(page, issueId) {
+  return page.getByRole("tabpanel").getByRole("row").filter({
+    has: page.locator(`a[href^="/nv/phieu-xuat/${issueId}?"]`),
+  });
+}
+
 test("real employee and manager complete the seeded production/export demo without API mocks", async ({ browser }) => {
   const employeeContext = await browser.newContext();
   const otherContext = await browser.newContext();
@@ -35,14 +41,17 @@ test("real employee and manager complete the seeded production/export demo witho
     await expect(employee).toHaveURL(/\/nv\/xuat-nvl\/\d+$/);
     const issueId = employee.url().split("/").pop();
     await employee.goto("/nv/yeu-cau/5");
-    await employee.reload();
-    await employee.getByRole("link", { name: /Mở phiếu PX-/ }).click();
-    await expect(employee).toHaveURL(new RegExp(`/nv/xuat-nvl/${issueId}$`));
+    await detail.getByRole("link", { name: "Xem phiếu xuất", exact: true }).click();
+    await expect(employee).toHaveURL(/\/nv\/phieu-xuat\?yeu_cau_san_xuat_id=5$/);
+    await issueRow(employee, issueId).getByRole("link", { name: "Xem chi tiết", exact: true }).click();
+    await expect(employee).toHaveURL((url) => url.pathname === `/nv/phieu-xuat/${issueId}`);
     await detail.getByRole("button", { name: "Gửi", exact: true }).click();
     await confirm(employee);
     await expect(detail.getByText("Chờ duyệt", { exact: true })).toBeVisible();
-    await other.goto(`/nv/xuat-nvl/${issueId}`);
-    await expect(other.locator("dialog.record-dialog").getByRole("alert")).toBeVisible();
+    await other.goto(`/nv/phieu-xuat/${issueId}`);
+    const accessError = other.locator("dialog.record-dialog").getByRole("alert");
+    await expect(accessError).toBeVisible();
+    await expect(accessError).toContainText("Forbidden");
     await expect(other.getByRole("button", { name: /Gửi|Duyệt/ })).toHaveCount(0);
     await manager.goto(`/kho/phieu-xuat/${issueId}`);
     await manager.getByRole("button", { name: "Duyệt phiếu xuất", exact: true }).click();
@@ -68,7 +77,12 @@ test("real employee and manager complete the seeded production/export demo witho
     await confirm(manager);
     await employee.goto("/nv/yeu-cau/5");
     await expect(detail.getByText("Hoàn thành", { exact: true }).first()).toBeVisible();
-    await expect(detail.getByRole("link", { name: /Mở phiếu PX-/ })).toHaveCount(2);
+    await detail.getByRole("link", { name: "Xem phiếu xuất", exact: true }).click();
+    await expect(employee).toHaveURL(/\/nv\/phieu-xuat\?yeu_cau_san_xuat_id=5$/);
+    await expect(employee.getByRole("tab", { name: "Xuất linh kiện", selected: true })).toBeVisible();
+    await expect(issueRow(employee, issueId).getByText("Đã duyệt", { exact: true })).toBeVisible();
+    await employee.getByRole("tab", { name: "Xuất thành phẩm", exact: true }).click();
+    await expect(issueRow(employee, productIssueId).getByText("Đã duyệt", { exact: true })).toBeVisible();
     expect(failures).toEqual([]);
     await employee.screenshot({ path: "test-results/employee-live-completed.png", fullPage: true });
   } finally {

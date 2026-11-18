@@ -16,6 +16,7 @@ from app.modules.phieu_xuat.schemas import (
     LyDoInput,
     PhieuXuatActionResponse,
     PhieuXuatCreate,
+    PhieuXuatCuaToiListResponse,
     PhieuXuatCuaToiQuery,
     PhieuXuatErrorResponse,
     PhieuXuatListResponse,
@@ -107,7 +108,7 @@ async def preview_issue(
 
 @router.get(
     "/cua_toi",
-    response_model=PhieuXuatListResponse,
+    response_model=PhieuXuatCuaToiListResponse,
     description="Scoped issues for the current employee.",
     dependencies=[Depends(reject_repeated_query), Depends(reject_get_body)],
 )

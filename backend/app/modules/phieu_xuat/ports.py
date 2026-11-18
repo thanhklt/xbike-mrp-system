@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from app.modules.phieu_xuat.schemas import (
     PhieuXuatCreate,
     PhieuXuatCuaToiQuery,
+    PhieuXuatCuaToiRead,
     PhieuXuatQuery,
     PhieuXuatRead,
 )
@@ -49,7 +50,7 @@ class PhieuXuatRepository(Protocol):
     ) -> RecordPage[PhieuXuatRead]: ...
     async def list_my_issues(
         self, params: PhieuXuatCuaToiQuery, employee_id: int
-    ) -> RecordPage[PhieuXuatRead]: ...
+    ) -> RecordPage[PhieuXuatCuaToiRead]: ...
     async def get_issue(self, issue_id: int, *, lock: bool = True) -> PhieuXuatRead | None: ...
     async def assigned_to(self, record: PhieuXuatRead, employee_id: int) -> bool: ...
     async def lock_source(

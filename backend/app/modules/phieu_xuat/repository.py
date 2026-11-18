@@ -12,6 +12,7 @@ from app.modules.phieu_xuat.ports import IssuePart, IssueSource, PhieuXuatSnapsh
 from app.modules.phieu_xuat.schemas import (
     PhieuXuatCreate,
     PhieuXuatCuaToiQuery,
+    PhieuXuatCuaToiRead,
     PhieuXuatQuery,
     PhieuXuatRead,
 )
@@ -50,12 +51,7 @@ class SqlAlchemyPhieuXuatRepository:
         return grouped
 
     @staticmethod
-    def _build(
-        record: PhieuXuat,
-        lines: list[ChiTietPhieuXuat],
-        *,
-        ma_yeu_cau_san_xuat: str | None = None,
-    ) -> PhieuXuatRead:
+    def _build(record: PhieuXuat, lines: list[ChiTietPhieuXuat]) -> PhieuXuatRead:
         return PhieuXuatRead.model_validate(
             {
                 **{
@@ -63,7 +59,6 @@ class SqlAlchemyPhieuXuatRepository:
                     for column in PhieuXuat.__table__.columns
                 },
                 "chi_tiet": lines,
-                "ma_yeu_cau_san_xuat": ma_yeu_cau_san_xuat,
             }
         )
 
@@ -121,7 +116,7 @@ class SqlAlchemyPhieuXuatRepository:
 
     async def list_my_issues(
         self, params: PhieuXuatCuaToiQuery, employee_id: int
-    ) -> RecordPage[PhieuXuatRead]:
+    ) -> RecordPage[PhieuXuatCuaToiRead]:
         query = (
             select(PhieuXuat, YeuCauSanXuat.ma_yeu_cau_san_xuat)
             .join(YeuCauSanXuat, PhieuXuat.yeu_cau_san_xuat_id == YeuCauSanXuat.id)
@@ -155,16 +150,18 @@ class SqlAlchemyPhieuXuatRepository:
         order = column.desc() if sort_value.startswith("-") else column.asc()
         results = (
             await self.session.execute(
-                query.order_by(order, PhieuXuat.id.desc())
-                .offset(offset)
-                .limit(params.page_size)
+                query.order_by(order, PhieuXuat.id.desc()).offset(offset).limit(params.page_size)
             )
         ).all()
-        records = [row[0] for row in results]
-        codes = {row[0].id: row[1] for row in results}
-        lines = await self._lines([record.id for record in records], lock=False)
+        lines = await self._lines([record.id for record, _ in results], lock=False)
         return RecordPage(
-            [self._build(record, lines[record.id], ma_yeu_cau_san_xuat=codes.get(record.id)) for record in records],
+            [
+                PhieuXuatCuaToiRead(
+                    **self._build(record, lines[record.id]).model_dump(),
+                    ma_yeu_cau_san_xuat=source_code,
+                )
+                for record, source_code in results
+            ],
             total,
         )
 

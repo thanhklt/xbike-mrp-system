@@ -87,6 +87,11 @@ Bộ lọc AND: `q` (tìm kiếm mã phiếu), `loai_phieu`, `trang_thai`, `yeu_
 Page mặc định 1, size 20, tối đa 100.
 Transaction snapshot: REPEATABLE READ READ ONLY, không tạo row lock hay ghi dữ liệu.
 
+Response dùng `PhieuXuatCuaToiListResponse`. Mỗi phần tử trong `data` là
+`PhieuXuatCuaToiRead`, có thêm `ma_yeu_cau_san_xuat` lấy từ yêu cầu liên quan.
+Chi tiết phiếu và danh sách QLK dùng `PhieuXuatRead` cho dữ liệu phiếu. Trường
+`ma_yeu_cau_san_xuat` vắng mặt trong hai response đó và trong dữ liệu tính ETag.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -116,14 +121,14 @@ sequenceDiagram
     S->>P: begin_read_snapshot
     P->>DB: Roll back auth read TX, start REPEATABLE READ READ ONLY
     S->>P: list_my_issues(query, actor_id)
-    P->>DB: JOIN YeuCauSanXuat ON YeuCauSanXuat.nhan_vien_duoc_giao_id = actor_id
+    P->>DB: JOIN YeuCauSanXuat by source ID, filter by assignee
     P->>DB: COUNT with AND filters
-    P->>DB: Page headers sorted with ID tie-break
+    P->>DB: Page headers and source codes sorted with ID tie-break
     opt Nonempty page
         P->>DB: Load lines for page issues
     end
-    P-->>S: RecordPage of detached read DTOs
-    S-->>R: data + pagination + request_id
+    P-->>S: RecordPage of PhieuXuatCuaToiRead
+    S-->>R: PhieuXuatCuaToiListResponse with data and meta
     R-->>C: 200, including valid empty page
     Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
 ```

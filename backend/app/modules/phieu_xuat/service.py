@@ -36,6 +36,7 @@ from app.modules.phieu_xuat.schemas import (
     PhieuXuatActionRead,
     PhieuXuatActionResponse,
     PhieuXuatCreate,
+    PhieuXuatCuaToiListResponse,
     PhieuXuatCuaToiQuery,
     PhieuXuatListResponse,
     PhieuXuatPreviewRead,
@@ -103,12 +104,12 @@ class PhieuXuatService:
 
     async def list_my_issues(
         self, query: PhieuXuatCuaToiQuery, actor: dict, request_id: str
-    ) -> PhieuXuatListResponse:
+    ) -> PhieuXuatCuaToiListResponse:
         """Scoped list for the current employee."""
         self._role(actor, "nhan_vien")
         await self.repository.begin_read_snapshot()
         result = await self.repository.list_my_issues(query, int(actor["sub"]))
-        return PhieuXuatListResponse(
+        return PhieuXuatCuaToiListResponse(
             data=result.items,
             meta=ListResponseMeta(
                 request_id=request_id,

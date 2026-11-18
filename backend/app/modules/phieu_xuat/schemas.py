@@ -68,7 +68,6 @@ class PhieuXuatRead(BaseModel):
     ly_do_tu_choi: str | None
     phien_ban: int
     chi_tiet: list[ChiTietPhieuXuatRead]
-    ma_yeu_cau_san_xuat: str | None = None
 
     @field_validator("created_at", "updated_at", "gui_at", "xu_ly_at")
     @classmethod
@@ -111,6 +110,15 @@ class PhieuXuatPreviewResponse(BaseModel):
 
 class PhieuXuatListResponse(BaseModel):
     data: list[PhieuXuatRead]
+    meta: ListResponseMeta
+
+
+class PhieuXuatCuaToiRead(PhieuXuatRead):
+    ma_yeu_cau_san_xuat: str | None
+
+
+class PhieuXuatCuaToiListResponse(BaseModel):
+    data: list[PhieuXuatCuaToiRead]
     meta: ListResponseMeta
 
 

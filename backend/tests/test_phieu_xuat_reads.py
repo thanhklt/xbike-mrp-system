@@ -1,6 +1,8 @@
 """Employee source lookup and preview against real PostgreSQL, without writes."""
 
+import json
 from datetime import timedelta
+from hashlib import sha256
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -105,6 +107,36 @@ async def test_read_permissions_validation_and_changed_source(
     )
     assert result.status_code == 409
     assert await scenario.snapshot() == before
+
+
+async def test_issue_read_contract_and_etag(
+    goods_issue_client, goods_issue_auth, goods_issue_scenario, goods_issue_pending
+):
+    client, auth, scenario = goods_issue_client, goods_issue_auth, goods_issue_scenario
+    created, _, source_id = await goods_issue_pending()
+    issue_id = created.json()["data"]["id"]
+    source_code = await scenario.scalar(
+        'SELECT ma_yeu_cau_san_xuat FROM "YeuCauSanXuat" WHERE id=:id', id=source_id
+    )
+    manager_headers = auth(employee_id=1, roles=["quan_ly"])
+    filters = {"yeu_cau_san_xuat_id": source_id}
+
+    detail = await client.get(f"{BASE}/{issue_id}", headers=manager_headers)
+    assert detail.status_code == 200, detail.text
+    payload = detail.json()["data"]
+    assert "ma_yeu_cau_san_xuat" not in payload
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    assert detail.headers["ETag"] == f'"{sha256(canonical.encode()).hexdigest()}"'
+
+    manager_list = await client.get(BASE, headers=manager_headers, params=filters)
+    assert manager_list.status_code == 200, manager_list.text
+    assert manager_list.json()["data"] == [payload]
+
+    employee_list = await client.get(
+        f"{BASE}/cua_toi", headers=auth(roles=["nhan_vien"]), params=filters
+    )
+    assert employee_list.status_code == 200, employee_list.text
+    assert employee_list.json()["data"] == [payload | {"ma_yeu_cau_san_xuat": source_code}]
 
 
 async def test_employee_list_my_issues_with_isolation(

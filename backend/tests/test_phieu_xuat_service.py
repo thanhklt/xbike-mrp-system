@@ -1,5 +1,7 @@
 """UC-34..40: business guards without HTTP/database dependencies."""
 
+import json
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,7 +14,12 @@ from app.core.errors import (
 )
 from app.modules.phieu_xuat.errors import IssueDependencyInvalid
 from app.modules.phieu_xuat.ports import IssuePart, IssueSource
-from app.modules.phieu_xuat.schemas import PhieuXuatCreate, PhieuXuatCuaToiQuery, PhieuXuatQuery
+from app.modules.phieu_xuat.schemas import (
+    PhieuXuatCreate,
+    PhieuXuatCuaToiQuery,
+    PhieuXuatQuery,
+    PhieuXuatRead,
+)
 from app.modules.phieu_xuat.service import PhieuXuatService
 
 
@@ -38,6 +45,34 @@ def test_uc35_gi_ac12_missing_validator(value):
 def test_uc35_gi_ac12_only_one_canonical_strong_validator(value):
     with pytest.raises(PreconditionFailedException):
         PhieuXuatService._require_if_match(value)
+
+
+def test_issue_etag_matches_legacy_snapshot():
+    payload = {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 5,
+        "tong_tien": None,
+        "trang_thai": "nhap",
+        "created_at": "2026-11-18T00:00:00Z",
+        "updated_at": "2026-11-18T00:00:00Z",
+        "gui_at": None,
+        "nguoi_xu_ly_id": None,
+        "xu_ly_at": None,
+        "ly_do_tu_choi": None,
+        "phien_ban": 1,
+        "chi_tiet": [
+            {"id": 1, "mat_hang_id": 7, "so_luong": 3, "don_gia_thuc": None, "tong_gia": None}
+        ],
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    legacy_etag = f'"{sha256(canonical.encode()).hexdigest()}"'
+
+    _, etag = PhieuXuatService.response(PhieuXuatRead.model_validate(payload), "test")
+
+    assert etag == legacy_etag
 
 
 def test_uc34_gi_ac03_input_only_source_and_kind():
