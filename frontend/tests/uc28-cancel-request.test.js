@@ -83,6 +83,7 @@ test("cancel tables use approved headings columns and empty messages", () => {
     { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell }, { key: "loai_giu", label: "Loại giữ" },
     { key: "so_luong", label: "Số lượng", numeric: true },
   ]);
+  assert.equal(CANCEL_HOLD_COLUMNS[2].render({ don_vi_tinh: "bo" }), "bộ");
   assert.deepEqual(CANCEL_ISSUE_COLUMNS, [
     { key: "ma_phieu_xuat", label: "Mã phiếu" }, { key: "loai_phieu", label: "Loại phiếu" },
     { key: "trang_thai", label: "Trạng thái" }, { key: "xu_ly", label: "Xử lý" },

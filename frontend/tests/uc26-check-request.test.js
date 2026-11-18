@@ -102,6 +102,7 @@ test("shortage table preserves all six report fields and numeric columns", () =>
   ]);
   assert.equal(CHECK_COLUMNS[2].render({ don_vi_tinh: "chiec" }), "chiếc");
   const original = structuredClone(shortage);
+  assert.equal(CHECK_COLUMNS[2].render({ don_vi_tinh: "chiec" }), "chiếc");
   assert.deepEqual(checkLines(shortage), [{ ...line, id: 2 }]);
   assert.deepEqual(shortage, original);
   assert.deepEqual(checkLines({ ...shortage, linh_kien: [], so_luong_can_san_xuat: 0 }), []);

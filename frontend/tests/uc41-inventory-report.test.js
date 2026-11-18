@@ -82,7 +82,7 @@ test("report renders all eight columns with numeric formatting and the real endp
   }
   assert.doesNotMatch(source, /dieu_chinh_trong_ky|Điều chỉnh|chưa có API|<Notice/);
   assert.match(source, /id: row\.mat_hang_id/);
-  assert.match(navigation, /\["\/kho\/thong-ke", "Báo cáo nhập – xuất – tồn"\]/);
+  assert.match(navigation, /\["\/kho\/thong-ke", "Nhập – xuất – tồn"\]/);
 });
 
 // UC-41 A1: Không có mặt hàng thỏa bộ lọc

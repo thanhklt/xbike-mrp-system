@@ -10,9 +10,11 @@ import {
   ROLE_LABELS,
   dateTime,
   employeeName,
+  formatDate,
   formatAuditTime,
   itemName,
   number,
+  unitLabel,
   quantity,
 } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
@@ -52,7 +54,11 @@ function Metric({ label, path, params, href, excludeStatus }) {
       : total
     : undefined;
   return (
-    <Link className="metric" to={href}>
+    <Link
+      className="metric"
+      data-status={query.isSuccess ? params?.trang_thai : undefined}
+      to={href}
+    >
       <span>{label}</span>
       <strong>{isError || isPending || count === undefined ? "—" : number(count)}</strong>
       {isError && <small>Không tải được số liệu</small>}
@@ -561,8 +567,8 @@ function WarehouseDashboard() {
         />
       </div>
       <div className="dashboard-columns">
-        <QuickStock />
-        <RecentAudit />
+        <PendingCompletions />
+        <WaitingComponentRequests />
       </div>
     </>
   );
@@ -675,31 +681,89 @@ function QuickStock({ showLegend = true }) {
     </Card>
   );
 }
-function RecentAudit() {
-  const logs = useResource(API.audit, auditParams({ page: 1, page_size: 5, sort: "-created_at" }));
+function PendingCompletions() {
+  const completions = useResource(API.completions, {
+    page: 1,
+    page_size: 5,
+    trang_thai: "cho_duyet",
+  });
+  const catalog = useResource(API.catalog);
   return (
-    <Card title="Hoạt động gần đây">
-      <QueryState query={logs}>
-        <div className="compact-list">
-          {logs.data?.data.length ? (
-            logs.data.data.map((entry) => (
-              <div className="compact-row" key={entry.id}>
-                <div>
-                  <small>
-                    {dateTime(entry.created_at)} · Nhân viên #{entry.nhan_vien_id}
-                  </small>
-                  <p>
-                    {entry.thao_tac} · {entry.loai_doi_tuong} #{entry.doi_tuong_id}
-                  </p>
-                  {entry.ly_do && <small>{entry.ly_do}</small>}
+    <Card title="Chứng từ hoàn thành chờ xác nhận">
+      <QueryState query={completions}>
+        <QueryState query={catalog}>
+          <div className="compact-list">
+            {completions.data?.data.length ? (
+              completions.data.data.map((entry) => (
+                <div className="compact-row" key={entry.id}>
+                  <div>
+                    <strong>{entry.ma_phieu}</strong>
+                    <small>{entry.ma_yeu_cau_san_xuat}</small>
+                    <small>
+                      {itemName(catalog.data?.data, entry.mat_hang_id)} ·{" "}
+                      {number(entry.so_luong_hoan_thanh)}{" "}
+                      {unitLabel(
+                        catalog.data?.data.find((item) => item.id === entry.mat_hang_id)
+                          ?.don_vi_tinh,
+                      )}
+                    </small>
+                    <small>{dateTime(entry.finish_time)}</small>
+                  </div>
+                  <Link to={`/kho/yeu-cau/${entry.yeu_cau_san_xuat_id}`}>Mở →</Link>
                 </div>
-              </div>
-            ))
-          ) : (
-            <p className="empty-state">Chưa có lịch sử thao tác.</p>
-          )}
-        </div>
+              ))
+            ) : (
+              <p className="empty-state">Không có chứng từ hoàn thành chờ xác nhận.</p>
+            )}
+          </div>
+        </QueryState>
       </QueryState>
+      <div className="actions actions-end">
+        <Link to="/kho/chung-tu-hoan-thanh">Xem danh sách chứng từ →</Link>
+      </div>
+    </Card>
+  );
+}
+
+function WaitingComponentRequests() {
+  const requests = useResource(API.requests, {
+    page: 1,
+    page_size: 5,
+    trang_thai: "cho_bo_sung_linh_kien",
+  });
+  const catalog = useResource(API.catalog);
+  return (
+    <Card title="Yêu cầu chờ bổ sung linh kiện">
+      <QueryState query={requests}>
+        <QueryState query={catalog}>
+          <div className="compact-list">
+            {requests.data?.data.length ? (
+              requests.data.data.map((entry) => (
+                <div className="compact-row" key={entry.id}>
+                  <div>
+                    <strong>{entry.ma_yeu_cau_san_xuat}</strong>
+                    <small>
+                      {itemName(catalog.data?.data, entry.mat_hang_id)} ·{" "}
+                      {number(entry.so_luong_can_san_xuat)}{" "}
+                      {unitLabel(
+                        catalog.data?.data.find((item) => item.id === entry.mat_hang_id)
+                          ?.don_vi_tinh,
+                      )}
+                    </small>
+                    <small>Hạn hoàn thành: {formatDate(entry.han_hoan_thanh)}</small>
+                  </div>
+                  <Link to={`/kho/yeu-cau/${entry.id}`}>Mở →</Link>
+                </div>
+              ))
+            ) : (
+              <p className="empty-state">Không có yêu cầu chờ bổ sung linh kiện.</p>
+            )}
+          </div>
+        </QueryState>
+      </QueryState>
+      <div className="actions actions-end">
+        <Link to="/kho/nhu-cau-bo-sung">Xem nhu cầu bổ sung →</Link>
+      </div>
     </Card>
   );
 }

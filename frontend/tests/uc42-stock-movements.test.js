@@ -60,7 +60,7 @@ test("movement table renders seven columns with source headers and ledger actors
 // UC-42 AC-3: Đúng bốn mã v4 và nhãn nhập kho theo phiếu nhập
 test("movement types use the four approved codes and receipt filter", () => {
   assert.deepEqual(MOVEMENT_TYPES, [
-    { value: "nhap_linh_kien", label: "Nhập kho (phiếu nhập)" },
+    { value: "nhap_linh_kien", label: "Nhập kho" },
     { value: "xuat_linh_kien", label: "Xuất linh kiện" },
     { value: "nhap_san_pham_san_xuat", label: "Nhập thành phẩm sản xuất" },
     { value: "xuat_thanh_pham", label: "Xuất thành phẩm" },
@@ -134,7 +134,7 @@ test("movement page uses the reporting endpoint and the approved navigation labe
     navigationFor("quan_ly")
       .flatMap((group) => group.items)
       .filter(([path]) => path === "/kho/giao-dich"),
-    [["/kho/giao-dich", "Lịch sử biến động kho"]],
+    [["/kho/giao-dich", "Biến động kho"]],
   );
 });
 

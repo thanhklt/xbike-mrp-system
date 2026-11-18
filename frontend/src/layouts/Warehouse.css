@@ -1,0 +1,593 @@
+/* Approved standalone prototype, applied only while the authenticated role is QLK. */
+html[data-warehouse-theme="true"] {
+  color-scheme: dark;
+  background: #14110f;
+  --warehouse-ground: #14110f;
+  --warehouse-surface: #1f1915;
+  --warehouse-raised: #2a211b;
+  --warehouse-input: #18120f;
+  --warehouse-text: #f4eee8;
+  --warehouse-highlight: #ffba82;
+  --warehouse-accent: #bc4907;
+  --warehouse-accent-border: #f07929;
+  --warehouse-selection: #3a2518;
+  --warehouse-positive: #8bddad;
+  --warehouse-negative: #ffb2a6;
+  --warehouse-positive-fill: #194c34;
+  --warehouse-negative-fill: #8b2922;
+  --warehouse-edit-fill: #4b5563;
+  --warehouse-warning-fill: #47331b;
+  --navy: #211912;
+  --primary: #f0dac7;
+  --muted: #c4b5a5;
+  --border: #49382a;
+  --surface: var(--warehouse-surface);
+  --soft: var(--warehouse-raised);
+  --red: var(--warehouse-negative);
+  --radius: 10px;
+}
+
+.warehouse-shell {
+  color: var(--warehouse-text);
+  background: var(--warehouse-ground);
+  min-height: 100dvh;
+}
+
+.warehouse-shell .topbar {
+  background: var(--navy);
+  border-bottom: 1px solid var(--border);
+  min-height: 80px;
+}
+
+.warehouse-shell .user-menu summary {
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.warehouse-shell .user-menu summary strong {
+  font-weight: 600;
+}
+
+.warehouse-shell .user-menu summary small {
+  color: var(--muted);
+}
+
+.warehouse-shell .avatar {
+  background: var(--warehouse-text);
+  color: var(--warehouse-ground);
+  width: 40px;
+  height: 40px;
+}
+
+.warehouse-shell .user-dropdown {
+  background: var(--warehouse-surface);
+  color: var(--warehouse-text);
+  border-color: var(--border);
+  border-radius: var(--radius);
+}
+
+.warehouse-shell .user-dropdown :is(a, button) {
+  color: var(--warehouse-text);
+}
+
+.warehouse-shell .user-dropdown :is(a, button):hover {
+  background: var(--soft);
+}
+
+.warehouse-shell .page-body {
+  padding: 28px;
+  gap: 24px;
+}
+
+.warehouse-shell .page-heading {
+  gap: 20px;
+  align-items: start;
+}
+
+.warehouse-shell .page-heading h1 {
+  font-size: 26px;
+  color: var(--warehouse-text);
+}
+
+.warehouse-shell .page-heading p {
+  display: none;
+}
+
+.warehouse-shell :is(.card, .metrics) {
+  background: var(--warehouse-surface);
+  border-color: var(--border);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.warehouse-shell .card-header {
+  padding: 18px 22px;
+  min-height: 64px;
+}
+
+.warehouse-shell .card-header h2 {
+  font-size: 18px;
+}
+
+.warehouse-shell .card-body {
+  padding: 22px;
+}
+
+.warehouse-shell .filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  align-items: end;
+  gap: 16px;
+  padding-bottom: 22px;
+}
+
+.warehouse-shell .filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.warehouse-shell[data-warehouse-page="thong-ke"] .filters {
+  display: flex;
+}
+
+.warehouse-shell[data-warehouse-page="thong-ke"] .filters .field {
+  flex-basis: 120px;
+}
+
+.warehouse-shell[data-warehouse-page="thong-ke"] .filter-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.warehouse-shell .field-label label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.warehouse-shell .field :is(input, select, textarea),
+.warehouse-shell .inline-select,
+.warehouse-shell .line-editor :is(input, select) {
+  color: var(--warehouse-text);
+  background: var(--warehouse-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 42px;
+}
+
+.warehouse-shell input::placeholder,
+.warehouse-shell textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.warehouse-shell .field :is(input, select, textarea):disabled {
+  background: var(--soft);
+  color: var(--muted);
+}
+
+.warehouse-shell .btn {
+  border-radius: 8px;
+  min-height: 42px;
+}
+
+.warehouse-shell .btn-primary {
+  color: #fff;
+  background: var(--warehouse-accent);
+  border-color: var(--warehouse-accent-border);
+}
+
+.warehouse-shell .btn-primary:hover:not(:disabled) {
+  background: #d3560b;
+  color: #fff;
+}
+
+.warehouse-shell[data-warehouse-page="nha-cung-cap"]
+  :is(.page-heading, .supplier-form-actions)
+  .btn-primary,
+.warehouse-shell[data-warehouse-page="yeu-cau"] .request-create-actions .btn-primary {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.warehouse-shell .request-create-actions .btn-primary {
+  min-width: 80px;
+}
+
+.warehouse-shell .btn-secondary {
+  color: var(--warehouse-text);
+  background: var(--warehouse-raised);
+  border-color: var(--border);
+}
+
+.warehouse-shell .btn-secondary:hover:not(:disabled) {
+  background: #3a2c21;
+}
+
+.warehouse-shell .btn-danger {
+  background: var(--warehouse-negative-fill);
+  border-color: var(--warehouse-negative);
+}
+
+.warehouse-shell a:hover,
+.warehouse-shell .text-button:hover {
+  color: var(--warehouse-highlight);
+}
+
+.warehouse-shell :focus-visible {
+  outline-color: var(--warehouse-highlight);
+}
+
+.warehouse-shell .table-scroll {
+  scrollbar-color: var(--border) transparent;
+}
+
+.warehouse-shell .card-body > .table-scroll {
+  margin-inline: -22px;
+}
+
+.warehouse-shell .card-body > .table-scroll:first-child {
+  margin-top: -22px;
+}
+
+.warehouse-shell .card-body > .table-scroll:last-child {
+  margin-bottom: -22px;
+}
+
+.warehouse-shell th {
+  background: var(--warehouse-raised);
+  color: var(--muted);
+  border-block: 1px solid var(--border);
+  padding: 14px 18px;
+}
+
+.warehouse-shell td {
+  padding: 17px 18px;
+  border-color: var(--border);
+}
+
+.warehouse-shell tbody tr:hover {
+  background: var(--warehouse-raised);
+}
+
+.warehouse-shell .badge {
+  border: 1px solid transparent;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+
+.warehouse-shell .badge-green {
+  color: var(--warehouse-positive);
+  background: var(--warehouse-positive-fill);
+  border-color: #326b4e;
+}
+
+.warehouse-shell .badge-red {
+  color: var(--warehouse-negative);
+  background: #4a211e;
+  border-color: #804138;
+}
+
+.warehouse-shell .badge-amber {
+  color: #ffcf87;
+  background: var(--warehouse-warning-fill);
+  border-color: #73562a;
+}
+
+.warehouse-shell .badge-blue {
+  color: var(--warehouse-text);
+  background: var(--warehouse-raised);
+  border-color: var(--border);
+}
+
+.warehouse-shell .badge-gray {
+  color: #e5e5e5;
+  background: #3a3a3a;
+  border-color: #606060;
+}
+
+.warehouse-shell .badge-sky {
+  color: #9bc7ff;
+  background: #173b63;
+  border-color: #38618d;
+}
+
+.warehouse-shell .badge-teal {
+  color: #7ee1d2;
+  background: #164842;
+  border-color: #2e7268;
+}
+
+.warehouse-shell .notice-info {
+  background: var(--warehouse-raised);
+  color: var(--warehouse-text);
+}
+
+.warehouse-shell .notice-warning {
+  color: #ffcf87;
+  background: var(--warehouse-warning-fill);
+  border-color: #73562a;
+}
+
+.warehouse-shell .notice-error {
+  color: var(--warehouse-negative);
+  background: #4a211e;
+  border-color: #804138;
+}
+
+.warehouse-shell .metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+
+.warehouse-shell .metric {
+  --metric-accent: var(--muted);
+  position: relative;
+  padding: 24px;
+}
+
+.warehouse-shell .metric[data-status="da_gui"] {
+  --metric-accent: #8bbcff;
+}
+
+.warehouse-shell .metric[data-status="dang_thuc_hien"] {
+  --metric-accent: var(--warehouse-positive);
+}
+
+.warehouse-shell .metric[data-status="cho_bo_sung_linh_kien"] {
+  --metric-accent: #f7c472;
+}
+
+.warehouse-shell .metric::before {
+  content: "";
+  position: absolute;
+  inset: 24px auto 24px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--metric-accent);
+}
+
+.warehouse-shell .metric:hover {
+  background: var(--soft);
+  color: var(--warehouse-text);
+}
+
+.warehouse-shell .metric strong {
+  color: var(--metric-accent);
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.warehouse-shell .metric:focus-visible {
+  outline: 2px solid var(--metric-accent);
+  outline-offset: -3px;
+}
+
+.warehouse-shell .dashboard-columns {
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.warehouse-shell .dashboard-columns .filters {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.warehouse-shell[data-warehouse-page="phieu-nhap"] td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.warehouse-shell[data-warehouse-page="phieu-nhap"] .table-scroll table {
+  min-width: 900px;
+}
+
+.warehouse-shell .compact-row {
+  border-color: var(--border);
+  gap: 16px;
+  padding-block: 16px;
+}
+
+.warehouse-shell .pagination {
+  padding-top: 22px;
+}
+
+.warehouse-shell .pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.warehouse-shell .pagination-size select {
+  width: auto;
+}
+
+.warehouse-shell[data-warehouse-page="mat-hang"] .table-scroll table {
+  min-width: 1120px;
+}
+
+.warehouse-shell .warehouse-item-edit {
+  background: var(--warehouse-edit-fill);
+  border-color: #6b7280;
+  color: #fff;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: inline-flex;
+}
+
+.warehouse-shell .warehouse-stock-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.warehouse-shell .warehouse-stock-summary > div {
+  background: var(--warehouse-raised);
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.warehouse-shell .warehouse-stock-summary strong {
+  display: block;
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+/* Native record dialogs inherit the shell; feedback dialogs are siblings of the layout. */
+html[data-warehouse-theme="true"] :is(.record-dialog, .confirmation) {
+  color-scheme: dark;
+  color: var(--warehouse-text);
+  background: var(--warehouse-surface);
+  border-color: var(--border);
+  border-radius: 12px;
+}
+
+html[data-warehouse-theme="true"] dialog::backdrop {
+  background: rgb(0 0 0 / 70%);
+}
+
+html[data-warehouse-theme="true"]
+  dialog
+  :is(.dialog-header, .dialog-body, .confirmation-impact, .confirm-impact) {
+  background: transparent;
+  border-color: var(--border);
+}
+
+html[data-warehouse-theme="true"] .confirmation .btn-secondary {
+  color: var(--warehouse-text);
+  background: var(--warehouse-raised);
+  border-color: var(--border);
+}
+
+html[data-warehouse-theme="true"] .confirmation .btn-primary {
+  color: #fff;
+  background: var(--warehouse-accent);
+  border-color: var(--warehouse-accent-border);
+}
+
+html[data-warehouse-theme="true"] .confirmation .btn-danger {
+  color: #fff;
+  background: var(--warehouse-negative-fill);
+}
+
+html[data-warehouse-theme="true"] .confirmation :is(input, textarea, select) {
+  color: var(--warehouse-text);
+  background: var(--warehouse-input);
+  border-color: var(--border);
+}
+
+html[data-warehouse-theme="true"] .confirmation th {
+  color: var(--muted);
+  background: var(--warehouse-raised);
+}
+
+html[data-warehouse-theme="true"] .confirmation .dialog-footer {
+  background: var(--warehouse-raised);
+  border-color: var(--border);
+}
+
+html[data-warehouse-theme="true"] .confirmation .table-scroll table {
+  min-width: 0;
+}
+
+html[data-warehouse-theme="true"] .confirmation tbody tr:hover {
+  background: var(--warehouse-raised);
+}
+
+html[data-warehouse-theme="true"] .confirmation .notice-info {
+  color: var(--warehouse-text);
+  background: var(--warehouse-raised);
+}
+
+html[data-warehouse-theme="true"] .confirmation .notice-warning {
+  color: #ffcf87;
+  background: var(--warehouse-warning-fill);
+  border-color: #73562a;
+}
+
+html[data-warehouse-theme="true"] .confirmation .notice-error {
+  color: var(--warehouse-negative);
+  background: #4a211e;
+  border-color: #804138;
+}
+
+html[data-warehouse-theme="true"] .audit-json {
+  background: var(--warehouse-input);
+  color: var(--warehouse-text);
+  border-color: var(--border);
+}
+
+html[data-warehouse-theme="true"] .toast {
+  color: var(--warehouse-positive);
+  background: var(--warehouse-positive-fill);
+  border-color: var(--border);
+}
+
+@media (min-width: 1600px) {
+  .warehouse-shell .page-body {
+    padding: 32px 40px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .warehouse-shell .dashboard-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .warehouse-shell .page-body {
+    padding: 20px;
+  }
+
+  .warehouse-shell .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .warehouse-shell .metric + .metric {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .warehouse-shell .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .warehouse-shell[data-warehouse-page="thong-ke"] .filters .field {
+    flex-basis: 100%;
+  }
+  .warehouse-shell .user-menu summary > span:not(.avatar) {
+    display: block;
+    max-width: 38vw;
+  }
+
+  .warehouse-shell .user-menu summary strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .warehouse-shell .page-body {
+    padding: 16px;
+  }
+
+  .warehouse-shell .page-heading h1 {
+    font-size: 24px;
+  }
+
+  .warehouse-shell .filters,
+  .warehouse-shell .warehouse-stock-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .warehouse-shell .pagination .actions {
+    gap: 8px;
+  }
+}

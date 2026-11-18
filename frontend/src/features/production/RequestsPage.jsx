@@ -96,9 +96,11 @@ export function RequestsPage() {
       <Collection
         collection={collection}
         filters={requestListFilters(manager)}
-        searchPlaceholder="Tìm mã yêu cầu hoặc tên thành phẩm…"
+        searchPlaceholder={manager ? undefined : "Tìm mã yêu cầu hoặc tên thành phẩm…"}
         expandableFilters={!manager}
         cycleFilters={!manager}
+        allowReset={manager}
+        pageSizes={manager ? [20, 50, 100] : undefined}
         columns={[
           {
             key: "ma_yeu_cau_san_xuat",
@@ -408,7 +410,13 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
                 max="2147483647"
                 {...field("so_luong")}
               />
-              <Field label="Hạn hoàn thành" type="date" required {...field("han_hoan_thanh")} />
+              <Field
+                label="Hạn hoàn thành"
+                type="date"
+                name="han_hoan_thanh"
+                required
+                {...field("han_hoan_thanh")}
+              />
             </div>
             <EmployeeSelect
               employees={employees.data}
@@ -424,7 +432,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
                 {submitButton}
               </div>
             ) : (
-              submitButton
+              <div className="actions actions-end request-create-actions">{submitButton}</div>
             )}
           </form>
         </QueryState>
@@ -447,6 +455,14 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
           <Button variant="secondary" disabled={cancelPending || cancelMutation.isPending} onClick={() => cancel()}>
             Hủy yêu cầu…
           </Button>
+          {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (
+            <Link
+              className="btn btn-secondary"
+              to="/kho/phieu-xuat"
+            >
+              Xem phiếu xuất kho →
+            </Link>
+          )}
         </div>
       )}
     </div>

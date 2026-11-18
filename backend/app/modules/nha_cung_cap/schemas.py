@@ -50,8 +50,12 @@ class NhaCungCapListQuery(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
     q: str | None = None
-    tinh: str | None = None
-    phuong: str | None = None
+    tinh: str | None = Field(
+        default=None, description="Tìm một phần tỉnh/thành, không phân biệt hoa/thường và dấu."
+    )
+    phuong: str | None = Field(
+        default=None, description="Tìm một phần phường/xã, không phân biệt hoa/thường và dấu."
+    )
     sort: SupplierSort = "id"
 
     @field_validator("q", "tinh", "phuong")

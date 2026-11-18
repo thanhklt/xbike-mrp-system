@@ -1,32 +1,32 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   ArrowLeftRight,
+  BadgeCheck,
   BarChart3,
   Boxes,
   ClipboardCheck,
   ClipboardList,
   Factory,
   FileCheck,
+  GitBranch,
   History,
   Home,
   Layers,
   LayoutDashboard,
-  LogOut,
   Network,
   Package,
   PackageMinus,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PackagePlus,
   SlidersHorizontal,
   Ticket,
   Truck,
-  UserRound,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
 import adminArtworkSource from "../assets/images/admin/sidebar-artwork.webp";
 import employeeArtworkSource from "../assets/images/brand/employee-bicycle.png";
+import artworkSource from "../assets/images/login/slide-02-touring.webp";
 import { API } from "../lib/api/endpoints.js";
 import { useResource } from "../lib/api/useResources.js";
 import { canAccessPath } from "../features/auth/permissions.js";
@@ -52,26 +52,40 @@ const sectionIcons = {
   "dieu-chinh": SlidersHorizontal,
   ticket: Ticket,
   "thong-ke": BarChart3,
-  "ho-so": UserRound,
-  nv: Home,
 };
 
-function SidebarLink({ path, label, onNavigate, darkTheme, badge }) {
+const warehouseIcons = {
+  kho: LayoutDashboard,
+  "mat-hang": Boxes,
+  "nha-cung-cap": Truck,
+  bom: GitBranch,
+  "phieu-nhap": PackagePlus,
+  "nhu-cau-bo-sung": ClipboardList,
+  "yeu-cau": ClipboardList,
+  "phieu-xuat": PackageMinus,
+  "chung-tu-hoan-thanh": BadgeCheck,
+  "thong-ke": TrendingUp,
+  "giao-dich": History,
+  "lich-su": History,
+};
+
+const employeeIcons = {
+  "/nv": Home,
+  "/nv/yeu-cau": ClipboardList,
+  "/nv/lenh-sx": Factory,
+  "/nv/hoan-thanh": FileCheck,
+  "/nv/chung-tu-hoan-thanh": FileCheck,
+  "/nv/phieu-xuat": Package,
+  "/nv/ton-kho": Boxes,
+};
+
+function SidebarLink({ path, label, onNavigate, adminTheme, warehouseTheme, employeeTheme, badge }) {
   const segment = path.split("/").at(-1);
   const Icon =
-    path === "/nv" || (segment === "admin" && darkTheme)
-      ? Home
-      : path === "/nv/yeu-cau"
-        ? ClipboardList
-        : path === "/nv/lenh-sx"
-          ? Factory
-          : path === "/nv/hoan-thanh" || path === "/nv/chung-tu-hoan-thanh"
-            ? FileCheck
-            : path === "/nv/phieu-xuat"
-              ? Package
-              : path === "/nv/ton-kho"
-                ? Boxes
-                : sectionIcons[segment] || LayoutDashboard;
+    (warehouseTheme && warehouseIcons[segment]) ||
+    employeeIcons[path] ||
+    (segment === "admin" && adminTheme ? Home : sectionIcons[segment]) ||
+    LayoutDashboard;
   return (
     <NavLink
       to={path}
@@ -81,7 +95,7 @@ function SidebarLink({ path, label, onNavigate, darkTheme, badge }) {
       onClick={onNavigate}
       className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ""}`}
     >
-      <Icon size={darkTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
+      <Icon size={adminTheme || employeeTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
       <span className={styles.label}>{label}</span>
       {badge !== undefined && <span className={styles.badge} aria-hidden="true">{badge}</span>}
     </NavLink>
@@ -92,8 +106,8 @@ export function Sidebar({
   groups,
   mobileOpen,
   onNavigate,
-  onSignOut,
   adminTheme = false,
+  warehouseTheme = false,
   employeeTheme = false,
 }) {
   const { pathname } = useLocation();
@@ -126,13 +140,11 @@ export function Sidebar({
   const activeAssignedCount = hasValidBadgeCounts
     ? Math.max(0, totalAssigned - completedAssigned)
     : undefined;
-  const [collapsed, setCollapsed] = useState(false);
-  const toggleLabel = collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng";
   return (
     <aside
       id="main-navigation"
       aria-label="Thanh điều hướng"
-      className={`${styles.root} ${darkTheme ? styles.admin : ""} ${employeeTheme ? styles.employee : ""} ${collapsed && !darkTheme ? styles.collapsed : ""} ${mobileOpen ? styles.open : ""}`}
+      className={`${styles.root} ${darkTheme ? styles.admin : ""} ${employeeTheme ? styles.employee : ""} ${mobileOpen ? styles.open : ""}`}
     >
       {darkTheme ? (
         <div className={styles.adminBrand}>
@@ -146,26 +158,12 @@ export function Sidebar({
               </div>
             </div>
           ) : (
-            <img src={logo} alt="XBIKE MRP System" className={styles.adminLogo} />
+            <img src={logo} alt="XBIKE MRP System" className={styles.logo} />
           )}
         </div>
       ) : (
         <div className={styles.toolbar}>
-          <button
-            type="button"
-            className={styles.toggle}
-            aria-label={toggleLabel}
-            title={toggleLabel}
-            aria-expanded={!collapsed}
-            aria-controls="sidebar-navigation-items"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? (
-              <PanelLeftOpen size={19} strokeWidth={1.75} aria-hidden="true" />
-            ) : (
-              <PanelLeftClose size={19} strokeWidth={1.75} aria-hidden="true" />
-            )}
-          </button>
+          <img src={logo} alt="XBIKE MRP System" className={styles.logo} />
         </div>
       )}
       <nav
@@ -182,30 +180,17 @@ export function Sidebar({
                 path={path}
                 label={label}
                 onNavigate={onNavigate}
-                darkTheme={darkTheme}
+                adminTheme={adminTheme}
+                warehouseTheme={warehouseTheme}
+                employeeTheme={employeeTheme}
                 badge={employeeTheme && path === "/nv/yeu-cau" ? activeAssignedCount : undefined}
               />
             ))}
           </div>
         ))}
         {!darkTheme && (
-          <div className={styles.account}>
-            <SidebarLink
-              path="/ho-so"
-              label="Hồ sơ"
-              onNavigate={onNavigate}
-              darkTheme={darkTheme}
-            />
-            <button
-              type="button"
-              className={styles.link}
-              aria-label="Đăng xuất"
-              title="Đăng xuất"
-              onClick={onSignOut}
-            >
-              <LogOut size={darkTheme ? 22 : 19} strokeWidth={1.75} aria-hidden="true" />
-              <span className={styles.label}>Đăng xuất</span>
-            </button>
+          <div className={styles.artwork} aria-hidden="true">
+            <img src={artworkSource} alt="" />
           </div>
         )}
       </nav>

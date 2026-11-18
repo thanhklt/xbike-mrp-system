@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-r
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useCollection, useDetail, useResource } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { dateTime, itemDisplayName, itemName, money, number, unitLabel } from "../../lib/format.js";
+import { dateTime, itemDisplayName, money, number, unitLabel } from "../../lib/format.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -12,53 +12,161 @@ import { Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
 import { ApprovalActions } from "../../components/ApprovalActions.jsx";
 import { SavedLines, statusFilter, dateFilters } from "../../components/ResourceFields.jsx";
+import { dateRangeError } from "../../components/filterFields.js";
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { canCreateIssue, issueTypeLabel } from "./issueForm.js";
+
+const managerBase = "/kho/phieu-xuat";
+const issueLabel = (value) => (value === "xuat_thanh_pham" ? "Thành phẩm" : "Linh kiện");
 
 export function MaterialIssuingPage({ issueType }) {
   const { id } = useParams();
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
+
+  if (manager && id === "moi") return <Navigate to={managerBase} replace />;
+  if (!manager && !id) return <Navigate to="/nv/yeu-cau" replace />;
+  return manager ? <ManagerIssuePage id={id} /> : <EmployeeIssuePage id={id} issueType={issueType} />;
+}
+
+// UC-34–40: QLK reads/reviews source-generated issue documents, without editing their lines.
+function ManagerIssuePage({ id }) {
+  const collection = useCollection(API.issues, { sort: "-created_at" });
+  const detail = useDetail(API.issues, id);
+  const catalog = useCatalog();
+  return (
+    <>
+      <PageHeader
+        title="Phiếu xuất kho"
+        subtitle="Theo dõi, duyệt và từ chối phiếu xuất linh kiện, thành phẩm. Chỉ duyệt mới trừ tồn; nhân viên được giao lập phiếu từ yêu cầu."
+      />
+      <Collection
+        collection={collection}
+        allowReset
+        pageSizes={[20, 50, 100]}
+        validate={dateRangeError}
+        filters={[
+          statusFilter(["nhap", "cho_duyet", "da_duyet", "tu_choi"]),
+          {
+            name: "loai_phieu",
+            label: "Loại phiếu",
+            as: "select",
+            options: [
+              { value: "", label: "Tất cả" },
+              { value: "xuat_linh_kien", label: "Xuất linh kiện" },
+              { value: "xuat_thanh_pham", label: "Xuất thành phẩm" },
+            ],
+          },
+          ...dateFilters,
+        ]}
+        columns={[
+          {
+            key: "ma_phieu_xuat",
+            label: "Mã phiếu",
+            render: (row) => <Link to={`${managerBase}/${row.id}`}>{row.ma_phieu_xuat}</Link>,
+          },
+          { key: "loai_phieu", label: "Loại", render: (row) => issueLabel(row.loai_phieu) },
+          { key: "created_at", label: "Tạo lúc", render: (row) => dateTime(row.created_at) },
+          {
+            key: "trang_thai",
+            label: "Trạng thái",
+            render: (row) => <Badge status={row.trang_thai} />,
+          },
+          {
+            key: "action",
+            label: "Thao tác",
+            render: (row) => <Link to={`${managerBase}/${row.id}`}>Mở →</Link>,
+          },
+        ]}
+      />
+      <RecordPanel id={id} query={detail} base={managerBase} title="Chi tiết phiếu xuất">
+        {(snapshot) => (
+          <QueryState query={catalog}>
+            <ManagerIssueDetail snapshot={snapshot} items={catalog.data?.data || []} />
+          </QueryState>
+        )}
+      </RecordPanel>
+    </>
+  );
+}
+
+function ManagerIssueDetail({ snapshot, items }) {
+  const record = snapshot.data;
+  const creator = useDetail(API.employees, record.nhan_vien_id);
+  const source = useDetail(API.requests, record.yeu_cau_san_xuat_id);
+  return (
+    <div className="stack">
+      <div className="actions">
+        <h3>{record.ma_phieu_xuat}</h3>
+        <Badge status={record.trang_thai} />
+      </div>
+      <InfoGrid
+        entries={[
+          [
+            "Người lập",
+            <QueryState query={creator}>{creator.data?.data.ho_ten || "Chưa có họ tên"}</QueryState>,
+          ],
+          ["Tạo lúc", dateTime(record.created_at)],
+          ["Loại phiếu", issueLabel(record.loai_phieu)],
+          [
+            "Nguồn",
+            <QueryState query={source}>{source.data?.data.ma_yeu_cau_san_xuat}</QueryState>,
+          ],
+          ["Tổng tiền đã chốt", money(record.tong_tien)],
+          ["Lý do từ chối", record.ly_do_tu_choi],
+        ]}
+      />
+      <SavedLines lines={record.chi_tiet} items={items} prices />
+      <ApprovalActions
+        kind="issue"
+        path={API.issues}
+        base={managerBase}
+        snapshot={snapshot}
+        items={items}
+        allowedActions={{
+          approve: record.trang_thai === "cho_duyet",
+          reject: record.trang_thai === "cho_duyet",
+        }}
+      />
+    </div>
+  );
+}
+
+function EmployeeIssuePage({ id, issueType }) {
   const [search] = useSearchParams();
   const detail = useDetail(API.issues, id);
   const catalog = useCatalog();
-  const base = manager ? "/kho/phieu-xuat" : issueType === "xuat_thanh_pham" ? "/nv/xuat-tp" : "/nv/xuat-nvl";
+  const base = issueType === "xuat_thanh_pham" ? "/nv/xuat-tp" : "/nv/xuat-nvl";
   const requestId = detail.data?.data.yeu_cau_san_xuat_id || search.get("yeu_cau_san_xuat_id");
-  const back = manager ? base : requestId ? `/nv/yeu-cau/${requestId}` : "/nv/yeu-cau";
-  if (!manager && !id) return <Navigate to="/nv/yeu-cau" replace />;
-  return <>
-    <PageHeader title={manager ? "Phiếu xuất kho" : issueTypeLabel(issueType)}
-      subtitle={manager ? "Duyệt hoặc từ chối phiếu do nhân viên được giao lập." : "Nội dung phiếu do hệ thống chốt theo yêu cầu sản xuất."} />
-    {manager && <IssueList base={base} items={catalog.data?.data || []} />}
-    <RecordPanel id={id} query={detail} base={back} title={id === "moi" ? "Lập phiếu xuất" : "Chi tiết phiếu xuất"}>
-      {(snapshot) => <QueryState query={catalog}>
-        <IssueDetail snapshot={snapshot} items={catalog.data?.data || []} base={base} issueType={issueType} />
-      </QueryState>}
-    </RecordPanel>
-  </>;
+  const back = requestId ? `/nv/yeu-cau/${requestId}` : "/nv/yeu-cau";
+  return (
+    <>
+      <PageHeader
+        title={issueTypeLabel(issueType)}
+        subtitle="Nội dung phiếu do hệ thống chốt theo yêu cầu sản xuất."
+      />
+      <RecordPanel
+        id={id}
+        query={detail}
+        base={back}
+        title={id === "moi" ? "Lập phiếu xuất" : "Chi tiết phiếu xuất"}
+      >
+        {(snapshot) => (
+          <QueryState query={catalog}>
+            <EmployeeIssueDetail
+              snapshot={snapshot}
+              items={catalog.data?.data || []}
+              base={base}
+              issueType={issueType}
+            />
+          </QueryState>
+        )}
+      </RecordPanel>
+    </>
+  );
 }
 
-function IssueList({ base, items }) {
-  const collection = useCollection(API.issues, { sort: "-created_at" });
-  return <Collection collection={collection} title="Danh sách phiếu xuất" filters={[
-    statusFilter(["nhap", "cho_duyet", "da_duyet", "tu_choi"]),
-    { name: "loai_phieu", label: "Loại phiếu", as: "select", options: [
-      { value: "", label: "Tất cả" },
-      { value: "xuat_linh_kien", label: issueTypeLabel("xuat_linh_kien") },
-      { value: "xuat_thanh_pham", label: issueTypeLabel("xuat_thanh_pham") },
-    ] }, ...dateFilters,
-  ]} columns={[
-    { key: "ma_phieu_xuat", label: "Mã phiếu", render: (row) => <Link to={`${base}/${row.id}`}>{row.ma_phieu_xuat}</Link> },
-    { key: "loai_phieu", label: "Loại", render: (row) => issueTypeLabel(row.loai_phieu) },
-    { key: "yeu_cau_san_xuat_id", label: "Yêu cầu", render: (row) => <Link to={`/kho/yeu-cau/${row.yeu_cau_san_xuat_id}`}>YCSX #{row.yeu_cau_san_xuat_id}</Link> },
-    { key: "chi_tiet", label: "Mặt hàng", render: (row) => row.chi_tiet.map((line) => itemName(items, line.mat_hang_id)).join(", ") },
-    { key: "created_at", label: "Ngày lập", render: (row) => dateTime(row.created_at) },
-    { key: "trang_thai", label: "Trạng thái", render: (row) => <Badge status={row.trang_thai} /> },
-    { key: "action", label: "Thao tác", render: (row) => <Link to={`${base}/${row.id}`}>Mở →</Link> },
-  ]} />;
-}
-
-function IssueDetail({ snapshot, items, base, issueType }) {
+function EmployeeIssueDetail({ snapshot, items, base, issueType }) {
   const record = snapshot?.data;
   const { user } = useAuth();
   const employee = user.ma_vai_tro === "nhan_vien";

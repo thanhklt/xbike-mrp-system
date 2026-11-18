@@ -8,6 +8,11 @@ import { CycleButton } from "./CycleButton.jsx";
 import { dateRangeError } from "./filterFields.js";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
+
+// Bộ lọc không mang theo phân trang: giữ số dòng/trang người dùng đã chọn.
+function filterParams({ page: _page, page_size: _pageSize, ...filters }) {
+  return filters;
+}
 export function Collection({
   collection,
   columns,
@@ -20,8 +25,12 @@ export function Collection({
   filterIcon = false,
   cycleFilters = false,
   syncDraftWithParams = false,
+  allowReset = false,
+  pageSizes,
+  optionLabels = {},
 }) {
-  const [draft, setDraft] = useState(collection.params);
+  const [draft, setDraft] = useState(() => filterParams(collection.params));
+  const [initial] = useState(() => filterParams(collection.params));
   const [filterError, setFilterError] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [resetCount, setResetCount] = useState(0);
@@ -31,7 +40,7 @@ export function Collection({
   useEffect(() => {
     if (syncDraftWithParams || cycleFilters) {
       clearTimeout(searchTimer.current);
-      setDraft(collection.params);
+      setDraft(filterParams(collection.params));
       setFilterError(null);
     }
   }, [collection.params, syncDraftWithParams, cycleFilters]);
@@ -47,7 +56,7 @@ export function Collection({
     clearTimeout(searchTimer.current);
     const next = search ? { q: "" } : {};
     for (const field of filters) next[field.name] = field.options?.[0]?.value ?? "";
-    setDraft({ ...collection.params, ...next, page: 1 });
+    setDraft({ ...filterParams(collection.params), ...next });
     setFilterError(null);
     setResetCount((count) => count + 1);
     collection.reset(next);
@@ -55,6 +64,10 @@ export function Collection({
   function renderFilter(field) {
     const Icon = expandableFilters && icons[field.name];
     const labelContent = Icon ? <><Icon size={19} aria-hidden="true" />{field.label}</> : field.label;
+    const options = field.options?.map((option) => ({
+      ...option,
+      label: optionLabels[field.name]?.[option.value] ?? option.label,
+    }));
     if (cycleFilters && field.as === "select") {
       const fieldId = `filter-${field.name}`;
       const labelId = `${fieldId}-label`;
@@ -68,7 +81,7 @@ export function Collection({
             name={field.name}
             aria-labelledby={labelId}
             value={draft[field.name] ?? ""}
-            options={field.options}
+            options={options}
             disabled={field.disabled}
             onChange={(event) => {
               const next = { ...draft, [field.name]: event.target.value };
@@ -83,6 +96,7 @@ export function Collection({
       <Field
         key={field.type === "date" ? `${field.name}-${resetCount}` : field.name}
         {...field}
+        options={options}
         {...(field.type === "date" ? { as: DateInput, type: undefined } : {})}
         label={labelContent}
         value={draft[field.name] ?? ""}
@@ -123,9 +137,26 @@ export function Collection({
       <RotateCcw size={20} aria-hidden="true" />Reset tìm kiếm
     </Button>
   ) : (
-    <Button type="submit" variant={expandableFilters ? "primary" : "secondary"}>
-      {(expandableFilters || filterIcon) && <Filter size={20} aria-hidden="true" />}Lọc
-    </Button>
+    <div className="filter-actions">
+      <Button type="submit" variant={expandableFilters ? "primary" : "secondary"}>
+        {(expandableFilters || filterIcon) && <Filter size={20} aria-hidden="true" />}Lọc
+      </Button>
+      {allowReset && (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            const cleared = Object.fromEntries(
+              Object.keys(draft).map((key) => [key, initial[key] ?? ""]),
+            );
+            setDraft(cleared);
+            setFilterError(null);
+            collection.filter(cleared);
+          }}
+        >
+          Xóa lọc
+        </Button>
+      )}
+    </div>
   );
   return (
     <Card title={title} className={expandableFilters ? "employee-request-collection" : ""}>
@@ -169,6 +200,8 @@ export function Collection({
             if (cycleFilters && (draft.q || "") !== (collection.params.q || "")) apply(draft);
             else collection.setPage(page);
           }}
+          pageSizes={pageSizes}
+          onPageSize={collection.setPageSize}
         />
       </QueryState>
     </Card>

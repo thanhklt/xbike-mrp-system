@@ -125,9 +125,13 @@ Giữ route hiện hữu, chỉ thêm PATCH NCC. Envelope `{data, meta}` và `{e
 - `q` strip whitespace ngoài, rỗng thành không lọc; literal substring không phân biệt
   hoa/thường trên mã/tên, giữ dấu; không tìm SKU, không wildcard `%/_`. Dùng thao tác
   text chuẩn, không ghép user input thành regex/SQL. Cache và SQL có test UTF-8 thực.
-- `tinh`/`phuong` query trống sau trim coi như không lọc; giá trị có nội dung so bằng
-  sau normalize whitespace ngoài và chữ hoa/thường, giữ dấu. Normalize ở predicate,
-  không sửa giá trị NCC lưu/response. Cho lọc phường một mình, không suy luận địa giới.
+- `tinh`/`phuong` query trống sau trim coi như không lọc. **Cập nhật dev duyệt
+  17/11/2026, UC-13 R6/AC-6:** tìm một phần, không phân biệt hoa/thường và dấu
+  tiếng Việt (cả Unicode dựng sẵn/tổ hợp), kết hợp AND. Normalize ở predicate bằng
+  `normalize`/`translate` có sẵn trong PostgreSQL 16, escape literal khi tìm chuỗi;
+  không thêm extension/schema/migration, không sửa giá trị NCC lưu/response. COUNT
+  và SELECT dùng cùng bộ lọc trước phân trang. Cho lọc phường một mình, không suy
+  luận địa giới. Quy tắc `q` trên mã/tên giữ nguyên.
 - Có `is_active` thì chỉ lọc TP; kết hợp loai=linh_kien bị service từ chối 422 theo
   chính sách Q3. Nếu không có filter trạng thái, linh kiện active vẫn có trong danh sách.
 - Tổng số và data áp dụng cùng bộ lọc; sort tường minh có tie-break ID; page vượt
@@ -340,3 +344,36 @@ Lệnh kiểm tra chính (tại `backend`, URL test do người chạy cung cấ
 Giới hạn: chưa frontend; chưa E2E duyệt giá xuất/sản xuất; phiếu nhập legacy chưa nâng
 đầy đủ tiền/posting theo SQL v4. Thay đổi bootstrap không được thực hiện và không
 tự cập nhật database đang chạy. Không commit/push/stage thay đổi.
+
+## Bổ sung UC-13 — tìm địa phương một phần, không dấu (17/11/2026)
+
+Dev đã duyệt thay phần so khớp toàn bộ tên của Q3 bằng UC-13 R6/AC-6.
+Không đổi payload, quyền, dữ liệu địa chỉ hay cách tìm `q` theo mã/tên.
+
+| File | Thay đổi |
+|---|---|
+| `backend/app/modules/nha_cung_cap/repository.py` | Chuẩn hóa dấu/hoa thường tại predicate, contains literal trên tỉnh/phường; lọc SQL trước COUNT/phân trang, không cần extension |
+| `backend/app/modules/nha_cung_cap/schemas.py` | Mô tả cách tìm mới trên OpenAPI, giữ nguyên kiểu/tham số |
+| `backend/tests/test_catalog_api.py` | Test HTTP tìm không dấu, AND, total/page, QTV và giữ nguyên response có dấu |
+| `backend/tests/test_catalog_postgres.py` | Test Unicode dựng sẵn/tổ hợp, đ/Đ, một phần tên, wildcard literal, blank, AND và dữ liệu/ETag/audit không đổi; sửa dữ liệu mẫu UC-44 để địa chỉ cũ/mới không chứa nhau |
+| `specs/use_cases/catalog/UC-13.md` | R6/AC-6 và truy vết test |
+| `specs/use_cases/catalog/README.md` | Quyết định Q3 mới và bảng truy vết |
+| `specs/use_cases/catalog/PLAN.md` | Phương án, phạm vi và kết quả lượt bổ sung |
+| `docs/sequence/nha_cung_cap.md` | GET list phản ánh predicate mới |
+| `docs/sequence/assets/nha_cung_cap/nha-cung-cap-1.png` | Render lại sơ đồ GET list bằng Mermaid CLI/Chrome; đã xem ảnh |
+
+Kết quả thực tế:
+
+- Nhóm test tìm kiếm: **20 pass** trên PostgreSQL 16 test riêng cổng 55464.
+- Toàn bộ ba file Catalog service/API/PostgreSQL: **169 pass, 1 fail, 0 skip**.
+  Lỗi còn lại `test_uc12_ac01_repeated_stop_does_not_publish_or_audit` thuộc cache
+  ngừng mặt hàng; đã tái hiện cùng lỗi khi nạp repository/schema NCC nguyên bản từ
+  HEAD vào tiến trình test riêng. Không sửa ngoài phạm vi UC-13, không bỏ/skip test.
+- Ruff check/format đạt; Mypy module NCC đạt (7 source files); `git diff --check` đạt.
+- Chrome kết nối API thật: **6/6** ca lọc đạt, HTTP 200, không lỗi JavaScript;
+  `ha noi` trả NCC-000002 (`Thành phố Hà Nội`), `ho chi minh` + `minh hoa` trả
+  NCC-000001, kết hợp không khớp trả rỗng; lọc riêng phường và ký tự `%` đúng.
+- Test ghi dữ liệu chỉ dùng database tạm do fixture BOM tạo trong container test
+  riêng; không nạp seed, thay schema hoặc ghi thử NCC vào database ứng dụng.
+- Uvicorn đã được khởi động lại để nạp code mới. Frontend không cần sửa trong lượt
+  bổ sung này; giữ nguyên các thay đổi giao diện có sẵn. Không commit/push/stage.

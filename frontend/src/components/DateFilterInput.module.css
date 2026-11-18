@@ -1,0 +1,38 @@
+.control {
+  position: relative;
+  min-width: 0;
+}
+
+.control input.textInput {
+  padding-inline-end: 44px;
+}
+
+.pickerButton {
+  position: absolute;
+  inset: 1px 1px 1px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.pickerButton:hover:not(:disabled) {
+  background: var(--soft, #eaf0f5);
+}
+
+.control input.nativePicker {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}

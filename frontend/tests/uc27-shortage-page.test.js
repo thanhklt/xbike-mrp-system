@@ -130,12 +130,12 @@ test("replenished request shows waiting for recheck notice instead of its shorta
 
 // UC-27 D6: Menu QLK ngay sau yêu cầu, nhãn mới; route được bảo vệ, NV/Admin không truy cập
 test("manager navigation and protected route expose the shortage page after production requests", () => {
-  const group = navigationFor("quan_ly").find(({ title }) => title === "Sản xuất");
-  const index = group.items.findIndex(([path]) => path === "/kho/yeu-cau");
+  const group = navigationFor("quan_ly").find(({ title }) => title === "Vận hành");
+  const index = group.items.findIndex(([path]) => path === "/kho/nhu-cau-bo-sung");
   assert.ok(index >= 0);
   assert.deepEqual(group.items.slice(index, index + 2), [
+    ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung LK"],
     ["/kho/yeu-cau", "Yêu cầu sản xuất"],
-    ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"],
   ]);
   for (const [role, allowed] of [["quan_ly", true], ["nhan_vien", false], ["quan_tri_vien", false]]) {
     assert.equal(canAccessPath(role, "/kho/nhu-cau-bo-sung"), allowed);

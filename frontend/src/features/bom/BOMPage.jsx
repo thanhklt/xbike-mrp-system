@@ -1,13 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
-import {
-  useCatalog,
-  useCollection,
-  useDetail,
-  useResource,
-  useWrite,
-} from "../../lib/api/useResources.js";
+import { useCatalog, useCollection, useDetail, useWrite } from "../../lib/api/useResources.js";
 import { itemName, dateTime } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
@@ -15,171 +9,177 @@ import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
 import {
-  ItemSelect,
   DocumentLines,
   newLine,
   linePayload,
   SavedLines,
 } from "../../components/ResourceFields.jsx";
-import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
+import { QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
+
 const base = "/kho/bom";
+const newProduct = "/kho/mat-hang/moi?loai_mat_hang=thanh_pham";
+
+// UC-15/16 — BOM v4 is one level; its initial version belongs to item creation.
 export function BOMPage() {
   const { id } = useParams();
   const catalog = useCatalog();
   const collection = useCollection(API.bom, { sort: "-id" });
   const detail = useDetail(API.bom, id);
   const items = catalog.data?.data || [];
+  if (id === "moi") return <Navigate to={newProduct} replace />;
   return (
     <>
       <PageHeader
         title="Công thức sản phẩm (BOM)"
-        subtitle="BOM nhiều cấp, nhiều phiên bản; mỗi mặt hàng có tối đa một phiên bản hiện hành."
+        subtitle="BOM một cấp, nhiều phiên bản; mỗi thành phẩm có tối đa một phiên bản đang dùng."
         action={
-          <Link className="btn btn-primary" to={`${base}/moi`}>
-            Tạo BOM mới
+          <Link className="btn btn-primary" to={newProduct}>
+            Tạo thành phẩm
           </Link>
         }
       />
-      <div>
-        <Collection
-          collection={collection}
-          search={false}
-          filters={[
-            {
-              name: "mat_hang_id",
-              label: "Mặt hàng",
-              as: "select",
-              options: [
-                { value: "", label: "Tất cả" },
-                ...items
-                  .filter((item) => ["thanh_pham", "ban_thanh_pham"].includes(item.loai_mat_hang))
-                  .map((item) => ({ value: item.id, label: item.ten_mat_hang })),
-              ],
-            },
-            {
-              name: "is_active",
-              label: "Hiệu lực",
-              as: "select",
-              options: [
-                { value: "", label: "Tất cả" },
-                { value: "true", label: "Đang dùng" },
-                { value: "false", label: "Ngừng dùng" },
-              ],
-            },
-          ]}
-          columns={[
-            {
-              key: "mat_hang_id",
-              label: "Sản phẩm",
-              render: (row) => (
-                <Link to={`${base}/${row.id}`}>{itemName(items, row.mat_hang_id)}</Link>
-              ),
-            },
-            { key: "version", label: "Phiên bản" },
-            { key: "chi_tiet", label: "Thành phần", render: (row) => row.chi_tiet.length },
-            {
-              key: "is_active",
-              label: "Hiệu lực",
-              render: (row) => (
-                <Badge status={row.is_active ? "hoat_dong" : "nhap"}>
-                  {row.is_active ? "Đang dùng" : "Ngừng dùng"}
-                </Badge>
-              ),
-            },
-            {
-              key: "action",
-              label: "Thao tác",
-              render: (row) => <Link to={`${base}/${row.id}`}>Mở →</Link>,
-            },
-          ]}
-        />
-        <RecordPanel
-          id={id}
-          query={detail}
-          base={base}
-          title={id === "moi" ? "Tạo phiên bản BOM" : "Chi tiết và cấu trúc BOM"}
-        >
-          {(snapshot) =>
-            snapshot ? (
-              <BomDetail record={snapshot.data} items={items} />
-            ) : (
-              <QueryState query={catalog}>
-                <BomForm items={items} />
-              </QueryState>
-            )
-          }
-        </RecordPanel>
-      </div>
+      <Collection
+        collection={collection}
+        search={false}
+        pageSizes={[20, 50, 100]}
+        filters={[
+          {
+            name: "mat_hang_id",
+            label: "Mặt hàng",
+            as: "select",
+            options: [
+              { value: "", label: "Tất cả" },
+              ...items
+                .filter((item) => item.loai_mat_hang === "thanh_pham")
+                .map((item) => ({
+                  value: item.id,
+                  label: `${item.ma_mat_hang} · ${item.ten_mat_hang}`,
+                })),
+            ],
+          },
+          {
+            name: "is_active",
+            label: "Hiệu lực",
+            as: "select",
+            options: [
+              { value: "", label: "Tất cả" },
+              { value: "true", label: "Đang dùng" },
+              { value: "false", label: "Ngừng dùng" },
+            ],
+          },
+        ]}
+        columns={[
+          {
+            key: "mat_hang_id",
+            label: "Sản phẩm",
+            render: (row) => (
+              <Link to={`${base}/${row.id}`}>{itemName(items, row.mat_hang_id)}</Link>
+            ),
+          },
+          { key: "version", label: "Phiên bản" },
+          { key: "chi_tiet", label: "Thành phần", render: (row) => row.chi_tiet.length },
+          {
+            key: "is_active",
+            label: "Hiệu lực",
+            render: (row) => (
+              <Badge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
+                {row.is_active ? "Đang dùng" : "Ngừng dùng"}
+              </Badge>
+            ),
+          },
+          {
+            key: "action",
+            label: "Thao tác",
+            render: (row) => <Link to={`${base}/${row.id}`}>Mở →</Link>,
+          },
+        ]}
+      />
+      <RecordPanel id={id} query={detail} base={base} title="Chi tiết công thức BOM">
+        {(snapshot) => (
+          <QueryState query={catalog}>
+            {snapshot && <BomDetail snapshot={snapshot} items={items} />}
+          </QueryState>
+        )}
+      </RecordPanel>
     </>
   );
 }
-function BomForm({ items }) {
-  const [outputId, setOutputId] = useState("");
-  const [lines, setLines] = useState([newLine()]);
+
+// UC-17 — the version request carries only the formula and the ETag reviewed by QLK.
+function BomVersionForm({ snapshot, items, onCancel }) {
+  const record = snapshot.data;
+  const [lines, setLines] = useState(() =>
+    record.chi_tiet.map((line) =>
+      newLine({ mat_hang_id: String(line.mat_hang_id), so_luong: String(line.so_luong) }),
+    ),
+  );
   const mutation = useWrite();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
   function submit(event) {
     event.preventDefault();
-    const body = { mat_hang_id: Number(outputId), chi_tiet: linePayload(lines) };
+    const body = { chi_tiet: linePayload(lines) };
     confirm({
       title: "Tạo và kích hoạt phiên bản BOM",
-      description: `${itemName(items, outputId)}. Kiểm tra định mức cho một đơn vị đầu ra.`,
+      description: `${itemName(items, record.mat_hang_id)} · phiên bản nguồn ${record.version}.`,
       content: <SavedLines lines={body.chi_tiet} items={items} />,
       impact:
-        "API tạo BOM đồng thời kích hoạt phiên bản mới và ngừng phiên bản hiện hành. Không đổi tồn kho; các kế hoạch đã chốt giữ BOM cũ.",
+        "Kích hoạt phiên bản mới và ngừng phiên bản hiện hành. Yêu cầu đã gửi giữ nguyên BOM đã chốt; không đổi tồn kho.",
       onConfirm: async () => {
-        const result = await mutation.mutateAsync({ path: API.bom, body, versioned: false });
+        const result = await mutation.mutateAsync({
+          path: `${API.bom}/${record.id}/phien_ban`,
+          body,
+          etag: snapshot.etag,
+        });
         notify("Đã tạo và kích hoạt phiên bản BOM.");
+        onCancel();
         navigate(`${base}/${result.data.id}`);
       },
     });
   }
   return (
     <form className="stack" onSubmit={submit}>
-      <ItemSelect
-        label="Sản phẩm đầu ra"
-        required
-        value={outputId}
-        onChange={(event) => {
-          setOutputId(event.target.value);
-          setLines([newLine()]);
-        }}
-        items={items}
-        types={["thanh_pham", "ban_thanh_pham"]}
-      />
+      <h3>Định mức phiên bản mới</h3>
       <DocumentLines
         lines={lines}
         onChange={setLines}
         items={items}
-        outputId={outputId}
-        types={["nguyen_vat_lieu", "linh_kien", "ban_thanh_pham"]}
+        outputId={record.mat_hang_id}
+        types={["linh_kien"]}
       />
-      <Notice>
-        Định mức cho một đơn vị đầu ra phải là số nguyên dương; không trùng mặt hàng hoặc tạo chu
-        trình. Tạo mới sẽ kích hoạt phiên bản và ngừng phiên bản hiện hành. Nội dung đã lưu bất
-        biến.
-      </Notice>
-      <Button type="submit" disabled={mutation.isPending}>
-        Tạo và kích hoạt phiên bản
-      </Button>
+      <div className="actions actions-end">
+        <Button variant="secondary" onClick={onCancel}>
+          Hủy chỉnh sửa
+        </Button>
+        <Button type="submit" disabled={mutation.isPending}>
+          Tạo và kích hoạt phiên bản
+        </Button>
+      </div>
     </form>
   );
 }
-function BomDetail({ record, items }) {
-  const tree = useResource(`${API.bom}/${record.id}/cau_truc`);
+
+// UC-18/19 — changing lifecycle uses the selected version's validator, never deletes its data.
+function BomDetail({ snapshot, items }) {
+  const record = snapshot.data;
+  const [drafting, setDrafting] = useState(false);
   const { confirm, notify } = useFeedback();
   const write = useWrite();
   function changeActive() {
     confirm({
-      title: record.is_active ? "Ngừng dùng BOM" : "Kích hoạt phiên bản BOM",
-      description: `${itemName(items, record.mat_hang_id)} · phiên bản ${record.version}. Kích hoạt sẽ ngừng dùng phiên bản hiện hành; kế hoạch đã chốt giữ BOM cũ.`,
+      title: record.is_active ? "Ngừng dùng BOM" : "Dùng lại phiên bản BOM",
+      description: `${itemName(items, record.mat_hang_id)} · phiên bản ${record.version}.`,
+      impact: record.is_active
+        ? "Ngừng công thức và thành phẩm. Giữ nguyên số dư và chứng từ cũ."
+        : "Dùng lại phiên bản được chọn cùng thành phẩm, thay phiên bản hiện hành. Không đổi tồn kho.",
+      danger: record.is_active,
       onConfirm: async () => {
         await write.mutateAsync({
           path: `${API.bom}/${record.id}${record.is_active ? "" : "/kich_hoat"}`,
           method: record.is_active ? "delete" : "post",
-          versioned: false,
+          body: record.is_active ? null : {},
+          etag: snapshot.etag,
         });
         notify("Đã cập nhật hiệu lực BOM.");
       },
@@ -191,37 +191,33 @@ function BomDetail({ record, items }) {
         entries={[
           ["Sản phẩm", itemName(items, record.mat_hang_id)],
           ["Phiên bản", record.version],
-          ["Bắt đầu hiệu lực", dateTime(record.start_time)],
-          ["Kết thúc hiệu lực", dateTime(record.end_time)],
+          ["Tạo lúc", dateTime(record.created_at)],
+          ["Kích hoạt gần nhất", dateTime(record.kich_hoat_gan_nhat_at)],
+          [
+            "Hiệu lực",
+            <Badge key="state" status={record.is_active ? "hoat_dong" : "bi_khoa"}>
+              {record.is_active ? "Đang dùng" : "Ngừng dùng"}
+            </Badge>,
+          ],
         ]}
       />
-      <SavedLines lines={record.chi_tiet} items={items} />
-      <div className="actions">
-        <Button onClick={changeActive}>
-          {record.is_active ? "Ngừng dùng phiên bản" : "Kích hoạt phiên bản"}
-        </Button>
-        <Link to={`${base}/moi`} className="btn btn-secondary">
-          Tạo phiên bản mới
-        </Link>
-      </div>
-      <Notice>Nội dung BOM đã lưu bất biến. Thay đổi công thức bằng phiên bản mới.</Notice>
-      <h3>Cấu trúc nhiều cấp</h3>
-      <QueryState query={tree}>
-        <BomTree nodes={tree.data?.data.children || []} items={items} />
-      </QueryState>
+      {drafting ? (
+        <BomVersionForm snapshot={snapshot} items={items} onCancel={() => setDrafting(false)} />
+      ) : (
+        <>
+          <SavedLines lines={record.chi_tiet} items={items} />
+          <div className="actions">
+            <Button
+              variant={record.is_active ? "danger" : "secondary"}
+              onClick={changeActive}
+              disabled={write.isPending}
+            >
+              {record.is_active ? "Ngừng dùng phiên bản" : "Dùng lại phiên bản"}
+            </Button>
+            <Button onClick={() => setDrafting(true)}>Tạo phiên bản mới</Button>
+          </div>
+        </>
+      )}
     </div>
-  );
-}
-function BomTree({ nodes, items }) {
-  return (
-    <ul className="tree">
-      {nodes.map((node) => (
-        <li key={node.mat_hang_id}>
-          <strong>{itemName(items, node.mat_hang_id)}</strong> × {node.so_luong_tren_mot_don_vi_cha}
-          {node.bom_id && <small className="muted"> · BOM #{node.bom_id}</small>}
-          {node.children?.length > 0 && <BomTree nodes={node.children} items={items} />}
-        </li>
-      ))}
-    </ul>
   );
 }

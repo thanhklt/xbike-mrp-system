@@ -9,7 +9,7 @@ import {
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { today, dateTime, money, nullable } from "../../lib/format.js";
+import { dateTime, money, nullable } from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
 import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
@@ -24,8 +24,9 @@ import {
   statusFilter,
   dateFilters,
 } from "../../components/ResourceFields.jsx";
-import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
+import { ErrorNotice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
+import { dateRangeError } from "../../components/filterFields.js";
 const base = "/kho/phieu-nhap";
 export function ReceivingPage() {
   const { id } = useParams();
@@ -52,6 +53,9 @@ export function ReceivingPage() {
       <div className="stack">
         <Collection
           collection={collection}
+          allowReset
+          pageSizes={[20, 50, 100]}
+          validate={dateRangeError}
           filters={[statusFilter(["nhap", "hoan_thanh"]), ...dateFilters]}
           columns={[
             {
@@ -114,7 +118,7 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
   const { save, busy, error } = useSave();
   const initial = {
     ncc_id: String(record?.ncc_id || ""),
-    ngay_nhap: record?.ngay_nhap || today(),
+    ngay_nhap: record?.ngay_nhap ?? "",
     ghi_chu: record?.ghi_chu || "",
   };
   const [values, setValues] = useState(initial);
@@ -169,11 +173,12 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
       danger: remove,
       impact: remove
         ? "Xóa bản nháp, không thay đổi tồn kho."
-        : "Cộng số lượng từng mặt hàng vào kho và ghi giao dịch một lần. Phiếu hoàn tất không sửa/xóa trực tiếp.",
+        : "Cộng số lượng từng mặt hàng vào kho và ghi giao dịch một lần. Sau khi xác nhận, phiếu không thể chỉnh sửa.",
       onConfirm: async () => {
         const result = await action.mutateAsync({
           path: `${API.receipts}/${record.id}${remove ? "" : "/hoan_tat"}`,
           method: remove ? "delete" : "post",
+          body: remove ? null : {},
           etag: snapshot.etag,
         });
         notify(
@@ -215,6 +220,7 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
               <Field
                 label="Ngày nhập"
                 type="date"
+                name="ngay_nhap"
                 required
                 value={values.ngay_nhap}
                 onChange={(event) => setValues({ ...values, ngay_nhap: event.target.value })}
@@ -232,7 +238,7 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
               onChange={setLines}
               items={items}
               prices
-              types={["nguyen_vat_lieu", "linh_kien"]}
+              types={["linh_kien"]}
             />
             <div className="actions actions-end">
               <span className="muted">
@@ -262,19 +268,10 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
             ]}
           />
           <SavedLines lines={record.chi_tiet} items={items} prices />
-          <Notice>
-            Phiếu đã hoàn tất, nội dung bất biến. Sai số lượng cần lập phiếu điều chỉnh.
-          </Notice>
           <div className="actions">
             <Link className="btn btn-primary" to={`/kho/dieu-chinh/moi?phieu_nhap_id=${record.id}`}>
               Tạo phiếu điều chỉnh
             </Link>
-            <Button
-              variant="secondary"
-              reason="Ticket chỉ được sinh khi xác nhận điều chỉnh thất bại theo nghiệp vụ."
-            >
-              Tạo ticket sự cố
-            </Button>
           </div>
         </>
       )}

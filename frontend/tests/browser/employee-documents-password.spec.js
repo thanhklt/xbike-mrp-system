@@ -712,7 +712,7 @@ test.describe("Employee Documents & Password Workflows", () => {
     await expect(page.getByText("Trang 1 / 2")).toBeVisible();
 
     // Type into search without clicking "Lọc"
-    const searchInput = page.getByPlaceholder("Tìm mã yêu cầu hoặc tên thành phẩm…");
+    const searchInput = page.getByRole("searchbox", { name: "Tìm kiếm" });
     await searchInput.fill("unsubmitted-draft-text");
 
     // Click next page

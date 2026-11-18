@@ -23,24 +23,6 @@ test("login calls the backend with username and password; server profile determi
   ).toBeTruthy();
 });
 
-test("bad credentials never grant a session or show a dashboard", async ({ page }) => {
-  await installApi(page, {
-    authenticated: false,
-    intercept: (call) =>
-      call.path === "auth/dang_nhap"
-        ? { status: 401, json: { error: { message: "Thông tin đăng nhập không hợp lệ" } } }
-        : null,
-  });
-  await page.goto("/dang-nhap");
-  await page.getByLabel("Tên đăng nhập", { exact: true }).fill("wrong");
-  await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText(
-    /Thông tin đăng nhập không hợp lệ|Tên đăng nhập hoặc mật khẩu không đúng/,
-  );
-  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-});
-
 test("the latest /auth/me role takes precedence over the earlier login response", async ({
   page,
 }) => {
@@ -66,7 +48,7 @@ test("admin sees no warehouse menu or snapshot and direct warehouse URL is denie
   await page.goto("/admin/lich-su");
   await expect(page.getByRole("heading", { name: "Lịch sử thao tác", exact: true })).toBeVisible();
   await expect(page.getByText("MANAGER_ONLY")).toHaveCount(0);
-  await expect(page.locator("#main-navigation").getByText("Mặt hàng và tồn kho")).toHaveCount(0);
+  await expect(page.locator("#main-navigation").getByText("Mặt hàng & tồn kho")).toHaveCount(0);
   await page.goto("/kho/mat-hang");
   await expect(page.getByRole("heading", { name: "Không có quyền truy cập" })).toBeVisible();
   expect(
@@ -75,11 +57,12 @@ test("admin sees no warehouse menu or snapshot and direct warehouse URL is denie
 });
 
 test("employee can view issues and needs an assigned request to create, but cannot approve", async ({ page }) => {
-  await installApi(page, { role: "nhan_vien" });
+  const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/xuat-nvl/1");
   await expect(page.getByRole("heading", { name: "Chi tiết phiếu xuất" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Duyệt phiếu xuất", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Tạo phiếu xuất", exact: true })).toHaveCount(0);
+  expect(state.calls.some((call) => call.path === "nhan_vien/2")).toBe(false);
   await page.goto("/nv/xuat-nvl/moi");
   await expect(page.getByText("Mở yêu cầu được giao để lập phiếu xuất.")).toBeVisible();
 });
@@ -89,7 +72,8 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/phieu-nhap/moi");
-  await page.locator("main").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await page.locator("dialog.record-dialog").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await page.getByLabel("Ngày nhập", { exact: true }).fill("17/11/2026");
   await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("1");
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("3");
   await page.getByLabel("Đơn giá dòng 1", { exact: true }).fill("250000");
@@ -98,6 +82,7 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
   const creation = state.calls.find((call) => call.path === "phieu_nhap" && call.method === "POST");
   expect(creation.body).toMatchObject({
     ncc_id: 1,
+    ngay_nhap: "2026-11-17",
     chi_tiet: [{ mat_hang_id: 1, so_luong: 3, don_gia_thuc: 250000 }],
   });
   expect(creation.body.trang_thai).toBeUndefined();
@@ -200,13 +185,25 @@ test("profile displays employee information without a password form", async ({ p
   expect(state.calls.some((call) => call.method !== "GET")).toBeFalsy();
 });
 
-test("unsupported supplier actions are disabled with visible reasons", async ({ page }) => {
+test("supplier, completed receipt and BOM details omit removed controls and notes", async ({ page }) => {
   const state = await installApi(page);
+  const detail = page.locator("dialog.record-dialog");
   await page.goto("/kho/nha-cung-cap/1");
-  await expect(page.getByRole("button", { name: "Sửa", exact: true })).toBeDisabled();
-  await expect(page.getByText("API hiện chỉ hỗ trợ xem và tạo nhà cung cấp.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Xóa…", exact: true })).toBeDisabled();
-  expect(state.calls.some((call) => ["PATCH", "DELETE"].includes(call.method))).toBeFalsy();
+  await expect(detail.getByRole("link", { name: "Xem phiếu nhập của nhà cung cấp →" })).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Sửa", exact: true })).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Xóa…", exact: true })).toHaveCount(0);
+  await expect(detail.getByText("API hiện chỉ hỗ trợ xem và tạo nhà cung cấp.")).toHaveCount(0);
+  await expect(detail.getByText("Chưa có API xóa nhà cung cấp.")).toHaveCount(0);
+
+  await page.goto("/kho/phieu-nhap/2");
+  await expect(detail.getByRole("link", { name: "Tạo phiếu điều chỉnh", exact: true })).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Tạo ticket sự cố", exact: true })).toHaveCount(0);
+  await expect(detail.getByText(/Ticket chỉ được sinh|Phiếu đã hoàn tất, nội dung bất biến/)).toHaveCount(0);
+
+  await page.goto("/kho/bom/1");
+  await expect(detail.getByRole("button", { name: "Tạo phiên bản mới", exact: true })).toBeVisible();
+  await expect(detail.getByText(/Nội dung BOM đã lưu bất biến/)).toHaveCount(0);
+  expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
 });
 
 // UC-42 R2: Hai trang báo cáo chỉ đọc endpoint reporting, không gọi inventory cũ

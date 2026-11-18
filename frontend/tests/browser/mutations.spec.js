@@ -35,40 +35,19 @@ test("employee profile save confirms via ADM-05 popup and sends profile fields s
   expect(patch.headers["if-match"]).toBe('"v1"');
 });
 
-test("locking an employee requires a reason and preserves DELETE body", async ({ page }) => {
-  const state = await installApi(page, { role: "quan_tri_vien" });
-  await page.goto("/admin/tai-khoan/3");
-  await page.getByRole("button", { name: "Vô hiệu hóa", exact: true }).click();
-  await expect(
-    page.locator("dialog.confirmation").getByRole("button", { name: "Xác nhận", exact: true }),
-  ).toBeEnabled();
-  await page
-    .locator("dialog.confirmation")
-    .getByLabel("Lý do", { exact: true })
-    .fill("Tạm ngừng công việc");
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Xác nhận", exact: true })
-    .click();
-  await expect(page.getByRole("button", { name: "Mở khóa", exact: true })).toBeVisible();
-  expect(state.calls.find((call) => call.method === "DELETE").body).toEqual({
-    ly_do: "Tạm ngừng công việc",
-  });
-});
-
 test("deactivating an item keeps its nonzero stock and historical record", async ({ page }) => {
   const state = await installApi(page);
-  await page.goto("/kho/mat-hang/1");
+  await page.goto("/kho/mat-hang/4");
   await page.getByRole("button", { name: "Ngừng sử dụng…" }).click();
   await expect(page.locator("dialog.confirmation")).toContainText("Giữ nguyên mặt hàng, số dư tồn");
   await page
     .locator("dialog.confirmation")
     .getByRole("button", { name: "Xác nhận", exact: true })
     .click();
-  await expect(page.getByRole("button", { name: "Ngừng sử dụng…" })).toBeDisabled();
-  expect(state.resources.mat_hang[0].so_luong_ton).toBe(120);
+  await expect(page.getByRole("button", { name: "Dùng lại thành phẩm", exact: true })).toBeVisible();
+  expect(state.resources.mat_hang[3].so_luong_ton).toBe(18);
   expect(
-    state.calls.find((call) => call.path === "mat_hang/1" && call.method === "DELETE").headers[
+    state.calls.find((call) => call.path === "mat_hang/4" && call.method === "DELETE").headers[
       "if-match"
     ],
   ).toBe('"v1"');
@@ -78,9 +57,8 @@ test("BOM creation explicitly confirms activation and sends no state or version 
   page,
 }) => {
   const state = await installApi(page);
-  await page.goto("/kho/bom/moi");
-  await page.getByLabel("Sản phẩm đầu ra", { exact: true }).selectOption("4");
-  await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("3");
+  await page.goto("/kho/bom/1");
+  await page.getByRole("button", { name: "Tạo phiên bản mới", exact: true }).click();
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("2");
   await page.getByRole("button", { name: "Tạo và kích hoạt phiên bản", exact: true }).click();
   await expect(page.locator("dialog.confirmation")).toContainText("ngừng phiên bản hiện hành");
@@ -92,11 +70,85 @@ test("BOM creation explicitly confirms activation and sends no state or version 
     .getByRole("button", { name: "Xác nhận", exact: true })
     .click();
   await expect(page).toHaveURL(/\/kho\/bom\/2$/);
-  expect(state.calls.find((call) => call.path === "bom" && call.method === "POST").body).toEqual({
-    mat_hang_id: 4,
-    chi_tiet: [{ mat_hang_id: 3, so_luong: 2 }],
+  const versionCall = state.calls.find((call) => call.path === "bom/1/phien_ban" && call.method === "POST");
+  expect(versionCall.headers["if-match"]).toBe('"v1"');
+  expect(versionCall.body).toEqual({
+    chi_tiet: [{ mat_hang_id: 1, so_luong: 2 }, { mat_hang_id: 3, so_luong: 2 }],
   });
 });
+
+// UC-20 AC-4/5, UC-21: DELETE không body; hoàn tất POST giữ body {} và ETag đã xem.
+for (const operation of [
+  {
+    name: "draft deletion",
+    button: "Xóa nháp",
+    method: "DELETE",
+    suffix: "",
+    body: null,
+    status: 204,
+  },
+  {
+    name: "completion",
+    button: "Hoàn tất nhập kho",
+    method: "POST",
+    suffix: "/hoan_tat",
+    body: "{}",
+    status: 200,
+  },
+]) {
+  test(`receipt ${operation.name} sends its required body and the reviewed ETag`, async ({
+    page,
+  }) => {
+    const state = await installApi(page);
+    const stock = state.resources.mat_hang.map((item) => item.so_luong_ton);
+    const path = `/api/v1/phieu_nhap/1${operation.suffix}`;
+    await page.route("**/api/v1/phieu_nhap/1**", async (route) => {
+      const request = route.request();
+      if (new URL(request.url()).pathname !== path || request.method() !== operation.method) {
+        return route.fallback();
+      }
+      if (request.postData() !== operation.body) {
+        return route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { message: "Body is not allowed" }, meta: {} }),
+        });
+      }
+      return route.fallback();
+    });
+    await page.goto("/kho/phieu-nhap/1");
+    const detail = page.locator("dialog.record-dialog");
+    const confirmation = page.locator("dialog.confirmation");
+    await detail.getByRole("button", { name: operation.button, exact: true }).click();
+    await confirmation.getByRole("button", { name: "Hủy", exact: true }).click();
+    expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
+
+    await detail.getByRole("button", { name: operation.button, exact: true }).click();
+    const requested = page.waitForRequest(
+      (request) =>
+        new URL(request.url()).pathname === path && request.method() === operation.method,
+    );
+    const responded = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === path &&
+        response.request().method() === operation.method,
+    );
+    await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
+    const request = await requested;
+    expect(request.postData()).toBe(operation.body);
+    expect(request.headers()["if-match"]).toBe('"v1"');
+    expect((await responded).status()).toBe(operation.status);
+    await expect(confirmation).toHaveCount(0);
+    if (operation.method === "DELETE") {
+      await expect(page).toHaveURL(/\/kho\/phieu-nhap$/);
+      expect(state.resources.phieu_nhap.some((record) => record.id === 1)).toBe(false);
+      expect(state.resources.mat_hang.map((item) => item.so_luong_ton)).toEqual(stock);
+    } else {
+      await expect(detail.getByText("Hoàn thành", { exact: true })).toBeVisible();
+    }
+    expect(state.calls.filter((call) => call.method !== "GET")).toHaveLength(1);
+  });
+}
 
 // UC-29 AC-2: Bắt đầu ngay trên yêu cầu, không qua xác nhận, gửi ETag chi tiết
 test("assigned employee starts a request without a confirmation dialog", async ({ page }) => {

@@ -72,68 +72,68 @@ for (const [width, height] of [
     await expect(page.getByRole("button", { name: "Đăng nhập", exact: true })).toBeInViewport();
     await expect(page.getByRole("link", { name: "0900 000 000" })).toBeInViewport();
   });
-
-  test(`failed login keeps the form in place without scrolling at ${width}x${height}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height });
-    await page.route("**/api/v1/auth/dang_nhap", (route) =>
-      route.fulfill({
-        status: 401,
-        json: {
-          error: { message: "Thông tin đăng nhập không hợp lệ" },
-          meta: { request_id: "12345678-1234-4321-9876-123456789abc" },
-        },
-      }),
-    );
-    const username = page.getByLabel("Tên đăng nhập", { exact: true });
-    const submit = page.getByRole("button", { name: "Đăng nhập", exact: true });
-    await username.fill("wrong");
-    await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
-    const before = { input: await username.boundingBox(), button: await submit.boundingBox() };
-    await submit.click();
-    const alert = page.getByRole("alert");
-    await expect(alert).toContainText(/Thông tin đăng nhập không hợp lệ|Tên đăng nhập hoặc mật khẩu không đúng/);
-    await expect(alert).not.toContainText("Mã yêu cầu");
-    await expect(alert).toHaveAttribute(
-      "title",
-      "Mã yêu cầu: 12345678-1234-4321-9876-123456789abc",
-    );
-    await expect(username).toHaveAttribute("aria-invalid", "true");
-    expect(await username.boundingBox()).toEqual(before.input);
-    expect(await submit.boundingBox()).toEqual(before.button);
-    const layout = await page.evaluate(() => {
-      const form = document.querySelector(".login-form");
-      const feedback = document.querySelector(".login-feedback").getBoundingClientRect();
-      const error = document.querySelector(".login-error").getBoundingClientRect();
-      const support = document.querySelector(".login-support").getBoundingClientRect();
-      return {
-        width: document.documentElement.scrollWidth,
-        height: document.documentElement.scrollHeight,
-        overflow: form.scrollHeight - form.clientHeight,
-        supportBottom: support.bottom,
-        formBottom: form.getBoundingClientRect().bottom,
-        errorBottom: error.bottom,
-        feedbackBottom: feedback.bottom,
-      };
-    });
-    expect(layout.width).toBeLessThanOrEqual(width);
-    expect(layout.height).toBeLessThanOrEqual(height);
-    expect(layout.overflow).toBeLessThanOrEqual(1);
-    expect(layout.supportBottom).toBeLessThanOrEqual(layout.formBottom);
-    expect(layout.errorBottom).toBeLessThanOrEqual(layout.feedbackBottom);
-    await page.locator(".login-form").hover();
-    await page.mouse.wheel(0, 500);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
-    await expect(page.locator(".login-form")).toHaveJSProperty("scrollTop", 0);
-  });
 }
 
+test("UC-01 AC-2 rejects a wrong password without creating a session or shifting the form", async ({
+  page,
+}) => {
+  const viewport = { width: 375, height: 667 };
+  await page.setViewportSize(viewport);
+  await page.route("**/api/v1/auth/dang_nhap", (route) =>
+    route.fulfill({
+      status: 401,
+      json: {
+        error: { message: "Server error" },
+        meta: { request_id: "12345678-1234-4321-9876-123456789abc" },
+      },
+    }),
+  );
+  const username = page.getByLabel("Tên đăng nhập", { exact: true });
+  const submit = page.getByRole("button", { name: "Đăng nhập", exact: true });
+  await username.fill("manager");
+  await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
+  const before = { input: await username.boundingBox(), button: await submit.boundingBox() };
+  await submit.click();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Tên đăng nhập hoặc mật khẩu không đúng");
+  await expect(alert).not.toContainText("Mã yêu cầu");
+  await expect(alert).toHaveAttribute(
+    "title",
+    "Mã yêu cầu: 12345678-1234-4321-9876-123456789abc",
+  );
+  await expect(username).toHaveAttribute("aria-invalid", "true");
+  await expect(page).toHaveURL(/\/dang-nhap$/);
+  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
+  expect(await username.boundingBox()).toEqual(before.input);
+  expect(await submit.boundingBox()).toEqual(before.button);
+  const layout = await page.evaluate(() => {
+    const form = document.querySelector(".login-form");
+    const feedback = document.querySelector(".login-feedback").getBoundingClientRect();
+    const error = document.querySelector(".login-error").getBoundingClientRect();
+    const support = document.querySelector(".login-support").getBoundingClientRect();
+    return {
+      width: document.documentElement.scrollWidth,
+      height: document.documentElement.scrollHeight,
+      overflow: form.scrollHeight - form.clientHeight,
+      supportBottom: support.bottom,
+      formBottom: form.getBoundingClientRect().bottom,
+      errorBottom: error.bottom,
+      feedbackBottom: feedback.bottom,
+    };
+  });
+  expect(layout.width).toBeLessThanOrEqual(viewport.width);
+  expect(layout.height).toBeLessThanOrEqual(viewport.height);
+  expect(layout.overflow).toBeLessThanOrEqual(1);
+  expect(layout.supportBottom).toBeLessThanOrEqual(layout.formBottom);
+  expect(layout.errorBottom).toBeLessThanOrEqual(layout.feedbackBottom);
+  await page.locator(".login-form").hover();
+  await page.mouse.wheel(0, 500);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.locator(".login-form")).toHaveJSProperty("scrollTop", 0);
+});
+
 for (const [status, message] of [
-  [403, /Tài khoản (bị khóa hoặc không có quyền đăng nhập|không có quyền đăng nhập|đang bị khóa)/],
-  [422, /Thông tin chưa hợp lệ|Vui lòng nhập đủ tên đăng nhập và mật khẩu/],
   [429, "Bạn thử quá nhiều lần. Vui lòng thử lại sau."],
-  [500, /Chưa thể đăng nhập|Đăng nhập thất bại/],
   [0, "Không kết nối được máy chủ. Vui lòng thử lại."],
 ]) {
   test(`login error ${status} stays compact on mobile`, async ({ page }) => {

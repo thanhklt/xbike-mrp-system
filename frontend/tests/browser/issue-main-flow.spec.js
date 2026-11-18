@@ -78,11 +78,13 @@ test("manager sees issue list and approval but cannot create or edit; other empl
   const manager = await installApi(page, { role: "quan_ly" });
   await page.goto("/kho/phieu-xuat/1");
   const dialog = page.locator("dialog.record-dialog");
-  await expect(page.getByRole("table", { name: "Danh sách phiếu xuất" })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Danh sách", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Duyệt phiếu xuất", exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: /Gửi|Xóa|Lưu nháp/ })).toHaveCount(0);
   await page.goto("/kho/phieu-xuat/moi");
-  await expect(dialog).toContainText("Chỉ nhân viên được giao yêu cầu được lập phiếu xuất.");
+  await expect(page).toHaveURL(/\/kho\/phieu-xuat$/);
+  await expect(page.getByRole("link", { name: /^(Tạo|Lập) phiếu xuất/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Tạo|Lập) phiếu xuất/ })).toHaveCount(0);
   expect(manager.calls.filter((c) => c.path === "phieu_xuat" && c.method === "POST")).toHaveLength(0);
   const employee = await installApi(page, { role: "nhan_vien" });
   employee.resources.yeu_cau_san_xuat[1].nhan_vien_duoc_giao_id = 99;

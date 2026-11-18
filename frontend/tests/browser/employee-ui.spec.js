@@ -19,13 +19,6 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     await expect(page.getByText("Mở yêu cầu được giao để kiểm tra linh kiện")).toBeHidden();
     await expect(page.getByText("NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm")).toBeHidden();
 
-    // Manager dashboard retains legend
-    const mgrPage = await page.context().newPage();
-    await installApi(mgrPage, { role: "quan_ly" });
-    await mgrPage.goto("/kho");
-    await expect(mgrPage.getByText("NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm")).toBeVisible();
-    await mgrPage.close();
-
     // 3 KPI metrics in order
     const metricLabels = await page
       .locator(".employee-stats .metric > span")

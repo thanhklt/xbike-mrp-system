@@ -331,6 +331,7 @@ async def test_uc14_cat_ac08_exhausted_code_returns_conflict(database):
     assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 0
 
 
+# UC-13 AC-1: Tìm kiếm nâng cao theo tỉnh và phường; AC-4: phân trang ổn định; A1: không có kết quả.
 async def test_uc13_cat_ac03_literal_address_and_stable_pages(database):
     await create_supplier(database, ten_ncc="Same %_", tinh="  Hà Nội  ", phuong=" Phường A ")
     await create_supplier(database, ten_ncc="Same %_", tinh="HÀ NỘI", phuong="PHƯỜNG A")
@@ -354,9 +355,59 @@ async def test_uc13_cat_ac03_literal_address_and_stable_pages(database):
             found.extend(item.id for item in result.data)
         assert found == [1, 2]
         result = await service.list_suppliers(NhaCungCapListQuery(phuong="phường a"), MANAGER, "r")
-        assert result.meta.total == 2
+        # UC-13 AC-6: accented and unaccented addresses now match the same filter.
+        assert result.meta.total == 3
         result = await service.list_suppliers(NhaCungCapListQuery(page=2**70), MANAGER, "r")
         assert result.data == [] and result.meta.total == 3
+
+
+@pytest.mark.parametrize(
+    "filters,expected",
+    [
+        ({"tinh": "ha noi"}, [1, 2]),
+        ({"tinh": "HÀ NỘI"}, [1, 2]),
+        ({"tinh": "nội"}, [1, 2]),
+        ({"tinh": "HA\u0300 NO\u0323\u0302I"}, [1, 2]),
+        ({"phuong": "dong da"}, [1, 2, 3]),
+        ({"phuong": "ĐỐNG"}, [1, 2, 3]),
+        ({"tinh": "ha noi", "phuong": "đống đa"}, [1, 2]),
+        ({"tinh": "ho chi minh", "phuong": "dong da"}, [3]),
+        ({"tinh": "ha noi", "phuong": "minh hoa"}, []),
+        ({"q": "%_", "tinh": "ha noi", "phuong": "dong da"}, [1]),
+        ({"q": "không tồn tại", "tinh": "ha noi"}, []),
+        ({"tinh": " \t ", "phuong": " "}, [1, 2, 3, 4]),
+    ],
+)
+async def test_uc13_ac06_partial_case_accent_insensitive_address(database, filters, expected):
+    first, first_tag = await create_supplier(
+        database, ten_ncc="Vendor %_", tinh="  Thành phố Hà Nội  ", phuong=" Phường Đống Đa "
+    )
+    await create_supplier(
+        database,
+        ten_ncc="Other",
+        tinh="THA\u0300NH PHO\u0302\u0301 HA\u0300 NO\u0323\u0302I",
+        phuong="Phuong Dong Da",
+    )
+    await create_supplier(database, tinh="Thành phố Hồ Chí Minh", phuong="Phường Đống Đa")
+    await create_supplier(database, tinh="Đà Nẵng", phuong="Phường Minh Họa")
+    async with suppliers(database) as (service, _):
+        result = await service.list_suppliers(NhaCungCapListQuery(**filters), MANAGER, "r")
+        assert [row.id for row in result.data] == expected
+        assert result.meta.total == len(expected)
+        # Searching normalizes predicates only; stored text and the detail ETag stay intact.
+        after, tag = await service.get_supplier(first.data.id, MANAGER, "r")
+        assert after.data == first.data and tag == first_tag
+    assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 4
+
+
+@pytest.mark.parametrize("field", ["tinh", "phuong"])
+@pytest.mark.parametrize("term", ["%", "_", "/"])
+async def test_uc13_ac06_address_wildcards_are_literal(database, field, term):
+    await create_supplier(database, **{field: f"Địa {term} Phương"})
+    await create_supplier(database, **{field: "Địa X Phương"})
+    async with suppliers(database) as (service, _):
+        result = await service.list_suppliers(NhaCungCapListQuery(**{field: term}), MANAGER, "r")
+        assert [row.id for row in result.data] == [1] and result.meta.total == 1
 
 
 @pytest.mark.parametrize(
@@ -504,22 +555,31 @@ async def test_uc44_ac08_draft_receipt_projection_and_stale_tag(client, database
     assert await scalar(database, 'SELECT count(*) FROM "GiaoDichKho"') == 0
 
 
+# UC-13 AC-1: Lọc theo một phần địa chỉ mới sau cập nhật nhà cung cấp.
 async def test_uc44_ac01_ac04_ac06_new_address_filters_and_audit(client, database):
-    original, tag = await create_supplier(database)
+    original, tag = await create_supplier(database, tinh="Old province", phuong="Old ward")
     path = f"/api/v1/nha_cung_cap/{original.data.id}"
-    changes = {"so_dien_thoai": "not-a-phone", "tinh": "  New province  ", "phuong": "\tNew ward\t"}
+    changes = {"so_dien_thoai": "not-a-phone", "tinh": "  Hà Nội  ", "phuong": "\tMinh Họa\t"}
+    for field in ["tinh", "phuong"]:
+        old_value = SUPPLIER[field].strip().casefold()
+        new_value = changes[field].strip().casefold()
+        assert old_value not in new_value and new_value not in old_value
     response = await client.patch(path, headers={**headers(), "If-Match": tag}, json=changes)
     assert response.status_code == 200, response.text
     assert response.json()["data"]["ma_ncc"] == original.data.ma_ncc
     found = await client.get(
         "/api/v1/nha_cung_cap",
-        params={"tinh": "NEW PROVINCE", "phuong": "new WARD"},
+        params={"tinh": "nội", "phuong": "họa"},
         headers=headers(),
     )
     old = await client.get(
-        "/api/v1/nha_cung_cap", params={"tinh": SUPPLIER["tinh"]}, headers=headers()
+        "/api/v1/nha_cung_cap", params={"tinh": original.data.tinh}, headers=headers()
     )
+    assert found.status_code == 200, found.text
+    assert old.status_code == 200, old.text
     assert found.json()["meta"]["total"] == 1 and old.json()["data"] == []
+    assert [item["id"] for item in found.json()["data"]] == [original.data.id]
+    assert old.json()["meta"]["total"] == 0
     assert {key: response.json()["data"][key] for key in changes} == changes
     before = await scalar(
         database, "SELECT du_lieu_truoc FROM \"LichSuThaoTac\" WHERE thao_tac='sua'"
