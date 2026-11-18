@@ -59,6 +59,7 @@ async def api():
     events = []
     repo = AsyncMock(spec=YeuCauSanXuatRepository)
     repo.work_statuses.return_value = {}
+    repo.creator_identity.return_value = ("Quản lý", "NV-000010")
     audit, session = AsyncMock(spec=AuditWriter), AsyncMock(spec=AsyncSession)
 
     def read(id_):
@@ -191,7 +192,11 @@ async def test_first_check_uses_stock_and_reserves_remaining_requirements(api):
     assert api.held == {5: 3, 2: 7, 9: 14} and api.stock == {5: 3, 2: 100, 9: 100}
     assert response.headers["etag"] == generate_yeu_cau_etag(api.stored[1]) != old_etag
     assert data["yeu_cau"]["phien_ban"] == 2
-    assert (await api.client.get(f"{URL}/1")).headers["etag"] == response.headers["etag"]
+    detail = await api.client.get(f"{URL}/1")
+    assert detail.status_code == 200, detail.text
+    assert detail.headers["etag"] == response.headers["etag"]
+    assert detail.json()["data"]["nguoi_lap_ho_ten"] == "Quản lý"
+    assert detail.json()["data"]["nguoi_lap_ma_nhan_vien"] == "NV-000010"
 
 
 # UC-26 AC-2: Thành phẩm đã giữ cho A không tính cho B

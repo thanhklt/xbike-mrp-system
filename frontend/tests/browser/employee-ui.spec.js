@@ -164,11 +164,13 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     const dialog1 = page.locator("dialog.record-dialog");
     await expect(dialog1).toBeVisible();
     await expect(dialog1.getByRole("heading", { name: "Chi tiết yêu cầu" })).toBeVisible();
-    await expect(dialog1.locator(".badge")).toContainText("Đang thực hiện");
+    await expect(dialog1.locator(".badge")).toHaveText("Chờ duyệt phiếu xuất linh kiện");
     expect(await dialog1.locator(".info-grid > div").first().evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgb(36, 28, 23)");
 
     // Business code & authenticated user name in popup detail
     await expect(dialog1.locator(".info-grid")).toContainText("Đặng Quốc Bình — NV-000003");
+    const creator = dialog1.locator(".info-grid > div").filter({ has: page.locator("dt", { hasText: /^Người lập$/ }) });
+    await expect(creator.locator("dd")).toHaveText("Nguyễn Văn An — NV-000002");
     await expect(dialog1.locator(".info-grid")).toContainText("Xe đạp City Ride — MH-000004");
 
     // Checking materials case on request 1 (da_gui)

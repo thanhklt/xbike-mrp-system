@@ -94,7 +94,7 @@ test("read only detail contains all approved information with employee names", (
   const sent = { ...record, trang_thai: "da_gui", gui_at: "2026-11-17T08:00:00Z" };
   const entries = Object.fromEntries(requestDetailEntries(sent, items, []));
   assert.equal(entries["Nhân viên được giao"], "Nhân viên #20");
-  assert.equal(entries["Người lập"], "Chưa có họ tên");
+  assert.equal(entries["Người lập"], "—");
   assert.equal(entries["Gửi lúc"], dateTime(sent.gui_at));
   assert.match(source, /<InfoGrid entries=\{requestDetailEntries\(record, items, employees\.data \|\| \[\]\)\} \/>/);
   assert.equal((source.match(/<InfoGrid entries=\{requestDetailEntries/g) || []).length, 1);

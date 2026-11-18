@@ -234,6 +234,7 @@ frontend/tests/browser/api-fixture.js
 frontend/tests/browser/employee-filter-cycle.spec.js
 frontend/tests/browser/employee-documents-password.spec.js
 frontend/tests/browser/employee-request-filters.spec.js
+frontend/tests/browser/employee-ui.spec.js
 frontend/tests/browser/employee-work-status.spec.js
 frontend/tests/browser/issue-main-flow.spec.js
 frontend/tests/browser/request-check-layout.spec.js
@@ -270,3 +271,23 @@ specs/use_cases/production/UC-30.md
 
 - `Sidebar.jsx`: lấy thêm tổng Đã hủy bằng bộ lọc API có sẵn. Số hiển thị = tổng được giao − Hoàn thành − Đã hủy; ẩn số nếu chưa tải đủ hoặc có lỗi. Không phụ thuộc phân trang danh sách.
 - Cập nhật quy tắc trong UC-25. Không sửa API, dữ liệu hoặc KPI dashboard. Không chạy test theo yêu cầu trước đó.
+
+### Kiểm thử trước PR theo yêu cầu ngày 19/11/2026
+
+Dev yêu cầu kiểm thử lại Nhân viên từ nhận việc đến hoàn thành, rồi tạo PR vào `main`.
+
+- Backend: **329 passed** trong 9 file `test_work_status_postgres.py`, `test_phieu_xuat_postgres.py`, `test_phieu_xuat_service.py`, UC-23, UC-25, UC-26, UC-29, UC-30, UC-31. Bộ PostgreSQL chạy trên server test cổng 55465, mỗi test tự tạo DB riêng theo guard hiện có.
+- Frontend: **316 passed**, lint và build đạt. Browser: **55 test riêng biệt đạt** trong 7 file Nhân viên (lượt đầu 54/55, sau cập nhật kỳ vọng nhãn cũ chạy lại cả `employee-ui.spec.js`: 12/12; sau bổ sung kiểm tra đúng tên/mã người lập, NV-02 chạy lại đạt).
+- Cập nhật 3 file test: fixture UC-26 trả đúng tuple tên/mã người lập và kiểm tra dữ liệu/ETag; kỳ vọng fallback khi thiếu tên là `—`; NV-02 dùng nhãn Chờ duyệt phiếu xuất linh kiện và kiểm tra Người lập theo tên/mã thực.
+
+Kiểm thử trình duyệt nối API thật dùng 2 phiên đăng nhập QLK/NV riêng, không mock API. Backend tạm cổng 18001, Vite cổng 5175, schema từ `init.sql` và dữ liệu nền từ fixture hàng hóa hiện có, trên DB mới `employee_browser_4ef7987a7785475bb0749a064cab7ded_test` của server test. Các thao tác tạo/gửi yêu cầu, kiểm tra, lập/gửi/duyệt phiếu, bắt đầu sản xuất và chứng từ hoàn thành đều thực hiện trên UI.
+
+| Nhánh | Kết quả |
+| --- | --- |
+| Xuất giao 107 xe, dùng 100 xe có sẵn và sản xuất 7 | Đã giao → Chờ duyệt phiếu xuất linh kiện → Sẵn sàng sản xuất → Đang sản xuất → Chờ duyệt chứng từ hoàn thành → Chờ lập phiếu xuất → Chờ duyệt phiếu xuất → Hoàn thành |
+| Sản xuất nhập kho 7 xe | Nhận việc, kiểm tra, xuất linh kiện, sản xuất và duyệt chứng từ → Hoàn thành; không có thao tác lập phiếu xuất thành phẩm |
+| Sản xuất nhập kho 120 xe khi thiếu linh kiện | Lập/gửi phiếu khi thiếu; QLK duyệt bị chặn và phiếu vẫn chờ duyệt; nhập đủ không tự duyệt; QLK duyệt được, NV sản xuất và hoàn thành |
+
+Đối chiếu SQL chỉ đọc: 3 yêu cầu có thời điểm bắt đầu/kết thúc và trạng thái `hoan_thanh`; 4 phiếu xuất và 3 chứng từ hoàn thành mới đã duyệt. Tồn cuối 2 linh kiện = 0, thành phẩm = 127; từng số dư khớp tổng biến động sổ kho, không âm và không còn giữ hàng. UI xác nhận tên/mã người lập đúng và không có notice giải thích thừa trong hộp xác nhận NV.
+
+Lượt live đầu gặp timeout khi nối PostgreSQL test qua cổng host Windows; lượt cuối dùng IP mạng nội bộ của đúng container test, cả 3 nhánh đạt. Không chỉnh timeout hoặc nghiệp vụ của ứng dụng. Kết quả JSON và ảnh từng bước lưu ngoài repo tại `%TEMP%/xbike-employee-lifecycle-20261119/` (`browser-results.json`, `database-results.json`, `*-finished.png`). Không ghi dữ liệu hoặc reset DB Docker ứng dụng. Không khẳng định toàn hệ thống đã đạt E2E hoặc kiểm thử bản merge vào `main`.
