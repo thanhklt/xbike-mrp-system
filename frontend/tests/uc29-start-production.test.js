@@ -17,6 +17,7 @@ const dashboard = read("../src/features/dashboard/DashboardPage.jsx");
 const row = {
   id: 1, ma_yeu_cau_san_xuat: "YCSX-202611-000001", trang_thai: "dang_thuc_hien",
   nhan_vien_duoc_giao_id: 20, so_luong_can_san_xuat: 7, started_at: null,
+  trang_thai_cong_viec: "san_sang_san_xuat",
 };
 
 function handler(failure) {
@@ -41,6 +42,9 @@ function handler(failure) {
 
 // UC-29 D5: Nút chỉ dành cho NV được giao, đúng trạng thái, lượng dương, chưa bắt đầu
 test("canStartProduction enforces every role state quantity and start-time condition", () => {
+  for (const trang_thai_cong_viec of [null, undefined, "cho_duyet_xuat_linh_kien", "da_giao"]) {
+    assert.equal(canStartProduction({ ...row, trang_thai_cong_viec }, false, 20), false);
+  }
   assert.equal(canStartProduction(row, false, "20"), true);
   assert.equal(canStartProduction(row, true, 20), false);
   assert.equal(canStartProduction(row, false, 21), false);

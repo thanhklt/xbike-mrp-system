@@ -6,7 +6,6 @@ import {
   CHECK_COLUMNS,
   canCheckRequest,
   checkConfirmEntries,
-  checkImpact,
   checkLines,
   requestDetailEntries,
   unitCell,
@@ -35,7 +34,7 @@ function handler({ result = shortage, readError, writeError } = {}) {
   const body = source.slice(start, end).replace(/content: <>[\s\S]*?<\/>,/, "content: null,");
   const state = { reads: [], writes: [], notices: [], errors: [], pending: [], options: null };
   const ports = {
-    record, snapshot: { etag: '"reviewed"' }, checkPath: "/yeu_cau_san_xuat/1/kiem_tra", checkImpact,
+    record, snapshot: { etag: '"reviewed"' }, checkPath: "/yeu_cau_san_xuat/1/kiem_tra",
     checkRead: { current: null },
     readCheckPreview: async (path) => {
       state.reads.push(path);
@@ -78,7 +77,7 @@ test("check action uses approved labels and shared confirmation components", () 
   assert.match(source, /description: record\.ma_yeu_cau_san_xuat/);
   assert.match(source, /<InfoGrid entries=\{checkConfirmEntries\(ketQua, record\.loai_yeu_cau\)\} \/>/);
   assert.match(source, /<RequestCheckRows rows=\{checkLines\(ketQua\)\} \/>/);
-  assert.match(source, /impact: checkImpact\(ketQua\)/);
+  assert.match(source, /hideImpact: true/);
 });
 
 // UC-26 AC-9: Hộp nhập kho ẩn thành phẩm dùng từ kho, giữ đúng số cần sản xuất
@@ -106,25 +105,6 @@ test("shortage table preserves all six report fields and numeric columns", () =>
   assert.deepEqual(checkLines(shortage), [{ ...line, id: 2 }]);
   assert.deepEqual(shortage, original);
   assert.deepEqual(checkLines({ ...shortage, linh_kien: [], so_luong_can_san_xuat: 0 }), []);
-});
-
-// UC-26 A1: Đủ thành phẩm không có linh kiện, câu tác động chỉ giữ thành phẩm
-test("impact explains finished product only and full component reservations without deducting stock", () => {
-  assert.equal(checkImpact({ ...shortage, du_linh_kien: true }), "Giữ 3 thành phẩm và toàn bộ linh kiện; chưa trừ tồn.");
-  assert.equal(checkImpact({ ...shortage, du_linh_kien: true, linh_kien: [] }), "Giữ 3 thành phẩm; chưa trừ tồn.");
-  assert.equal(checkImpact({ ...shortage, du_linh_kien: true, giu_thanh_pham: 0 }), "Giữ toàn bộ linh kiện; chưa trừ tồn.");
-});
-
-// UC-26 A2: Thiếu không giữ linh kiện nào, nhập kho không nói giữ thành phẩm
-test("shortage impact explains waiting and all or nothing component reservation", () => {
-  assert.equal(checkImpact(shortage), "Giữ 3 thành phẩm, không giữ linh kiện nào; yêu cầu chuyển Chờ bổ sung linh kiện; chưa trừ tồn.");
-  assert.equal(checkImpact({ ...shortage, giu_thanh_pham: 0 }), "Không giữ linh kiện nào; yêu cầu chuyển Chờ bổ sung linh kiện; chưa trừ tồn.");
-});
-
-// UC-26 D3: Kiểm tra lại vẫn thiếu không có gì thay đổi
-test("recheck impact distinguishes unchanged shortages from newly held components", () => {
-  assert.equal(checkImpact({ ...shortage, lan_dau: false, giu_thanh_pham: 0 }), "Không có gì thay đổi.");
-  assert.equal(checkImpact({ ...shortage, lan_dau: false, giu_thanh_pham: 0, du_linh_kien: true }), "Giữ toàn bộ linh kiện; chưa trừ tồn.");
 });
 
 // UC-26 D5: Chi tiết chỉ hiện số chốt khi đã kiểm tra, nhập kho ẩn thành phẩm
@@ -169,14 +149,14 @@ test("confirmation posts the reviewed ETag and reports the actual recomputed res
   ports.snapshot.etag = '"changed-during-confirmation"';
   await state.options.onConfirm();
   assert.deepEqual(state.writes, [{ path: "/yeu_cau_san_xuat/1/kiem_tra", body: {}, etag: '"reviewed"' }]);
-  assert.deepEqual(state.notices, ["Yêu cầu Chờ bổ sung linh kiện."]);
+  assert.deepEqual(state.notices, ["Đã kiểm tra yêu cầu."]);
 });
 
 // UC-26 AC-7: Thông báo phân biệt đủ và kiểm tra lại vẫn thiếu
-test("notifications distinguish enough components from an unchanged recheck", async () => {
+test("check confirmations avoid exposing internal request status labels", async () => {
   for (const [result, message] of [
-    [{ ...shortage, lan_dau: false }, "Vẫn thiếu linh kiện."],
-    [{ ...shortage, du_linh_kien: true, trang_thai_du_kien: "dang_thuc_hien" }, "Yêu cầu Đang thực hiện."],
+    [{ ...shortage, lan_dau: false }, "Đã kiểm tra yêu cầu."],
+    [{ ...shortage, du_linh_kien: true, trang_thai_du_kien: "dang_thuc_hien" }, "Đã kiểm tra yêu cầu."],
   ]) {
     const { open, state } = handler({ result });
     await open();

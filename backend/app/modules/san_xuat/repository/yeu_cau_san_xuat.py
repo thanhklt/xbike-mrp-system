@@ -3,12 +3,15 @@
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, false, func, literal_column, or_, select, text, update
+from sqlalchemy import and_, case, delete, false, func, literal_column, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.bom.models import Bom, ChiTietBom
 from app.modules.mat_hang.models import MatHang
+from app.modules.nhan_vien.models import NhanVien
+from app.modules.phieu_xuat.models import PhieuXuat
 from app.modules.san_xuat.models import (
+    ChungTuHoanThanhSx,
     GiuHang,
     NhuCauLinhKien,
     YeuCauSanXuat,
@@ -32,9 +35,70 @@ def _search_text(value):
     )
 
 
+def _work_status_expression():
+    request = YeuCauSanXuat
+    component = select(PhieuXuat.trang_thai).where(
+        PhieuXuat.yeu_cau_san_xuat_id == request.id,
+        PhieuXuat.loai_phieu == "xuat_linh_kien",
+    ).scalar_subquery()
+    finished = select(PhieuXuat.trang_thai).where(
+        PhieuXuat.yeu_cau_san_xuat_id == request.id,
+        PhieuXuat.loai_phieu == "xuat_thanh_pham",
+    ).scalar_subquery()
+    completion = select(ChungTuHoanThanhSx.trang_thai).where(
+        ChungTuHoanThanhSx.yeu_cau_san_xuat_id == request.id,
+    ).scalar_subquery()
+    active = request.trang_thai == "dang_thuc_hien"
+    needs_production = request.so_luong_can_san_xuat > 0
+    export_ready = and_(active, request.loai_yeu_cau == "xuat_giao",
+                        request.kiem_tra_lan_dau_at.is_not(None),
+                        or_(request.so_luong_can_san_xuat == 0,
+                            and_(needs_production, completion == "da_duyet")))
+    return case(
+        (request.trang_thai == "hoan_thanh", "hoan_thanh"),
+        (request.trang_thai == "da_huy", "da_huy"),
+        (or_(component == "tu_choi", finished == "tu_choi", completion == "tu_choi"), None),
+        (and_(export_ready, finished == "cho_duyet"), "cho_duyet_phieu_xuat"),
+        (and_(export_ready, or_(finished.is_(None), finished == "nhap")), "cho_lap_phieu_xuat"),
+        (and_(active, request.started_at.is_not(None), completion == "cho_duyet"), "cho_duyet_hoan_thanh"),
+        (and_(active, request.started_at.is_not(None),
+              or_(completion.is_(None), completion == "nhap")), "dang_san_xuat"),
+        (and_(active, needs_production, request.started_at.is_(None), component == "da_duyet"), "san_sang_san_xuat"),
+        (and_(request.trang_thai.in_(["dang_thuc_hien", "cho_bo_sung_linh_kien"]),
+              needs_production, request.started_at.is_(None), component == "cho_duyet"), "cho_duyet_xuat_linh_kien"),
+        (and_(request.trang_thai.in_(["da_gui", "dang_thuc_hien", "cho_bo_sung_linh_kien"]),
+              request.started_at.is_(None), completion.is_(None),
+              or_(component.is_(None), component == "nhap")), "da_giao"),
+        else_=None,
+    )
+
+
 class SqlAlchemyYeuCauSanXuatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def begin_read_snapshot(self) -> None:
+        # Match the document reads: count, page and work labels share one read-only snapshot.
+        if self.session.in_transaction():
+            await self.session.rollback()
+        await self.session.connection(
+            execution_options={"isolation_level": "REPEATABLE READ", "postgresql_readonly": True},
+        )
+
+    async def work_statuses(self, request_ids: list[int]) -> dict[int, str | None]:
+        if not request_ids:
+            return {}
+        rows = await self.session.execute(
+            select(YeuCauSanXuat.id, _work_status_expression()).where(YeuCauSanXuat.id.in_(request_ids)),
+        )
+        return dict(rows.all())
+
+    async def creator_identity(self, employee_id: int) -> tuple[str | None, str | None]:
+        result = await self.session.execute(
+            select(NhanVien.ho_ten, NhanVien.ma_nhan_vien).where(NhanVien.id == employee_id),
+        )
+        row = result.one_or_none()
+        return (row.ho_ten, row.ma_nhan_vien) if row else (None, None)
 
     async def giu_hang_dang_giu(self, yeu_cau_id: int, *, lock: bool) -> list[HangTraLine]:
         query = (
@@ -162,6 +226,8 @@ class SqlAlchemyYeuCauSanXuatRepository:
         self, params: YeuCauListQuery, actor_id: int | None
     ) -> RecordPage[YeuCauRead]:
         query = select(YeuCauSanXuat)
+        if params.trang_thai_cong_viec is not None:
+            query = query.where(_work_status_expression() == params.trang_thai_cong_viec)
         if actor_id is not None:
             query = query.where(
                 YeuCauSanXuat.nhan_vien_duoc_giao_id == actor_id,

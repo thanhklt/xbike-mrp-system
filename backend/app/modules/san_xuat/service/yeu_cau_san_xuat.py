@@ -38,6 +38,7 @@ from app.modules.san_xuat.schemas import (
     PhieuXuatHuyLine,
     ResponseMeta,
     YeuCauChoBoSung,
+    YeuCauCongViecRead,
     YeuCauCreate,
     YeuCauDetailResponse,
     YeuCauListQuery,
@@ -359,6 +360,14 @@ class YeuCauSanXuatService:
             generate_yeu_cau_etag(record),
         )
 
+    async def _work_records(self, records: list[YeuCauRead], actor: dict) -> list[YeuCauRead]:
+        if "quan_ly" in actor.get("roles", []):
+            return records
+        statuses = await self.repository.work_statuses([record.id for record in records])
+        return [YeuCauCongViecRead(
+            **record.model_dump(exclude={"trang_thai_cong_viec"}), trang_thai_cong_viec=statuses.get(record.id),
+        ) for record in records]
+
     # UC-23 Lập và gửi yêu cầu sản xuất — A2; D5 (specs/use_cases/production/UC-23.md)
     # UC-25 Xem danh sách yêu cầu sản xuất — Main 2–3; A1, A3 (specs/use_cases/production/UC-25.md)
     async def list_entries(
@@ -367,12 +376,15 @@ class YeuCauSanXuatService:
         if not {"quan_ly", "nhan_vien"}.intersection(actor.get("roles", [])):
             raise ForbiddenException()
         actor_id = None if "quan_ly" in actor["roles"] else int(actor["sub"])
+        if actor_id is None and params.trang_thai_cong_viec is not None:
+            raise ForbiddenException()
+        await self.repository.begin_read_snapshot()
         if params.sort is None:
             # Dev chốt 16/11/2026: mặc định mới nhất trước cho cả QLK và NV (UC-25 R2, AC-3).
             params = params.model_copy(update={"sort": "-created_at"})
         result = await self.repository.list_entries(params, actor_id)
         return YeuCauListResponse(
-            data=result.items,
+            data=await self._work_records(result.items, actor),
             meta=ListResponseMeta(
                 request_id=request_id,
                 page=params.page,
@@ -387,7 +399,15 @@ class YeuCauSanXuatService:
     async def get_entry(
         self, resource_id: int, actor: dict, request_id: str
     ) -> tuple[YeuCauDetailResponse, str]:
-        return self._detail(await self._require_request(resource_id, actor), request_id)
+        await self.repository.begin_read_snapshot()
+        record = await self._require_request(resource_id, actor)
+        result, etag = self._detail(record, request_id)
+        if "quan_ly" not in actor.get("roles", []):
+            result.data = (await self._work_records([record], actor))[0]
+            (
+                result.data.nguoi_lap_ho_ten, result.data.nguoi_lap_ma_nhan_vien,
+            ) = await self.repository.creator_identity(record.nhan_vien_id)
+        return result, etag
 
     async def _validate_product(self, item_id: int) -> None:
         records = await self.items.read_items([item_id], lock=True)

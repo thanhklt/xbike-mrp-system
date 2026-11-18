@@ -62,6 +62,10 @@ class IssueStockContext:
 
 
 class InventoryIssueWriter(Protocol):
+    async def reserve_issue_stock(
+        self, request_id: int, demand: dict[int, int], at: datetime
+    ) -> None: ...
+
     async def lock_issue_stock(
         self, request_id: int, item_ids: list[int]
     ) -> list[IssueStockContext]: ...

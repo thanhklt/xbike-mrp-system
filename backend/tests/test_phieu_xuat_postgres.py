@@ -22,6 +22,52 @@ BASE = "/api/v1/phieu_xuat"
 MANAGER = {"sub": "1", "roles": ["quan_ly"]}
 
 
+async def test_waiting_issue_can_be_sent_then_approved_after_receipt(
+    goods_issue_client, goods_issue_auth, goods_issue_scenario, goods_issue_pending,
+):
+    scenario = goods_issue_scenario
+    source = await scenario.source(production=101, state="cho_bo_sung_linh_kien")
+    created, pending, _ = await goods_issue_pending(source=source)
+    path = created.headers["location"]
+    headers = {**goods_issue_auth(1), "If-Match": pending.headers["etag"]}
+    before = await scenario.snapshot()
+
+    rejected = await goods_issue_client.post(path + "/duyet", headers=headers, json={})
+    assert rejected.status_code == 409, rejected.text
+    assert await scenario.snapshot() == before
+
+    # A real receipt supplies stock; receiving does not approve the pending issue.
+    from datetime import date
+
+    receipt = await goods_issue_client.post(
+        "/api/v1/phieu_nhap", headers=goods_issue_auth(1), json={
+            "ncc_id": 1, "ngay_nhap": date.today().isoformat(),
+            "chi_tiet": [{"mat_hang_id": item, "so_luong": 200, "don_gia_thuc": 1}
+                      for item in scenario.component_ids],
+        },
+    )
+    assert receipt.status_code == 201, receipt.text
+    received = await goods_issue_client.post(
+        receipt.headers["location"] + "/hoan_tat",
+        headers={**goods_issue_auth(1), "If-Match": receipt.headers["etag"]}, json={},
+    )
+    assert received.status_code == 200, received.text
+    assert await scenario.scalar('SELECT trang_thai FROM "PhieuXuat"') == "cho_duyet"
+
+    approved = await goods_issue_client.post(path + "/duyet", headers=headers, json={})
+    assert approved.status_code == 200, approved.text
+    assert await scenario.scalar(
+        'SELECT trang_thai FROM "YeuCauSanXuat" WHERE id=:id', id=source,
+    ) == "dang_thuc_hien"
+    assert await scenario.scalar('SELECT sum(so_luong_dang_giu) FROM "MatHang"') == 0
+    assert [row["so_luong_ton"] for row in await scenario.sql(
+        'SELECT so_luong_ton FROM "MatHang" WHERE loai_mat_hang=\'linh_kien\' ORDER BY id',
+    )] == [199, 98]
+    replay = await goods_issue_client.post(path + "/duyet", headers=headers, json={})
+    assert replay.status_code == 200
+    assert replay.json()["data"]["da_ghi_so_truoc_do"] is True
+
+
 @pytest.fixture
 def race_at_source(monkeypatch):
     def synchronize():
@@ -44,6 +90,43 @@ def issue_service(session):
         SqlAlchemyTransaction(session),
         SqlAlchemyInventoryRepository(session),
     )
+
+
+async def test_two_waiting_issues_cannot_use_the_same_available_stock(
+    goods_issue_client, goods_issue_auth, goods_issue_scenario, goods_issue_pending, race_at_source,
+):
+    scenario = goods_issue_scenario
+    sources = [await scenario.source(production=40, state="cho_bo_sung_linh_kien") for _ in range(2)]
+    issues = [await goods_issue_pending(source=source) for source in sources]
+    race_at_source()
+    results = await asyncio.gather(*(
+        goods_issue_client.post(created.headers["location"] + "/duyet", headers={
+            **goods_issue_auth(1), "If-Match": pending.headers["etag"],
+        }, json={}) for created, pending, _ in issues
+    ))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    assert await scenario.scalar('SELECT sum(so_luong_dang_giu) FROM "MatHang"') == 0
+    assert await scenario.scalar('SELECT count(*) FROM "GiaoDichKho" WHERE chi_tiet_phieu_xuat_id IS NOT NULL') == 2
+
+
+async def test_waiting_issue_rolls_back_new_reservations_and_source_on_posting_failure(
+    goods_issue_database, goods_issue_scenario, goods_issue_pending, monkeypatch,
+):
+    scenario = goods_issue_scenario
+    source = await scenario.source(state="cho_bo_sung_linh_kien")
+    created, pending, _ = await goods_issue_pending(source=source)
+    before = await scenario.snapshot()
+
+    async def fail_posting(*args, **kwargs):
+        raise RuntimeError("posting failure after reservation")
+
+    monkeypatch.setattr(SqlAlchemyInventoryRepository, "issue_stock", fail_posting)
+    async with goods_issue_database.sessions() as session:
+        with pytest.raises(RuntimeError, match="posting failure after reservation"):
+            await issue_service(session).approve(
+                created.json()["data"]["id"], MANAGER, pending.headers["etag"], "rollback-test",
+            )
+    assert await scenario.snapshot() == before
 
 
 async def test_uc34_gi_ac04_13_concurrent_create(

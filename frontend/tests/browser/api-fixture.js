@@ -103,6 +103,25 @@ export function adminActivityEntries() {
   }));
 }
 
+function requestWithWorkStatus(request, resources) {
+  const issues = resources.phieu_xuat.filter((entry) => entry.yeu_cau_san_xuat_id === request.id);
+  const component = issues.find((entry) => entry.loai_phieu === "xuat_linh_kien");
+  const finished = issues.find((entry) => entry.loai_phieu === "xuat_thanh_pham");
+  const completion = resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === request.id);
+  let work = null;
+  if (["hoan_thanh", "da_huy"].includes(request.trang_thai)) work = request.trang_thai;
+  else if ([component, finished, completion].some((entry) => entry?.trang_thai === "tu_choi")) work = null;
+  else if (request.trang_thai === "dang_thuc_hien" && request.loai_yeu_cau === "xuat_giao" &&
+    (request.so_luong_can_san_xuat === 0 || completion?.trang_thai === "da_duyet"))
+    work = finished?.trang_thai === "cho_duyet" ? "cho_duyet_phieu_xuat" : "cho_lap_phieu_xuat";
+  else if (request.started_at)
+    work = completion?.trang_thai === "cho_duyet" ? "cho_duyet_hoan_thanh" : "dang_san_xuat";
+  else if (component?.trang_thai === "da_duyet") work = "san_sang_san_xuat";
+  else if (component?.trang_thai === "cho_duyet") work = "cho_duyet_xuat_linh_kien";
+  else if (request.trang_thai !== "nhap") work = "da_giao";
+  return { ...request, trang_thai_cong_viec: work };
+}
+
 export async function installApi(page, { role = "quan_ly", authenticated = true, intercept } = {}) {
   const people = [
     {
@@ -696,7 +715,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       const type = call.params.loai_phieu;
       if (!["xuat_linh_kien", "xuat_thanh_pham"].includes(type)) return respond({ error: { message: "Loại phiếu không hợp lệ" } }, 422);
       const completed = state.resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === source.id);
-      if (source.trang_thai !== "dang_thuc_hien" || saved.some((entry) => entry.loai_phieu === type) ||
+      if (!(type === "xuat_linh_kien" ? ["dang_thuc_hien", "cho_bo_sung_linh_kien"] : ["dang_thuc_hien"]).includes(source.trang_thai) || saved.some((entry) => entry.loai_phieu === type) ||
         (type === "xuat_linh_kien" ? !(source.so_luong_can_san_xuat > 0) :
           source.loai_yeu_cau !== "xuat_giao" || !(source.so_luong_can_san_xuat === 0 || completed?.trang_thai === "da_duyet")))
         return respond({ error: { message: "Yêu cầu chưa đủ điều kiện hoặc đã có phiếu" } }, 409);
@@ -756,7 +775,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           !["xuat_linh_kien", "xuat_thanh_pham"].includes(body.loai_phieu))
           return respond({ error: { message: "Payload không đúng hợp đồng" } }, 422);
         const completed = state.resources.chung_tu_hoan_thanh_sx.find((entry) => entry.yeu_cau_san_xuat_id === source.id);
-        if (source.trang_thai !== "dang_thuc_hien" || (body.loai_phieu === "xuat_linh_kien"
+        if (!(body.loai_phieu === "xuat_linh_kien" ? ["dang_thuc_hien", "cho_bo_sung_linh_kien"] : ["dang_thuc_hien"]).includes(source.trang_thai) || (body.loai_phieu === "xuat_linh_kien"
           ? !(source.so_luong_can_san_xuat > 0)
           : source.loai_yeu_cau !== "xuat_giao" || !(source.so_luong_can_san_xuat === 0 || completed?.trang_thai === "da_duyet")))
           return respond({ error: { message: "Yêu cầu chưa đủ điều kiện lập phiếu" } }, 409);
@@ -800,14 +819,20 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       });
     if (method === "GET" && rawId)
       return record
-        ? respond({ data: record, meta: {} }, 200, { etag: version() })
+        ? respond({ data: resource === "yeu_cau_san_xuat" && role === "nhan_vien"
+          ? { ...requestWithWorkStatus(record, state.resources),
+              nguoi_lap_ho_ten: people.find((person) => person.id === record.nhan_vien_id)?.ho_ten,
+              nguoi_lap_ma_nhan_vien: people.find((person) => person.id === record.nhan_vien_id)?.ma_nhan_vien }
+          : record, meta: {} }, 200, { etag: version() })
         : respond({ error: { message: "Không tìm thấy" } }, 404);
     if (method === "GET") {
       if ((resource === "phieu_xuat" || resource === "chung_tu_hoan_thanh_sx") && role === "nhan_vien") {
         return respond({ error: { message: "Không có quyền truy cập danh sách" } }, 403);
       }
       const foldSearch = (value) => String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
-      let matching = records.filter((entry) =>
+      const visibleRecords = resource === "yeu_cau_san_xuat" && role === "nhan_vien"
+        ? records.map((entry) => requestWithWorkStatus(entry, state.resources)) : records;
+      let matching = visibleRecords.filter((entry) =>
         !(resource === "yeu_cau_san_xuat" && role === "nhan_vien" &&
           (entry.trang_thai === "nhap" || entry.nhan_vien_duoc_giao_id !== user.id)) &&
         Object.entries(call.params).every(([key, value]) =>

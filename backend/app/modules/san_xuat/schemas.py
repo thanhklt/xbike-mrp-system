@@ -11,6 +11,10 @@ INT_MAX = 2**31 - 1
 YeuCauStatus = Literal[
     "nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"
 ]
+CongViecStatus = Literal[
+    "da_giao", "cho_duyet_xuat_linh_kien", "san_sang_san_xuat", "dang_san_xuat",
+    "cho_duyet_hoan_thanh", "cho_lap_phieu_xuat", "cho_duyet_phieu_xuat", "hoan_thanh", "da_huy",
+]
 YeuCauSort = Literal[
     "id", "-id", "created_at", "-created_at", "ma_yeu_cau_san_xuat", "-ma_yeu_cau_san_xuat",
     "han_hoan_thanh", "-han_hoan_thanh",
@@ -81,6 +85,7 @@ class YeuCauListQuery(BaseModel):
     q: str | None = None
     mat_hang_id: int | None = Field(default=None, gt=0)
     trang_thai: YeuCauStatus | None = None
+    trang_thai_cong_viec: CongViecStatus | None = None
     loai_yeu_cau: LoaiYeuCau | None = None
     nhan_vien_duoc_giao_id: int | None = Field(default=None, gt=0)
     tu_ngay: date | None = None
@@ -119,6 +124,12 @@ class YeuCauRead(BaseModel):
     nguoi_huy_id: int | None
     ly_do_huy: str | None
     phien_ban: int
+
+
+class YeuCauCongViecRead(YeuCauRead):
+    trang_thai_cong_viec: CongViecStatus | None = Field(default=None, exclude_if=lambda value: value is None)
+    nguoi_lap_ho_ten: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    nguoi_lap_ma_nhan_vien: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class ResponseMeta(BaseModel):
@@ -249,12 +260,12 @@ class ChungTuListResponse(BaseModel):
 
 
 class YeuCauDetailResponse(BaseModel):
-    data: YeuCauRead
+    data: YeuCauRead | YeuCauCongViecRead
     meta: ResponseMeta
 
 
 class YeuCauListResponse(BaseModel):
-    data: list[YeuCauRead]
+    data: list[YeuCauRead | YeuCauCongViecRead]
     meta: ListResponseMeta
 
 

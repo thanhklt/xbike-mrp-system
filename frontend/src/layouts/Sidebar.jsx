@@ -122,23 +122,34 @@ export function Sidebar({
     { page: 1, page_size: 1, trang_thai: "hoan_thanh" },
     employeeTheme && canAccessPath("nhan_vien", pathname),
   );
+  const cancelledRequests = useResource(
+    API.requests,
+    { page: 1, page_size: 1, trang_thai: "da_huy" },
+    employeeTheme && canAccessPath("nhan_vien", pathname),
+  );
   const totalAssigned = assignedRequests.data?.meta?.total;
   const completedAssigned = completedRequests.data?.meta?.total;
+  const cancelledAssigned = cancelledRequests.data?.meta?.total;
   const isAssignedPending = assignedRequests.isPending || assignedRequests.isLoading;
   const isCompletedPending = completedRequests.isPending || completedRequests.isLoading;
+  const isCancelledPending = cancelledRequests.isPending || cancelledRequests.isLoading;
   const isAssignedError = Boolean(assignedRequests.isError || assignedRequests.error);
   const isCompletedError = Boolean(completedRequests.isError || completedRequests.error);
+  const isCancelledError = Boolean(cancelledRequests.isError || cancelledRequests.error);
 
   const hasValidBadgeCounts =
     !isAssignedPending &&
     !isCompletedPending &&
+    !isCancelledPending &&
     !isAssignedError &&
     !isCompletedError &&
+    !isCancelledError &&
     typeof totalAssigned === "number" &&
-    typeof completedAssigned === "number";
+    typeof completedAssigned === "number" &&
+    typeof cancelledAssigned === "number";
 
   const activeAssignedCount = hasValidBadgeCounts
-    ? Math.max(0, totalAssigned - completedAssigned)
+    ? Math.max(0, totalAssigned - completedAssigned - cancelledAssigned)
     : undefined;
   return (
     <aside

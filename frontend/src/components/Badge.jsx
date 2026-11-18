@@ -7,7 +7,7 @@ const STATUS_TONES = new Map([
   ["dang_thuc_hien", "teal"],
 ]);
 
-export function Badge({ status, children }) {
+export function Badge({ status, children, tone }) {
   const color =
     STATUS_TONES.get(status) ??
     (["hoan_thanh", "da_duyet", "da_xac_nhan", "da_xu_ly", "hoat_dong"].includes(status)
@@ -18,7 +18,7 @@ export function Badge({ status, children }) {
           ? "red"
           : "blue");
   return (
-    <span className={`badge badge-${color}`}>{children || STATUS_LABELS[status] || status}</span>
+    <span className={`badge badge-${tone || color}`}>{children || STATUS_LABELS[status] || status}</span>
   );
 }
 

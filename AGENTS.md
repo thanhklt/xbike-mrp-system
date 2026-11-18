@@ -19,13 +19,16 @@ Không tự ý accept các sự thay đổi
 - Có thể tiếp tục đọc code, kiểm tra tài liệu hoặc làm các phần độc lập đã rõ yêu cầu trong khi chờ phản hồi.
 - Không xem việc dev chưa phản hồi là sự đồng ý với một giả định.
 
-## 3. Đọc tài liệu đã thống nhất khi bắt đầu phiên mới
+## 3. Đọc spec trước, rồi đối chiếu Google Drive
 
-Nguồn tài liệu đã thống nhất của project:
+Nguồn tài liệu của project theo thứ tự đọc:
 
-[Thư mục Google Drive của project](https://drive.google.com/drive/folders/1AVkmFGSHI-zgRTCzaxAh9qyD1_FkFFd9)
+1. Spec trong repository tại `specs/`, gồm use case và quy tắc nghiệp vụ liên quan trực tiếp đến tác vụ.
+2. [Thư mục Google Drive của project](https://drive.google.com/drive/folders/1AVkmFGSHI-zgRTCzaxAh9qyD1_FkFFd9).
 
-- Mỗi khi bắt đầu một phiên mới mà chưa có ngữ cảnh về project, phải mở thư mục trên và đọc các tài liệu đã thống nhất để nắm yêu cầu, phạm vi, mô hình dữ liệu và các quyết định liên quan trước khi triển khai.
+- Trước khi triển khai tác vụ, agent phải đọc spec liên quan trong repository trước, rồi mới đọc tài liệu Google Drive để đối chiếu hoặc bổ sung ngữ cảnh. Không bắt đầu từ Drive rồi dùng tài liệu đó để bỏ qua spec hiện có.
+- Mỗi khi bắt đầu một phiên mới mà chưa có ngữ cảnh về project, phải đọc tài liệu theo đúng thứ tự trên để nắm yêu cầu, phạm vi, mô hình dữ liệu và các quyết định liên quan trước khi triển khai.
+- Thứ tự đọc không đồng nghĩa với quyền tự chọn nguồn thắng khi có mâu thuẫn. Nếu spec và Drive khác nhau, nêu rõ nội dung khác biệt, dẫn nguồn và hỏi lại dev trước khi sửa phần liên quan; không tự hợp nhất hai luồng nghiệp vụ.
 - Không suy đoán nội dung tài liệu từ tên file, cấu trúc code hoặc trí nhớ chưa được xác minh.
 - Nếu không truy cập được thư mục hoặc tài liệu cần thiết, báo rõ cho dev và yêu cầu cấp quyền hoặc cung cấp nội dung. Không tự thay thế thông tin thiếu bằng giả định.
 - Nếu tài liệu, code hiện tại và yêu cầu của dev có điểm mâu thuẫn hoặc chưa rõ, nêu cụ thể điểm đó và hỏi lại dev trước khi sửa phần liên quan.

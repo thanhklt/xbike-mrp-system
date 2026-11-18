@@ -375,6 +375,14 @@ class SqlAlchemyPhieuXuatRepository:
             raise NotFoundException()
         return resource
 
+    async def ready_for_production(self, request_id: int, at: datetime) -> dict:
+        result = await self.session.execute(
+            text('''UPDATE "YeuCauSanXuat" SET trang_thai='dang_thuc_hien', updated_at=:at,
+                phien_ban=phien_ban+1 WHERE id=:id AND trang_thai='cho_bo_sung_linh_kien'
+                RETURNING *'''), {"id": request_id, "at": at},
+        )
+        return dict(result.mappings().one())
+
     async def update_progress(self, request_id: int, at: datetime) -> dict:
         row = (
             (

@@ -80,6 +80,19 @@ def test_uc34_gi_ac03_input_only_source_and_kind():
     assert payload.model_dump() == {"loai_phieu": "xuat_linh_kien", "yeu_cau_san_xuat_id": 1}
 
 
+def test_component_issue_can_be_prepared_while_waiting_for_stock():
+    source = IssueSource("cho_bo_sung_linh_kien", 2, 1, {7: 7}, "xuat_giao", 7, None, None, {})
+    PhieuXuatService._source_state("xuat_linh_kien", source)
+
+
+def test_waiting_for_components_does_not_allow_finished_goods_issue():
+    from app.core.errors import InvalidWorkflowState
+
+    source = IssueSource("cho_bo_sung_linh_kien", 2, 1, {7: 7}, "xuat_giao", 7, None, None, {})
+    with pytest.raises(InvalidWorkflowState):
+        PhieuXuatService._source_state("xuat_thanh_pham", source)
+
+
 @pytest.mark.parametrize("roles", [["quan_ly"], ["quan_tri_vien"]])
 async def test_uc34_gi_ac01_manager_cannot_create_directly(roles):
     repository = SimpleNamespace(lock_source=AsyncMock())

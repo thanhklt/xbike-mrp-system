@@ -37,13 +37,13 @@ import {
   canStartProduction,
   checkConfirmEntries,
   checkLines,
-  checkImpact,
   REQUEST_TYPE_LABELS,
   initialRequestValues,
   canEditRequest,
   canCancelRequest,
   requestDetailEntries,
   requestListFilters,
+  requestWorkStatus,
   requestCreateBody,
   sendConfirmEntries,
 } from "./requestForm.js";
@@ -80,9 +80,7 @@ export function RequestsPage() {
     <>
       <PageHeader
         title={manager ? "Yêu cầu sản xuất" : "Yêu cầu được giao"}
-        subtitle={manager
-          ? "Lập yêu cầu sản xuất và gửi cho nhân viên được giao."
-          : "Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi."}
+        subtitle={manager ? "Lập yêu cầu sản xuất và gửi cho nhân viên được giao." : undefined}
         action={
           manager && (
             <Link className="btn btn-primary" to={`${base}/moi`}>
@@ -124,7 +122,7 @@ export function RequestsPage() {
           {
             key: "trang_thai",
             label: "Trạng thái",
-            render: (row) => <Badge status={row.trang_thai} />,
+            render: (row) => <RequestStatusBadge record={row} manager={manager} />,
           },
           {
             key: "action",
@@ -157,6 +155,11 @@ export function RequestsPage() {
     </>
   );
 }
+function RequestStatusBadge({ record, manager }) {
+  const work = manager ? undefined : requestWorkStatus(record);
+  return <Badge status={record.trang_thai} tone={work?.tone}>{work?.label}</Badge>;
+}
+
 function RequestEditor({ snapshot, items, employees, manager, base, userId, refreshing, detailUpdatedAt }) {
   const record = snapshot?.data;
   const initial = initialRequestValues(record);
@@ -219,19 +222,17 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, refr
           <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
           <RequestCheckRows rows={checkLines(ketQua)} />
         </>,
-        impact: checkImpact(ketQua),
+        hideImpact: true,
         onConfirm: async () => {
           if (controller.signal.aborted) {
             throw new Error("Chi tiết yêu cầu đã thay đổi. Hãy mở lại kiểm tra.");
           }
-          const result = await checkMutation.mutateAsync({
+          await checkMutation.mutateAsync({
             path: checkPath,
             body: {},
             etag,
           });
-          const actual = result.data.ket_qua;
-          notify(actual.du_linh_kien ? "Yêu cầu Đang thực hiện."
-            : actual.lan_dau ? "Yêu cầu Chờ bổ sung linh kiện." : "Vẫn thiếu linh kiện.");
+          notify("Đã kiểm tra yêu cầu.");
         },
       });
     } catch (failure) {
@@ -359,7 +360,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, refr
         <>
           <div className="actions">
             <h3>{record.ma_yeu_cau_san_xuat}</h3>
-            <Badge status={record.trang_thai} />
+            <RequestStatusBadge record={record} manager={manager} />
           </div>
           <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
           <CompletionSection record={record} items={items} manager={manager} userId={userId} />
@@ -522,7 +523,7 @@ function RequestCheckAvailability({ availability, requestType }) {
       </>
     );
   }
-  if (availability.du_linh_kien) return <Notice>Đã đủ linh kiện, chờ xác nhận</Notice>;
+  if (availability.du_linh_kien) return <Notice>Đã đủ linh kiện</Notice>;
   return (
     <section className="stack request-check-results">
       <h3>Linh kiện thiếu</h3>
@@ -649,7 +650,7 @@ function CompletionSection({ record, items, manager, userId }) {
       title: completion.trang_thai === "tu_choi" ? "Gửi lại chứng từ hoàn thành" : "Gửi chứng từ hoàn thành",
       description: completion.ma_phieu,
       content: <InfoGrid entries={completionConfirmEntries(completion, record, items, !manager)} />,
-      impact: "Chưa cộng tồn thành phẩm.",
+      hideImpact: true,
       onConfirm: async () => {
         await completionMutation.mutateAsync({
           path: [API.completions, completion.id, "gui"].join("/"),
@@ -676,7 +677,6 @@ function CompletionSection({ record, items, manager, userId }) {
         ) : (creating ? (
           <>
             <InfoGrid entries={[["Số lượng hoàn thành", number(record.so_luong_can_san_xuat)]]} />
-            <Notice>Thời điểm hoàn thành do hệ thống ghi khi bạn xác nhận gửi.</Notice>
             <div className="actions actions-end">
               <Button variant="secondary" disabled={completionMutation.isPending} onClick={() => setCreating(false)}>Bỏ</Button>
               <Button disabled={completionMutation.isPending} onClick={saveCompletion}>Lưu</Button>

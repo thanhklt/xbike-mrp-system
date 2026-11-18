@@ -58,6 +58,7 @@ async def api():
     boms = {101: {9: 2, 2: 1}, 102: {2: 8}}
     events = []
     repo = AsyncMock(spec=YeuCauSanXuatRepository)
+    repo.work_statuses.return_value = {}
     audit, session = AsyncMock(spec=AuditWriter), AsyncMock(spec=AsyncSession)
 
     def read(id_):

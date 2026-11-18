@@ -35,7 +35,7 @@ test("employee dropdown filters preserve collapse, apply valid dates, and leave 
   await sortSelect.selectOption("-created_at");
   await expect(sortSelect).toHaveValue("-created_at");
   const statusSelect = form.getByRole("combobox", { name: "Trạng thái", exact: true });
-  await statusSelect.selectOption("da_gui");
+  await statusSelect.selectOption("da_giao");
   await statusSelect.focus();
   await expect(statusSelect).toBeFocused();
   const employeeDropdownStyle = await statusSelect.locator("..").evaluate((element) => {

@@ -131,11 +131,20 @@ sequenceDiagram
             R-->>C: 422 du_lieu_khong_hop_le
         else Hợp lệ
             R->>S: list_entries(params, actor, request_id)
-            S->>S: Thiếu sort, N dùng created_at, Q dùng -created_at
+            break Q dùng trang_thai_cong_viec chỉ dành cho N
+                S-->>C: 403 khong_co_quyen
+            end
+            S->>S: Thiếu sort, cả N và Q dùng -created_at
+            S->>P: begin_read_snapshot()
+            P->>D: Kết thúc transaction đọc auth, REPEATABLE READ READ ONLY
             S->>P: list_entries(params, N.id hoặc null với Q)
             P->>P: Nếu q khác trắng, JOIN MatHang và lọc chứa mã/tên sau chuẩn hóa hoa/thường và dấu
-            P->>D: COUNT theo phạm vi và bộ lọc, N loại nhap
+            P->>D: COUNT theo phạm vi và bộ lọc, N loại nhap, lọc CASE bước công việc nếu có
             P->>D: SELECT cùng bộ lọc, ORDER BY cột rồi id cùng chiều, OFFSET/LIMIT
+            opt Người xem là N
+                S->>P: work_statuses(IDs của trang)
+                P->>D: SELECT CASE trạng thái yêu cầu và phiếu/chứng từ liên quan theo lô
+            end
             S-->>C: 200 data[] + meta phân trang
         end
     end
@@ -154,7 +163,10 @@ tăng hoặc dấu `-` cho giảm; luôn thêm `id` cùng chiều làm khóa ph�
 Sai loại/sort trả 422. Bộ lọc người được giao không thay thế phạm vi N: lọc người khác
 trả danh sách rỗng. Q vẫn thấy yêu cầu giao cho nhân viên bị khóa, không JOIN/lọc trạng thái NV.
 Meta có `request_id`, `page`, `page_size`, `total`, `total_pages`.
-Projection Q/N cùng các field, khác phạm vi dòng. Không audit, không ETag danh sách.
+N có thêm `trang_thai_cong_viec` cho 9 bước theo UC-25; field được bỏ khi không có
+bước phù hợp (nhánh sau từ chối) và khi người xem là Q. Query cùng tên chỉ dành N,
+lọc CASE trước COUNT/OFFSET/LIMIT; giá trị ngoài enum trả 422. Không audit hoặc
+ETag danh sách; không tải phiếu riêng cho từng dòng.
 
 ## GET /api/v1/yeu_cau_san_xuat/{id}
 
@@ -174,6 +186,8 @@ sequenceDiagram
     else Cho phép
         R->>R: ID dương, không query (sai: 422)
         R->>S: get_entry(id, actor, request_id)
+        S->>P: begin_read_snapshot()
+        P->>D: Kết thúc transaction đọc auth, REPEATABLE READ READ ONLY
         S->>P: get_by_id(id), trừ ID vượt INT32
         P->>D: SELECT yêu cầu
         alt Vượt INT32 / không tồn tại / N đọc Nháp
@@ -182,12 +196,29 @@ sequenceDiagram
             S-->>C: 403 khong_co_quyen
         else Trong phạm vi
             S->>S: Tạo ETag canonical từ YeuCauRead
+            opt Người xem là N
+                S->>P: work_statuses([id])
+                P->>D: SELECT CASE bước từ yêu cầu và phiếu/chứng từ liên quan
+                P-->>S: Bước công việc hoặc null
+                S->>P: creator_identity(nhan_vien_id)
+                P->>D: SELECT NhanVien.ho_ten, ma_nhan_vien WHERE id = người lập
+                P-->>S: Họ tên và mã nhân viên của người lập hoặc null
+            end
             S-->>C: 200 YeuCauRead + meta + ETag
         end
     end
 ```
 
-Không audit. Response và ETag dùng trực tiếp bản ghi yêu cầu, không truy vấn tiến độ xuất (D6).
+Không audit hoặc truy vấn tiến độ xuất (D6). ETag giữ snapshot YeuCauRead; chỉ N
+được bổ sung field trình bày `trang_thai_cong_viec` khi có bước phù hợp. Đổi nháp/gửi
+phiếu có thể đổi nhãn mà không đổi ETag yêu cầu; UI tải lại dữ liệu sau mutation,
+không dùng nhãn để thay thế kiểm tra quyền/phiên bản của endpoint ghi.
+
+Dev chốt 19/11/2026: GET chi tiết của N bổ sung `nguoi_lap_ho_ten` và
+`nguoi_lap_ma_nhan_vien` khi có giá trị, sau khi kiểm tra phạm vi yêu cầu.
+UI hiển thị Người lập theo `Họ tên — NV-xxxxxx`, giống Nhân viên được giao.
+Chỉ đọc họ tên và mã người lập, không mở quyền GET hồ sơ người khác hoặc danh sách nhân viên.
+Field trình bày không tham gia ETag hoặc audit, không thay đổi schema DB hay API ghi.
 
 ## POST /api/v1/yeu_cau_san_xuat
 

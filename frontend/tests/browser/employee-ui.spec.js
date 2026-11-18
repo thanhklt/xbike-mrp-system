@@ -84,7 +84,7 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     expect(errorState.unexpected).toEqual([]);
   });
 
-  test("NV-01b completed exclusion from Sidebar badge and KPI with gated completed query", async ({
+  test("NV-01b completed exclusion from badge and KPI, with cancelled requests excluded from badge", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -140,6 +140,10 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     // Total assigned (5) - completed (2) = 3 active assigned requests
     await expect(firstMetric).toHaveText("3");
     await expect(sidebarLink.locator("[class*='badge']")).toHaveText("3");
+
+    mixedRequests[0].trang_thai = "da_huy";
+    await page.reload();
+    await expect(sidebarLink.locator("[class*='badge']")).toHaveText("2");
   });
 
   test("NV-02 assigned request details, check materials and start production", async ({
@@ -271,9 +275,9 @@ test.describe("Employee UI specification verification (§14-19)", () => {
     const state = await installApi(page, { role: "nhan_vien" });
     await page.goto("/nv/yeu-cau");
 
-    // Employee request page stays read-only with approved subtitle.
+    // Employee request page stays read-only without a subtitle.
     await expect(page.getByRole("heading", { name: "Yêu cầu được giao", exact: true })).toBeVisible();
-    await expect(page.locator("main .page-heading p.muted")).toHaveText("Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi.");
+    await expect(page.locator("main .page-heading p.muted")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Tạo yêu cầu sản xuất" })).toHaveCount(0);
     await expect(page.getByRole("table")).toBeVisible();
     await page.screenshot({ path: "test-results/employee-requests-1440x900.png", fullPage: true });

@@ -184,7 +184,8 @@ sequenceDiagram
 ## POST /api/v1/phieu_xuat
 
 Input chỉ `{loai_phieu, yeu_cau_san_xuat_id}`. Loại `xuat_linh_kien` hoặc
-`xuat_thanh_pham`. Source phải `dang_thuc_hien`, giao đúng NV. LK lấy đúng đủ
+`xuat_thanh_pham`. Source giao đúng NV; LK cho phép `dang_thuc_hien` hoặc
+`cho_bo_sung_linh_kien`, TP chỉ `dang_thuc_hien`. LK lấy đúng đủ
 NhuCauLinhKien đã chốt, cần lượng sản xuất > 0. TP chỉ `xuat_giao`, lượng toàn bộ yêu
 cầu; nếu cần sản xuất thì chứng từ hoàn thành của nguồn phải `da_duyet`. Không tính
 lại BOM; TP đã ngừng vẫn được hoàn tất yêu cầu đã gửi hợp lệ (UC-12 R7).
@@ -221,7 +222,7 @@ sequenceDiagram
         S->>T: Roll back
         S-->>C: 404 / 403
     end
-    S->>S: Check source state, type and completion prerequisites
+    S->>S: LK: dang_thuc_hien hoặc cho_bo_sung_linh_kien, TP: dang_thuc_hien và điều kiện hoàn thành
     S->>P: lock_parts, exists_for_source
     P->>DB: Item type snapshot FOR SHARE, existing issue lookup
     break Invalid source/demand or duplicate request/type
@@ -247,6 +248,10 @@ sequenceDiagram
 ```
 
 ## POST /api/v1/phieu_xuat/{id}/gui
+
+LK cho phép nguồn Đang thực hiện hoặc Chờ bổ sung linh kiện, đã có nhu cầu chốt;
+TP giữ điều kiện Đang thực hiện và đủ điều kiện xuất thành phẩm. Gửi không trừ tồn
+hoặc bổ sung phần giữ; nguồn thiếu hàng vẫn được gửi và phiếu chờ QLK duyệt khi đủ.
 
 Body bắt buộc `{}`. NV đúng nguồn gửi nháp hoặc gửi lại từ chối trực tiếp sang
 `cho_duyet`; giữ nguyên ID/chi tiết. Tăng phiên bản, cập nhật gui_at/updated_at,
@@ -374,6 +379,20 @@ sequenceDiagram
         S->>I: lock_issue_stock(source, ordered item IDs)
         I->>DB: MatHang FOR UPDATE then active GiuHang FOR UPDATE, ledger SUM
         I-->>S: Detached stock, prices, all active reservations
+        opt Source cho_bo_sung_linh_kien - chỉ phiếu LK
+            S->>S: Kiểm đủ toàn bộ tồn trừ phần giữ, nguồn chưa giữ linh kiện
+            break Thiếu hàng hoặc phần giữ nguồn bất thường
+                S->>T: Roll back
+                S-->>C: 409, phiếu vẫn cho_duyet
+            end
+            S->>I: reserve_issue_stock(source, nhu cầu đã chốt, timestamp)
+            I->>DB: INSERT đủ GiuHang linh_kien và tăng so_luong_dang_giu
+            S->>I: lock_issue_stock đọc lại snapshot giữ hàng
+            S->>P: ready_for_production(source, timestamp)
+            P->>DB: UPDATE YCSX dang_thuc_hien, updated_at, version +1 RETURNING
+            S->>AU: append source sua, trước/sau trạng thái
+            AU->>AR: append, session.add
+        end
         S->>S: Validate holds, stock/ledger, source quantities, price and overflow
         break Invalid holds / insufficient or inconsistent stock / money
             S->>T: Roll back
@@ -452,7 +471,7 @@ sequenceDiagram
         S->>T: Roll back
         S-->>C: 428 / 412
     end
-    S->>S: Require cho_duyet and source dang_thuc_hien
+    S->>S: Require cho_duyet, nguồn LK dang_thuc_hien hoặc cho_bo_sung_linh_kien, TP dang_thuc_hien
     break Invalid workflow
         S->>T: Roll back
         S-->>C: 409
@@ -523,7 +542,7 @@ sequenceDiagram
 
 ## GET /api/v1/phieu_xuat/xem_truoc/{id}?loai_phieu=...
 
-Chỉ N. loai_phieu bắt buộc xuat_linh_kien hoặc xuat_thanh_pham; cấm query thừa/lặp và GET body. Response data: {yeu_cau_san_xuat_id, loai_phieu, chi_tiet: [{mat_hang_id, so_luong}]}, meta.request_id. UI ghép mã/tên/đơn vị từ catalog thật. Cùng nguồn và validation với create: đang thực hiện; linh kiện có lượng cần sản xuất/nhu cầu; thành phẩm thuộc xuất giao và không cần SX hoặc có chứng từ đã duyệt. Kiểm loại mặt hàng và phiếu trùng. GET không tạo nháp/giữ hàng/audit/ETag; POST vẫn kiểm lại trong transaction.
+Chỉ N. loai_phieu bắt buộc xuat_linh_kien hoặc xuat_thanh_pham; cấm query thừa/lặp và GET body. Response data: {yeu_cau_san_xuat_id, loai_phieu, chi_tiet: [{mat_hang_id, so_luong}]}, meta.request_id. UI ghép mã/tên/đơn vị từ catalog thật. Cùng nguồn và validation với create: linh kiện cho nguồn Đang thực hiện hoặc Chờ bổ sung linh kiện có lượng cần sản xuất/nhu cầu đã chốt; thành phẩm cho nguồn Đang thực hiện thuộc xuất giao và không cần SX hoặc có chứng từ đã duyệt. Kiểm loại mặt hàng và phiếu trùng. GET không tạo nháp/giữ hàng/audit/ETag; POST vẫn kiểm lại trong transaction.
 
 ```mermaid
 sequenceDiagram
@@ -540,14 +559,14 @@ sequenceDiagram
         R->>S: preview
         S->>P: begin_read_snapshot
         P->>DB: REPEATABLE READ READ ONLY
-        S->>P: Đọc source/nhu cầu/chứng từ; kiểm phân công và trạng thái; đọc loại mặt hàng và phiếu trùng, không khóa
+        S->>P: Đọc source/nhu cầu/chứng từ, LK cho cả cho_bo_sung_linh_kien, TP cần dang_thuc_hien, kiểm phân công, loại mặt hàng và phiếu trùng, không khóa
         P->>DB: SELECT
         alt Không có tài nguyên hoặc ngoài phân công
             S-->>U: 404 hoặc 403
         else Trạng thái/phụ thuộc sai hoặc phiếu trùng khi preview
             S-->>U: 409 (chỉ preview)
         else Hợp lệ
-            S-->>U: 200 data + meta; ETag chỉ chi tiết phiếu
+            S-->>U: 200 data + meta, ETag chỉ chi tiết phiếu
         end
     end
 ```

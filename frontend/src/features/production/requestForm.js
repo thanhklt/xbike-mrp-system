@@ -26,6 +26,22 @@ export const REQUEST_SORT_OPTIONS = [
   { value: "created_at", label: "Cũ nhất trước" },
 ];
 
+export const REQUEST_WORK_STATUSES = [
+  { value: "da_giao", label: "Đã giao", tone: "work-assigned" },
+  { value: "cho_duyet_xuat_linh_kien", label: "Chờ duyệt phiếu xuất linh kiện", tone: "work-issue" },
+  { value: "san_sang_san_xuat", label: "Sẵn sàng sản xuất", tone: "work-production" },
+  { value: "dang_san_xuat", label: "Đang sản xuất", tone: "work-production" },
+  { value: "cho_duyet_hoan_thanh", label: "Chờ duyệt chứng từ hoàn thành", tone: "work-completion" },
+  { value: "cho_lap_phieu_xuat", label: "Chờ lập phiếu xuất", tone: "work-issue" },
+  { value: "cho_duyet_phieu_xuat", label: "Chờ duyệt phiếu xuất", tone: "work-issue" },
+  { value: "hoan_thanh", label: "Hoàn thành", tone: "work-completed" },
+  { value: "da_huy", label: "Đã hủy", tone: "work-cancelled" },
+];
+
+export function requestWorkStatus(record) {
+  return REQUEST_WORK_STATUSES.find(({ value }) => value === record?.trang_thai_cong_viec);
+}
+
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 2–3; A1, A3 (specs/use_cases/production/UC-25.md)
 export function requestListFilters(manager) {
   const statuses = [
@@ -33,12 +49,13 @@ export function requestListFilters(manager) {
   ].filter((status) => manager || status !== "nhap");
   return [
     {
-      name: "trang_thai",
+      name: manager ? "trang_thai" : "trang_thai_cong_viec",
       label: "Trạng thái",
       as: "select",
       options: [
         { value: "", label: "Tất cả" },
-        ...statuses.map((value) => ({ value, label: STATUS_LABELS[value] })),
+        ...(manager ? statuses.map((value) => ({ value, label: STATUS_LABELS[value] }))
+          : REQUEST_WORK_STATUSES.map(({ value, label }) => ({ value, label }))),
       ],
     },
     {
@@ -114,11 +131,12 @@ export function requestDetailEntries(record, items, employees, currentUser = nul
   const assignedText = isEmployee
     ? employeeDisplayName(employees, record.nhan_vien_duoc_giao_id, "Chưa giao", current)
     : employeeName(employees, record.nhan_vien_duoc_giao_id);
-  const creatorText = isEmployee
-    ? (record.nhan_vien_id === current?.id
-        ? employeeDisplayName(employees, record.nhan_vien_id, "—", current)
-        : `Nhân viên #${record.nhan_vien_id}`)
-    : employeeName(employees, record.nhan_vien_id);
+  const creator = employees?.find((employee) => Number(employee.id) === Number(record.nhan_vien_id));
+  const creatorText = employeeDisplayName([{
+    id: record.nhan_vien_id,
+    ho_ten: record.nguoi_lap_ho_ten || creator?.ho_ten,
+    ma_nhan_vien: record.nguoi_lap_ma_nhan_vien || creator?.ma_nhan_vien,
+  }], record.nhan_vien_id, "—");
   return [
     ["Loại yêu cầu", REQUEST_TYPE_LABELS[record.loai_yeu_cau]],
     ["Thành phẩm", productText],
@@ -165,6 +183,7 @@ export function canCheckRequest(record, manager, userId) {
 export function canStartProduction(record, manager, userId) {
   return Boolean(!manager && record && record.nhan_vien_duoc_giao_id === Number(userId)
     && record.trang_thai === "dang_thuc_hien" && record.so_luong_can_san_xuat > 0
+    && record.trang_thai_cong_viec === "san_sang_san_xuat"
     && !record.started_at);
 }
 
@@ -229,16 +248,4 @@ export const CHECK_COLUMNS = [
 // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4, 8; A2 báo thiếu R10 (specs/use_cases/production/UC-26.md)
 export function checkLines(ketQua) {
   return ketQua.linh_kien.map((line) => ({ ...line, id: line.mat_hang_id }));
-}
-
-// UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 4; A1–A3 tác động giữ hàng (specs/use_cases/production/UC-26.md)
-export function checkImpact(ketQua) {
-  if (!ketQua.lan_dau && !ketQua.du_linh_kien) return "Không có gì thay đổi.";
-  const product = ketQua.giu_thanh_pham > 0
-    ? `${number(ketQua.giu_thanh_pham)} thành phẩm` : "";
-  if (ketQua.du_linh_kien) {
-    const parts = ketQua.linh_kien.length ? "toàn bộ linh kiện" : "";
-    return `Giữ ${[product, parts].filter(Boolean).join(" và ")}; chưa trừ tồn.`;
-  }
-  return `${product ? `Giữ ${product}, không` : "Không"} giữ linh kiện nào; yêu cầu chuyển Chờ bổ sung linh kiện; chưa trừ tồn.`;
 }

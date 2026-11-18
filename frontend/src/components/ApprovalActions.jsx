@@ -50,18 +50,17 @@ export function ApprovalActions({
   function act(action, title, options = {}) {
     confirm({
       title,
-      description: `${code}. Kiểm tra nội dung chứng từ trước khi xác nhận.`,
+      description: employeeIssue ? code : `${code}. Kiểm tra nội dung chứng từ trước khi xác nhận.`,
       content,
       reason: options.reason,
       danger: options.danger,
+      hideImpact: employeeIssue,
       impact:
         action === "duyet"
           ? kind === "issue"
             ? "Duyệt thành công sẽ trừ tồn kho một lần và ghi giao dịch xuất. Chứng từ đã duyệt bất biến."
             : "Duyệt thành công sẽ cộng đầu ra sản xuất một lần; không trừ vật tư lần nữa."
-          : employeeIssue
-            ? "Chưa trừ tồn; hàng vẫn được giữ cho yêu cầu."
-            : "Thao tác này chưa làm thay đổi tồn kho.",
+          : "Thao tác này chưa làm thay đổi tồn kho.",
       onConfirm: async (explanation) => {
         const result = await mutation.mutateAsync({
           path: `${path}/${record.id}${action ? `/${action}` : ""}`,
