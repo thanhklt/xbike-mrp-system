@@ -331,6 +331,7 @@ async def test_uc14_cat_ac08_exhausted_code_returns_conflict(database):
     assert await scalar(database, 'SELECT count(*) FROM "LichSuThaoTac"') == 0
 
 
+# UC-13 AC-1: Tìm kiếm nâng cao theo tỉnh và phường; AC-4: phân trang ổn định; A1: không có kết quả.
 async def test_uc13_cat_ac03_literal_address_and_stable_pages(database):
     await create_supplier(database, ten_ncc="Same %_", tinh="  Hà Nội  ", phuong=" Phường A ")
     await create_supplier(database, ten_ncc="Same %_", tinh="HÀ NỘI", phuong="PHƯỜNG A")
@@ -554,22 +555,31 @@ async def test_uc44_ac08_draft_receipt_projection_and_stale_tag(client, database
     assert await scalar(database, 'SELECT count(*) FROM "GiaoDichKho"') == 0
 
 
+# UC-13 AC-1: Lọc theo một phần địa chỉ mới sau cập nhật nhà cung cấp.
 async def test_uc44_ac01_ac04_ac06_new_address_filters_and_audit(client, database):
     original, tag = await create_supplier(database, tinh="Old province", phuong="Old ward")
     path = f"/api/v1/nha_cung_cap/{original.data.id}"
-    changes = {"so_dien_thoai": "not-a-phone", "tinh": "  New province  ", "phuong": "\tNew ward\t"}
+    changes = {"so_dien_thoai": "not-a-phone", "tinh": "  Hà Nội  ", "phuong": "\tMinh Họa\t"}
+    for field in ["tinh", "phuong"]:
+        old_value = SUPPLIER[field].strip().casefold()
+        new_value = changes[field].strip().casefold()
+        assert old_value not in new_value and new_value not in old_value
     response = await client.patch(path, headers={**headers(), "If-Match": tag}, json=changes)
     assert response.status_code == 200, response.text
     assert response.json()["data"]["ma_ncc"] == original.data.ma_ncc
     found = await client.get(
         "/api/v1/nha_cung_cap",
-        params={"tinh": "NEW PROVINCE", "phuong": "new WARD"},
+        params={"tinh": "nội", "phuong": "họa"},
         headers=headers(),
     )
     old = await client.get(
         "/api/v1/nha_cung_cap", params={"tinh": original.data.tinh}, headers=headers()
     )
+    assert found.status_code == 200, found.text
+    assert old.status_code == 200, old.text
     assert found.json()["meta"]["total"] == 1 and old.json()["data"] == []
+    assert [item["id"] for item in found.json()["data"]] == [original.data.id]
+    assert old.json()["meta"]["total"] == 0
     assert {key: response.json()["data"][key] for key in changes} == changes
     before = await scalar(
         database, "SELECT du_lieu_truoc FROM \"LichSuThaoTac\" WHERE thao_tac='sua'"

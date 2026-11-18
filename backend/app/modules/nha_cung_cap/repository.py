@@ -36,6 +36,7 @@ class SqlAlchemySupplierRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-13 Tra cứu nhà cung cấp — Main 3–4; R2, R3, A1 (specs/use_cases/catalog/UC-13.md)
     async def list_suppliers(self, params: NhaCungCapListQuery) -> RecordPage[SupplierResponse]:
         query = select(NhaCungCap)
         if params.q:
