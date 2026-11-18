@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { readResource } from "../../lib/api/client.js";
@@ -61,14 +62,11 @@ import { canCreateIssue } from "../material-issuing/issueForm.js";
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
   const { id } = useParams();
-  // RecordPanel remounts the editor when ETag changes after confirmation.
-  const [checkResult, setCheckResult] = useState(null);
-  useEffect(() => setCheckResult(null), [id]);
   const { user } = useAuth();
   const manager = user.ma_vai_tro === "quan_ly";
   const base = manager ? "/kho/yeu-cau" : "/nv/yeu-cau";
   const collection = useCollection(API.requests, {});
-  const detail = useDetail(API.requests, id);
+  const detail = useDetail(API.requests, id, manager ? undefined : { staleTime: 0 });
   const catalog = useCatalog();
   const rawEmployees = useChoices(API.employees, {}, manager);
   const employees = manager
@@ -150,8 +148,8 @@ export function RequestsPage() {
               manager={manager}
               base={base}
               userId={user.id}
-              checkResult={checkResult}
-              onCheckResult={setCheckResult}
+              refreshing={detail.isFetching}
+              detailUpdatedAt={detail.dataUpdatedAt}
             />
           </QueryState>
         )}
@@ -159,7 +157,7 @@ export function RequestsPage() {
     </>
   );
 }
-function RequestEditor({ snapshot, items, employees, manager, base, userId, checkResult, onCheckResult }) {
+function RequestEditor({ snapshot, items, employees, manager, base, userId, refreshing, detailUpdatedAt }) {
   const record = snapshot?.data;
   const initial = initialRequestValues(record);
   const [values, setValues] = useState(initial);
@@ -167,6 +165,8 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   const [checkError, setCheckError] = useState(null);
   const [startError, setStartError] = useState(null);
   const [checkPending, setCheckPending] = useState(false);
+  const checkRead = useRef(null);
+  useLayoutEffect(() => () => checkRead.current?.abort(), []);
   const [cancelError, setCancelError] = useState(null);
   const [cancelPending, setCancelPending] = useState(false);
   const mutation = useWrite();
@@ -177,6 +177,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   const { save, busy, error } = useSave();
   const { confirm, notify } = useFeedback();
   const navigate = useNavigate();
+  const checkPath = `${API.requests}/${record?.id}/kiem_tra`;
   const editable = canEditRequest(record, manager);
   const showForm = manager && (!record || (editable && editing));
   const field = (name) => ({
@@ -201,37 +202,42 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   }
   // UC-26 Kiểm tra yêu cầu sản xuất và giữ hàng — Main 2–8; A5 xem trước rồi xác nhận (specs/use_cases/production/UC-26.md)
   async function openCheck() {
+    checkRead.current?.abort();
     setCheckError(null);
     setCheckPending(true);
+    const controller = new AbortController();
+    checkRead.current = controller;
     const etag = snapshot.etag;
     try {
-      const { data: ketQua } = await readResource(`${API.requests}/${record.id}/kiem_tra`);
+      const ketQua = await readCheckPreview(checkPath, controller.signal);
+      if (controller.signal.aborted) return;
       confirm({
         title: ketQua.lan_dau ? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất",
         variant: "request-check",
         description: record.ma_yeu_cau_san_xuat,
         content: <>
           <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
-          <div className="request-check-table"><DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} /></div>
-          <RequestCheckCards rows={checkLines(ketQua)} />
+          <RequestCheckRows rows={checkLines(ketQua)} />
         </>,
         impact: checkImpact(ketQua),
         onConfirm: async () => {
+          if (controller.signal.aborted) {
+            throw new Error("Chi tiết yêu cầu đã thay đổi. Hãy mở lại kiểm tra.");
+          }
           const result = await checkMutation.mutateAsync({
-            path: `${API.requests}/${record.id}/kiem_tra`,
+            path: checkPath,
             body: {},
             etag,
           });
           const actual = result.data.ket_qua;
-          onCheckResult(actual);
           notify(actual.du_linh_kien ? "Yêu cầu Đang thực hiện."
             : actual.lan_dau ? "Yêu cầu Chờ bổ sung linh kiện." : "Vẫn thiếu linh kiện.");
         },
       });
     } catch (failure) {
-      setCheckError(failure);
+      if (!controller.signal.aborted) setCheckError(failure);
     } finally {
-      setCheckPending(false);
+      if (!controller.signal.aborted) setCheckPending(false);
     }
   }
   // UC-23 Lập và gửi yêu cầu sản xuất — Main 4–6; A1, A2 (specs/use_cases/production/UC-23.md)
@@ -364,19 +370,22 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       <ErrorNotice error={checkError} />
       <ErrorNotice error={startError} />
       <ErrorNotice error={cancelError} />
-      {checkResult && !checkResult.du_linh_kien && (
-        <>
-          <Notice tone="warning">Yêu cầu Chờ bổ sung linh kiện.</Notice>
-          <h3>Linh kiện thiếu</h3>
-          <DataTable rows={checkLines(checkResult).filter((line) => line.so_luong_thieu > 0)} columns={CHECK_COLUMNS} />
-        </>
-      )}
       {canCheckRequest(record, manager, userId) && (
-        <div className="actions actions-end">
-          <Button disabled={checkMutation.isPending || checkPending} onClick={openCheck}>
-            {record.trang_thai === "da_gui" ? "Kiểm tra" : "Kiểm tra lại"}
-          </Button>
-        </div>
+        <>
+          {refreshing ? <RequestCheckLoading /> : (
+            <RequestCheckPreview
+              key={detailUpdatedAt}
+              path={checkPath}
+              userId={userId}
+              requestType={record.loai_yeu_cau}
+            />
+          )}
+          <div className="actions actions-end">
+            <Button disabled={refreshing || checkMutation.isPending || checkPending} onClick={openCheck}>
+              {record.trang_thai === "da_gui" ? "Kiểm tra" : "Kiểm tra lại"}
+            </Button>
+          </div>
+        </>
       )}
       {canStartProduction(record, manager, userId) && (
         <div className="actions actions-end">
@@ -474,6 +483,60 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
         </div>
       )}
     </div>
+  );
+}
+
+async function readCheckPreview(path, signal) {
+  const { data } = await readResource(path, {}, signal);
+  if (typeof data?.du_linh_kien !== "boolean" || !Array.isArray(data.linh_kien)) {
+    throw new Error("Không tải được tình trạng linh kiện.");
+  }
+  return data;
+}
+
+function RequestCheckLoading() {
+  return <div className="loading" role="status">Đang tải tình trạng linh kiện…</div>;
+}
+
+function RequestCheckPreview({ path, userId, requestType }) {
+  // Share the cache across reopens while refreshing availability on every mount.
+  const query = useQuery({
+    queryKey: ["request-check-availability", userId, path],
+    queryFn: ({ signal }) => readCheckPreview(path, signal),
+    refetchOnMount: "always",
+  });
+  if (query.isFetching) return <RequestCheckLoading />;
+  return (
+    <QueryState query={query}>
+      {query.data && <RequestCheckAvailability availability={query.data} requestType={requestType} />}
+    </QueryState>
+  );
+}
+
+function RequestCheckAvailability({ availability, requestType }) {
+  if (requestType === "xuat_giao" && availability.so_luong_can_san_xuat === 0) {
+    return (
+      <>
+        <Notice>Đã đủ thành phẩm, không cần sản xuất</Notice>
+        <InfoGrid entries={[["Số cần sản xuất", "0"]]} />
+      </>
+    );
+  }
+  if (availability.du_linh_kien) return <Notice>Đã đủ linh kiện, chờ xác nhận</Notice>;
+  return (
+    <section className="stack request-check-results">
+      <h3>Linh kiện thiếu</h3>
+      <RequestCheckRows rows={checkLines(availability).filter((line) => line.so_luong_thieu > 0)} />
+    </section>
+  );
+}
+
+function RequestCheckRows({ rows }) {
+  return (
+    <>
+      <div className="request-check-table"><DataTable rows={rows} columns={CHECK_COLUMNS} /></div>
+      <RequestCheckCards rows={rows} />
+    </>
   );
 }
 

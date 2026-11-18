@@ -2944,13 +2944,13 @@ html[data-employee-theme="true"] .confirmation-request-check {
   width: min(980px, calc(100vw - 32px));
 }
 
-.confirmation-request-check .request-check-table table {
+:is(.confirmation-request-check, .request-check-results) .request-check-table table {
   min-width: 0;
   table-layout: fixed;
 }
 
-.confirmation-request-check .request-check-table th,
-.confirmation-request-check .request-check-table td {
+:is(.confirmation-request-check, .request-check-results) .request-check-table th,
+:is(.confirmation-request-check, .request-check-results) .request-check-table td {
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -2965,10 +2965,10 @@ html[data-employee-theme="true"] .confirmation-request-check {
 }
 
 @media (max-width: 640px) {
-  .confirmation-request-check .request-check-table {
+  :is(.confirmation-request-check, .request-check-results) .request-check-table {
     display: none;
   }
-  .confirmation-request-check .request-check-cards {
+  :is(.confirmation-request-check, .request-check-results) .request-check-cards {
     display: grid;
     gap: 16px;
   }

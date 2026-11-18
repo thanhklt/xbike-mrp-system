@@ -4,17 +4,18 @@ import { readAll, readResource, writeResource } from "./client.js";
 import { API } from "./endpoints.js";
 import { useAuth } from "../../features/auth/AuthProvider.jsx";
 
-export function useResource(path, params = {}, enabled = true) {
+export function useResource(path, params = {}, enabled = true, options = {}) {
   const { user } = useAuth();
   return useQuery({
+    ...options,
     queryKey: ["resources", user?.id, user?.ma_vai_tro, path, params],
     queryFn: ({ signal }) => readResource(path, params, signal),
     enabled: enabled && Boolean(user),
     retry: false,
   });
 }
-export function useDetail(path, id) {
-  return useResource(`${path}/${id}`, {}, Boolean(id && id !== "moi"));
+export function useDetail(path, id, options) {
+  return useResource(`${path}/${id}`, {}, Boolean(id && id !== "moi"), options);
 }
 export function useCollection(path, initial = {}, transform = (params) => params) {
   const [params, setParams] = useState({ page: 1, page_size: 20, ...initial });

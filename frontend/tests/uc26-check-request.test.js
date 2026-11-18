@@ -33,13 +33,14 @@ function handler({ result = shortage, readError, writeError } = {}) {
   const end = source.indexOf("  // UC-23", start);
   assert.ok(start > 0 && end > start);
   const body = source.slice(start, end).replace(/content: <>[\s\S]*?<\/>,/, "content: null,");
-  const state = { reads: [], writes: [], notices: [], errors: [], pending: [], results: [], options: null };
+  const state = { reads: [], writes: [], notices: [], errors: [], pending: [], options: null };
   const ports = {
-    record, snapshot: { etag: '"reviewed"' }, API: { requests: "/yeu_cau_san_xuat" }, checkImpact,
-    readResource: async (path) => {
+    record, snapshot: { etag: '"reviewed"' }, checkPath: "/yeu_cau_san_xuat/1/kiem_tra", checkImpact,
+    checkRead: { current: null },
+    readCheckPreview: async (path) => {
       state.reads.push(path);
       if (readError) throw readError;
-      return { data: shortage };
+      return shortage;
     },
     checkMutation: { mutateAsync: async (input) => {
       state.writes.push(input);
@@ -50,7 +51,6 @@ function handler({ result = shortage, readError, writeError } = {}) {
     notify: (message) => state.notices.push(message),
     setCheckError: (error) => state.errors.push(error),
     setCheckPending: (pending) => state.pending.push(pending),
-    onCheckResult: (value) => state.results.push(value),
   };
   const open = new Function(...Object.keys(ports), `return (${body.trim()});`)(...Object.values(ports));
   return { open, state, ports };
@@ -73,11 +73,11 @@ test("only assigned employees can check sent or waiting requests", () => {
 
 // UC-26 D6: Đúng nhãn nút, thanh thao tác, trạng thái bận và nội dung hộp xác nhận
 test("check action uses approved labels and shared confirmation components", () => {
-  assert.match(source, /\{canCheckRequest\(record, manager, userId\) && \(\s*<div className="actions actions-end">\s*<Button disabled=\{checkMutation\.isPending \|\| checkPending\} onClick=\{openCheck\}>\s*\{record\.trang_thai === "da_gui" \? "Kiểm tra" : "Kiểm tra lại"\}/);
+  assert.match(source, /<div className="actions actions-end">\s*<Button disabled=\{refreshing \|\| checkMutation\.isPending \|\| checkPending\} onClick=\{openCheck\}>\s*\{record\.trang_thai === "da_gui" \? "Kiểm tra" : "Kiểm tra lại"\}/);
   assert.match(source, /title: ketQua\.lan_dau \? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất"/);
   assert.match(source, /description: record\.ma_yeu_cau_san_xuat/);
   assert.match(source, /<InfoGrid entries=\{checkConfirmEntries\(ketQua, record\.loai_yeu_cau\)\} \/>/);
-  assert.match(source, /<DataTable rows=\{checkLines\(ketQua\)\} columns=\{CHECK_COLUMNS\} \/>/);
+  assert.match(source, /<RequestCheckRows rows=\{checkLines\(ketQua\)\} \/>/);
   assert.match(source, /impact: checkImpact\(ketQua\)/);
 });
 
@@ -147,14 +147,13 @@ test("checked detail displays finalized quantities and first check time after se
 
 // UC-26 AC-8: Mở rồi đóng xác nhận chỉ GET, không POST hoặc lưu kết quả
 // UC-26 A5: Chỉ callback onConfirm được ghi dữ liệu
-test("dismissing confirmation after GET makes no POST or result changes", async () => {
+test("dismissing confirmation after GET makes no POST", async () => {
   const { open, state } = handler();
   await open();
   assert.deepEqual(state.reads, ["/yeu_cau_san_xuat/1/kiem_tra"]);
   assert.equal(state.options.title, "Kiểm tra yêu cầu sản xuất");
   assert.equal(typeof state.options.onConfirm, "function");
   assert.deepEqual(state.writes, []);
-  assert.deepEqual(state.results, []);
   assert.deepEqual(state.notices, []);
   assert.deepEqual(state.pending, [true, false]);
   assert.equal("onClose" in state.options, false);
@@ -162,7 +161,7 @@ test("dismissing confirmation after GET makes no POST or result changes", async 
 });
 
 // UC-26 D1: Xác nhận dùng body rỗng và ETag đã xem, hiển thị kết quả thật sau tính lại
-test("confirmation posts reviewed ETag and stores actual recomputed result", async () => {
+test("confirmation posts the reviewed ETag and reports the actual recomputed result", async () => {
   const actual = { ...shortage, so_luong_dung_thanh_pham: 1, so_luong_can_san_xuat: 9,
     giu_thanh_pham: 1, linh_kien: [{ ...line, so_luong_can: 9, so_luong_thieu: 5 }] };
   const { open, state, ports } = handler({ result: actual });
@@ -170,7 +169,6 @@ test("confirmation posts reviewed ETag and stores actual recomputed result", asy
   ports.snapshot.etag = '"changed-during-confirmation"';
   await state.options.onConfirm();
   assert.deepEqual(state.writes, [{ path: "/yeu_cau_san_xuat/1/kiem_tra", body: {}, etag: '"reviewed"' }]);
-  assert.deepEqual(state.results, [actual]);
   assert.deepEqual(state.notices, ["Yêu cầu Chờ bổ sung linh kiện."]);
 });
 
@@ -184,7 +182,6 @@ test("notifications distinguish enough components from an unchanged recheck", as
     await open();
     await state.options.onConfirm();
     assert.deepEqual(state.notices, [message]);
-    assert.deepEqual(state.results, [result]);
   }
 });
 
@@ -201,24 +198,29 @@ test("GET failure is shown through existing ErrorNotice and never confirms", asy
 });
 
 // UC-26 A6: Lỗi POST truyền lên hộp xác nhận, không hiện thành công hoặc kết quả giả
-test("POST failure propagates to confirmation without replacing local result", async () => {
+test("POST failure propagates to confirmation without reporting success", async () => {
   const failure = new Error("Dữ liệu đã thay đổi");
   const { open, state } = handler({ writeError: failure });
   await open();
   await assert.rejects(state.options.onConfirm(), (error) => error === failure);
   assert.equal(state.writes.length, 1);
-  assert.deepEqual(state.results, []);
   assert.deepEqual(state.notices, []);
 });
 
-// UC-26 D5: Kết quả thiếu ở state của trang, tồn tại qua ETag mới và xóa khi rời yêu cầu
-test("shortage state survives ETag remount and renders only missing lines until leaving request", () => {
-  const editor = source.indexOf("function RequestEditor(");
-  assert.ok(source.indexOf("const [checkResult, setCheckResult] = useState(null)") < editor);
-  assert.match(source, /useEffect\(\(\) => setCheckResult\(null\), \[id\]\)/);
-  assert.match(source, /checkResult=\{checkResult\}\s+onCheckResult=\{setCheckResult\}/);
-  assert.match(source, /\{checkResult && !checkResult\.du_linh_kien && \(/);
-  assert.match(source, /<Notice tone="warning">Yêu cầu Chờ bổ sung linh kiện\.<\/Notice>\s*<h3>Linh kiện thiếu<\/h3>/);
-  assert.match(source, /<DataTable rows=\{checkLines\(checkResult\)\.filter\(\(line\) => line\.so_luong_thieu > 0\)\} columns=\{CHECK_COLUMNS\} \/>/);
-  assert.doesNotMatch(source, /localStorage|sessionStorage/);
+test("leaving the request while opening confirmation skips the stale GET response", async () => {
+  const { open, state, ports } = handler();
+  const pending = open();
+  ports.checkRead.current.abort();
+  await pending;
+  assert.equal(state.options, null);
+  assert.deepEqual(state.writes, []);
+  assert.deepEqual(state.errors, [null]);
+});
+
+test("confirmation from an unmounted detail cannot post", async () => {
+  const { open, state, ports } = handler();
+  await open();
+  ports.checkRead.current.abort();
+  await assert.rejects(state.options.onConfirm(), /Chi tiết yêu cầu đã thay đổi/);
+  assert.deepEqual(state.writes, []);
 });

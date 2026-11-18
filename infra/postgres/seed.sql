@@ -2,7 +2,18 @@
 -- Tương thích init.sql v4.0. Giá, hồ sơ, liên hệ, địa chỉ đều là dữ liệu minh họa.
 -- Yêu cầu: init.sql đã chạy thành công và các bảng chưa có dữ liệu.
 -- Không chạy lại trên DB đã seed; không xóa/ghi đè dữ liệu có sẵn.
--- 4 tài khoản demo dùng mật khẩu DemoXbike2026! (bcrypt cost 12).
+-- 15 tài khoản demo dùng chung mật khẩu DemoXbike2026! (bcrypt cost 12).
+--
+-- Tài khoản dựng sẵn cho kiểm thử giao diện admin (UC-01 → UC-08), 15 tài khoản = 2 trang x 10:
+--   QTV  : NV-000001 quan_tri (hoạt động), NV-000005 quan_tri_2 (hoạt động),
+--          NV-000006 quan_tri_cu (bị khóa — không tính là QTV đang hoạt động).
+--   QLK  : NV-000002 quan_ly_kho, NV-000012 quan_ly_ca2 (từ Nhân viên đổi sang, đã đổi tên đăng nhập),
+--          NV-000015 quan_ly_kho_2, NV-000007 quan_ly_tam_nghi (bị khóa, có lý do).
+--   NV   : NV-000003, NV-000004 (còn yêu cầu chưa kết thúc — không đổi được vai trò),
+--          NV-000008 nhan_vien_mo_khoa (đã khóa → đổi mật khẩu → mở khóa),
+--          NV-000009 nhan_vien_khoa (bị khóa, không lý do), NV-000010 nhan_vien_ca3 (đã sửa hồ sơ),
+--          NV-000011 nhan_vien_nhap (chỉ được giao YCSX-202611-000009 còn Nháp),
+--          NV-000013 nv_chua_ho_so (chỉ có trường bắt buộc), NV-000014 nhan_vien_moi (không có yêu cầu nào).
 --
 -- Tồn kho chỉ dựng qua chứng từ đã ghi nhận + GiaoDichKho (data model v4 mục 3.7):
 --   PN-202611-000001 hoàn tất -> cộng linh kiện.
@@ -18,6 +29,7 @@
 --   YCSX-202611-000006 (10 Speed Sport): Chờ bổ sung linh kiện, thiếu 4 khung xe.
 --   YCSX-202611-000007 (3 Kids Fun): Đã gửi, chưa kiểm tra.
 --   YCSX-202611-000008 (2 Mountain Pro): Nháp.
+--   YCSX-202611-000009 (2 Kids Fun): Nháp, giao NV-000011.
 --   PN-202611-000002: phiếu nháp bổ sung khung, chưa cộng tồn.
 BEGIN;
 SET LOCAL TIME ZONE 'Asia/Ho_Chi_Minh';
@@ -66,6 +78,17 @@ BEGIN
   RETURN v_tong;
 END $$;
 
+-- Hàm tạm cho seed: hồ sơ tài khoản đúng dạng backend ghi vào du_lieu_truoc/du_lieu_sau
+-- (NhanVienRead, he_so_luong là chuỗi). Snapshot quá khứ = hồ sơ hiện tại || các trường khác lúc đó.
+CREATE FUNCTION pg_temp.ho_so_nv(p_id int) RETURNS jsonb
+LANGUAGE sql AS $$
+  SELECT jsonb_build_object('id', n.id, 'ma_nhan_vien', n.ma_nhan_vien, 'ho_ten', n.ho_ten,
+    'vai_tro_id', n.vai_tro_id, 'ma_vai_tro', v.ma_vai_tro, 'trang_thai', n.trang_thai,
+    'ngay_sinh', n.ngay_sinh, 'so_dien_thoai', n.so_dien_thoai, 'email', n.email,
+    'ngay_vao_lam', n.ngay_vao_lam, 'he_so_luong', n.he_so_luong::text, 'ten_dang_nhap', n.ten_dang_nhap)
+  FROM public."NhanVien" n JOIN public."VaiTro" v ON v.id = n.vai_tro_id WHERE n.id = p_id
+$$;
+
 -- ---------------------------------------------------------------------
 -- identity_access
 -- ---------------------------------------------------------------------
@@ -80,7 +103,20 @@ INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ho_ten, 
   (1, 1, 'quan_tri', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Nguyễn Minh An', '1990-03-15', '0900000001', 'minh.an@example.com', '2026-10-01', 3.50, 'hoat_dong', 0, '2026-11-01 07:00:00+07'),
   (2, 2, 'quan_ly_kho', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Trần Thanh Bình', '1993-07-20', '0900000002', 'thanh.binh@example.com', '2026-10-01', 2.80, 'hoat_dong', 0, '2026-11-01 08:00:00+07'),
   (3, 3, 'nhan_vien_sx', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Lê Hoàng Nam', '1998-11-05', '0900000003', 'hoang.nam@example.com', '2026-10-01', 2.00, 'hoat_dong', 0, '2026-11-01 08:01:00+07'),
-  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07');
+  (4, 3, 'nhan_vien_lr', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Phạm Thu Hà', '1999-04-12', '0900000004', 'thu.ha@example.com', '2026-10-15', 2.00, 'hoat_dong', 0, '2026-11-01 08:02:00+07'),
+  -- Tài khoản bổ sung cho kiểm thử admin. phien_ban_dang_nhap tăng theo đúng thao tác đã ghi lịch sử:
+  -- khóa +1, đổi mật khẩu +1, đổi vai trò +1; mở khóa và sửa hồ sơ giữ nguyên.
+  (5, 1, 'quan_tri_2', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Võ Thị Lan', '1991-09-09', '0900000005', 'thi.lan@example.com', '2026-10-01', 3.20, 'hoat_dong', 0, '2026-11-01 08:10:00+07'),
+  (6, 1, 'quan_tri_cu', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Đặng Quốc Huy', '1987-01-25', '0900000006', 'quoc.huy@example.com', '2026-10-01', 3.50, 'bi_khoa', 1, '2026-11-01 08:15:00+07'),
+  (7, 2, 'quan_ly_tam_nghi', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Hồ Văn Tài', '1992-06-30', '0900000007', 'van.tai@example.com', '2026-10-01', 2.60, 'bi_khoa', 1, '2026-11-01 08:20:00+07'),
+  (8, 3, 'nhan_vien_mo_khoa', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Lý Thanh Tâm', '2000-02-14', '0900000008', 'thanh.tam@example.com', '2026-10-15', 1.86, 'hoat_dong', 2, '2026-11-01 08:25:00+07'),
+  (9, 3, 'nhan_vien_khoa', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Đoàn Minh Khôi', '1997-08-08', '0900000009', 'minh.khoi@example.com', '2026-10-15', 2.00, 'bi_khoa', 1, '2026-11-01 08:30:00+07'),
+  (10, 3, 'nhan_vien_ca3', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Nguyễn Văn An', '2001-12-01', '0900000110', 'van.an.ca3@example.com', '2026-11-02', 1.86, 'hoat_dong', 0, '2026-11-02 08:00:00+07'),
+  (11, 3, 'nhan_vien_nhap', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Mai Phương Thảo', '1999-10-20', '0900000011', 'phuong.thao@example.com', '2026-11-13', 1.86, 'hoat_dong', 0, '2026-11-13 08:00:00+07'),
+  (12, 2, 'quan_ly_ca2', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Bùi Ngọc Ánh', '1995-05-05', '0900000012', 'ngoc.anh@example.com', '2026-11-13', 2.40, 'hoat_dong', 1, '2026-11-13 08:30:00+07'),
+  (13, 3, 'nv_chua_ho_so', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', NULL, NULL, NULL, NULL, NULL, NULL, 'hoat_dong', 0, '2026-11-15 14:00:00+07'),
+  (14, 3, 'nhan_vien_moi', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Trịnh Gia Bảo', '2003-03-03', '0900000014', 'gia.bao@example.com', '2026-11-16', 1.86, 'hoat_dong', 0, '2026-11-16 08:00:00+07'),
+  (15, 2, 'quan_ly_kho_2', '$2b$12$b6WSrWrAkDHtQoaOGzhFdegb5SbNwkobaHO6IqEfNnaO.m58.hv5m', 'Phan Thị Diệu', '1994-11-11', '0900000015', 'thi.dieu@example.com', '2026-11-16', 2.80, 'hoat_dong', 0, '2026-11-16 09:00:00+07');
 
 -- ---------------------------------------------------------------------
 -- catalog — mã MH-/NCC- do trigger cấp từ id, seed không truyền mã.
@@ -88,7 +124,11 @@ INSERT INTO public."NhanVien" (id, vai_tro_id, ten_dang_nhap, mat_khau, ho_ten, 
 
 INSERT INTO public."NhaCungCap" (id, ten_ncc, so_dien_thoai, dia_chi, phuong, tinh, created_at) VALUES
   (1, 'Công ty TNHH Linh kiện Xe đạp Minh Phát', '0280000011', '123 Đường Mẫu (địa chỉ minh họa)', 'Phường Minh Họa', 'Thành phố Hồ Chí Minh', '2026-11-01 09:10:00+07'),
-  (2, 'Công ty CP Phụ tùng Thành Công', '0240000022', '45 Đường Minh Họa (địa chỉ minh họa)', 'Phường Mẫu', 'Thành phố Hà Nội', '2026-11-01 09:12:00+07');
+  (2, 'Công ty CP Phụ tùng Thành Công', '0240000022', '45 Đường Minh Họa (địa chỉ minh họa)', 'Phường Mẫu', 'Thành phố Hà Nội', '2026-11-01 09:12:00+07'),
+  -- NCC 3–5 chưa có phiếu nhập nào: dùng để thử tra cứu, tìm kiếm và chi tiết NCC chưa giao dịch.
+  (3, 'Công ty TNHH Săm lốp Đông Á', '0274000033', '7 Đường Minh Họa (địa chỉ minh họa)', 'Phường Mẫu Ba', 'Tỉnh Bình Dương', '2026-11-03 14:00:00+07'),
+  (4, 'Cửa hàng Phụ tùng Xe đạp Hải Âu', '0236000044', '89 Đường Mẫu (địa chỉ minh họa)', 'Phường Minh Họa Hai', 'Thành phố Đà Nẵng', '2026-11-05 09:00:00+07'),
+  (5, 'Công ty TNHH Xích Líp Việt Tiến', '0292000055', '12 Đường Minh Họa (địa chỉ minh họa)', 'Phường Mẫu Năm', 'Thành phố Cần Thơ', '2026-11-14 10:00:00+07');
 
 -- don_gia: giá danh mục (VND), dùng làm giá xuất lúc duyệt phiếu xuất.
 INSERT INTO public."MatHang" (id, ten_mat_hang, sku, loai_mat_hang, don_vi_tinh, mau_sac, mo_ta, don_gia, is_active, created_at) VALUES
@@ -176,7 +216,10 @@ INSERT INTO public."YeuCauSanXuat" (id, ma_yeu_cau_san_xuat, loai_yeu_cau, mat_h
   (7, 'YCSX-202611-000007', 'xuat_giao', 4, 3, '2026-11-25', 2, 4, 5, 'da_gui', NULL, NULL,
    '2026-11-11 07:50:00+07', '2026-11-11 08:00:00+07', '2026-11-11 08:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, 2),
   (8, 'YCSX-202611-000008', 'xuat_giao', 1, 2, '2026-11-30', 2, 3, NULL, 'nhap', NULL, NULL,
-   '2026-11-12 08:00:00+07', '2026-11-12 08:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1);
+   '2026-11-12 08:00:00+07', '2026-11-12 08:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1),
+  -- Yêu cầu Nháp duy nhất của NV-000011: QTV đổi vai trò người này phải bị từ chối (UC-07 AC-5).
+  (9, 'YCSX-202611-000009', 'xuat_giao', 4, 2, '2026-12-05', 2, 11, NULL, 'nhap', NULL, NULL,
+   '2026-11-13 10:00:00+07', '2026-11-13 10:00:00+07', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1);
 
 -- Nhu cầu linh kiện = định mức của công thức đã chốt × số cần sản xuất.
 INSERT INTO public."NhuCauLinhKien" (yeu_cau_san_xuat_id, mat_hang_id, so_luong_can)
@@ -262,10 +305,57 @@ SET so_luong_dang_giu = COALESCE((SELECT sum(g.so_luong) FROM public."GiuHang" g
 -- ---------------------------------------------------------------------
 
 -- Tạo tài khoản; Quản trị viên đầu tiên tạo sẵn khi cài đặt nên không có bản ghi.
-INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, trang_thai_truoc, trang_thai_sau, du_lieu_truoc, du_lieu_sau, ly_do, created_at)
-SELECT 1, 'nhan_vien', n.id, 'tao', NULL, 'hoat_dong', NULL,
-       jsonb_build_object('ten_dang_nhap', n.ten_dang_nhap, 'ma_nhan_vien', n.ma_nhan_vien, 'vai_tro', v.ma_vai_tro), NULL, n.created_at
-FROM public."NhanVien" n JOIN public."VaiTro" v ON v.id = n.vai_tro_id WHERE n.id > 1 ORDER BY n.id;
+-- du_lieu_sau là hồ sơ đầy đủ như backend ghi (UC-04), trang_thai_truoc/sau để trống như backend.
+INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, du_lieu_sau, created_at)
+SELECT 1, 'nhan_vien', n.id, 'tao', pg_temp.ho_so_nv(n.id), n.created_at
+FROM public."NhanVien" n WHERE n.id BETWEEN 2 AND 4 ORDER BY n.id;
+
+-- Lịch sử quản trị tài khoản NV-000005 → NV-000015 (UC-01, UC-04 → UC-08), theo thời gian.
+-- Hồ sơ trong bảng NhanVien là trạng thái cuối; snapshot quá khứ ghi đè các trường đã khác lúc đó.
+INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, trang_thai_truoc, trang_thai_sau, du_lieu_truoc, du_lieu_sau, ly_do, created_at) VALUES
+  (1, 'nhan_vien', 1, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-01 07:55:00+07'),
+  (1, 'nhan_vien', 5, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(5), 'Bổ sung Quản trị viên dự phòng.', '2026-11-01 08:10:00+07'),
+  (1, 'nhan_vien', 6, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(6) || '{"trang_thai": "hoat_dong"}', NULL, '2026-11-01 08:15:00+07'),
+  (1, 'nhan_vien', 7, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(7) || '{"trang_thai": "hoat_dong"}', NULL, '2026-11-01 08:20:00+07'),
+  (1, 'nhan_vien', 8, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(8), NULL, '2026-11-01 08:25:00+07'),
+  (1, 'nhan_vien', 9, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(9) || '{"trang_thai": "hoat_dong"}', NULL, '2026-11-01 08:30:00+07'),
+  (1, 'nhan_vien', 10, 'tao', NULL, NULL, NULL,
+   pg_temp.ho_so_nv(10) || '{"so_dien_thoai": "0900000010", "email": "van.an@example.com"}', NULL, '2026-11-02 08:00:00+07'),
+  -- NV-000006: QTV cũ chuyển công tác -> khóa có lý do.
+  (1, 'nhan_vien', 6, 'khoa', 'hoat_dong', 'bi_khoa', pg_temp.ho_so_nv(6) || '{"trang_thai": "hoat_dong"}', pg_temp.ho_so_nv(6),
+   'Chuyển công tác sang chi nhánh khác.', '2026-11-10 16:00:00+07'),
+  -- NV-000008: khóa -> đổi mật khẩu -> mở khóa (phiên bản đăng nhập 0 -> 1 -> 2).
+  (1, 'nhan_vien', 8, 'khoa', 'hoat_dong', 'bi_khoa', pg_temp.ho_so_nv(8), pg_temp.ho_so_nv(8) || '{"trang_thai": "bi_khoa"}',
+   'Nghi lộ mật khẩu, tạm khóa để kiểm tra.', '2026-11-11 08:00:00+07'),
+  (1, 'nhan_vien', 8, 'doi_mat_khau', NULL, NULL, NULL, '{"da_doi_mat_khau": true}', NULL, '2026-11-11 08:10:00+07'),
+  (1, 'nhan_vien', 8, 'mo_khoa', 'bi_khoa', 'hoat_dong', pg_temp.ho_so_nv(8) || '{"trang_thai": "bi_khoa"}', pg_temp.ho_so_nv(8),
+   'Đã cấp mật khẩu mới.', '2026-11-11 08:15:00+07'),
+  (1, 'nhan_vien', 11, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(11), NULL, '2026-11-13 08:00:00+07'),
+  -- NV-000012: tạo là Nhân viên "nv_ngoc_anh", đổi sang Quản lý kho, rồi đổi tên đăng nhập.
+  (1, 'nhan_vien', 12, 'tao', NULL, NULL, NULL,
+   pg_temp.ho_so_nv(12) || '{"ten_dang_nhap": "nv_ngoc_anh", "vai_tro_id": 3, "ma_vai_tro": "nhan_vien"}', NULL, '2026-11-13 08:30:00+07'),
+  (1, 'nhan_vien', 12, 'doi_vai_tro', NULL, NULL,
+   pg_temp.ho_so_nv(12) || '{"ten_dang_nhap": "nv_ngoc_anh", "vai_tro_id": 3, "ma_vai_tro": "nhan_vien"}',
+   pg_temp.ho_so_nv(12) || '{"ten_dang_nhap": "nv_ngoc_anh"}', 'Điều chuyển làm quản lý kho ca 2.', '2026-11-14 09:00:00+07'),
+  (1, 'nhan_vien', 12, 'sua', NULL, NULL, pg_temp.ho_so_nv(12) || '{"ten_dang_nhap": "nv_ngoc_anh"}', pg_temp.ho_so_nv(12),
+   NULL, '2026-11-14 09:05:00+07'),
+  (12, 'nhan_vien', 12, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-14 09:30:00+07'),
+  (1, 'nhan_vien', 13, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(13), NULL, '2026-11-15 14:00:00+07'),
+  -- NV-000007: Quản lý kho nghỉ dài hạn -> khóa có lý do.
+  (1, 'nhan_vien', 7, 'khoa', 'hoat_dong', 'bi_khoa', pg_temp.ho_so_nv(7) || '{"trang_thai": "hoat_dong"}', pg_temp.ho_so_nv(7),
+   'Nghỉ phép dài hạn đến hết tháng 12.', '2026-11-15 17:00:00+07'),
+  -- 16/11: 5 dòng mới nhất cho bảng "Hoạt động gần đây" ở Tổng quan admin.
+  (1, 'nhan_vien', 1, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-16 07:50:00+07'),
+  (1, 'nhan_vien', 14, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(14), 'Tuyển mới tổ lắp ráp.', '2026-11-16 08:00:00+07'),
+  (1, 'nhan_vien', 15, 'tao', NULL, NULL, NULL, pg_temp.ho_so_nv(15), NULL, '2026-11-16 09:00:00+07'),
+  -- NV-000009: khóa không nhập lý do (UC-05 A1).
+  (1, 'nhan_vien', 9, 'khoa', 'hoat_dong', 'bi_khoa', pg_temp.ho_so_nv(9) || '{"trang_thai": "hoat_dong"}', pg_temp.ho_so_nv(9),
+   NULL, '2026-11-16 10:00:00+07'),
+  -- NV-000010: sửa số điện thoại và email.
+  (1, 'nhan_vien', 10, 'sua', NULL, NULL,
+   pg_temp.ho_so_nv(10) || '{"so_dien_thoai": "0900000010", "email": "van.an@example.com"}', pg_temp.ho_so_nv(10),
+   NULL, '2026-11-16 15:00:00+07'),
+  (5, 'nhan_vien', 5, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-16 16:30:00+07');
 
 INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, thao_tac, trang_thai_truoc, trang_thai_sau, du_lieu_truoc, du_lieu_sau, ly_do, created_at) VALUES
   (2, 'nhan_vien', 2, 'dang_nhap', NULL, NULL, NULL, NULL, NULL, '2026-11-01 09:00:00+07'),
@@ -346,7 +436,12 @@ INSERT INTO public."LichSuThaoTac" (nhan_vien_id, loai_doi_tuong, doi_tuong_id, 
   (2, 'yeu_cau_san_xuat', 7, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 4, "so_luong": 3, "nhan_vien_duoc_giao_id": 4}', NULL, '2026-11-11 07:50:00+07'),
   (2, 'yeu_cau_san_xuat', 7, 'gui', 'nhap', 'da_gui', NULL, '{"bom_id": 5}', NULL, '2026-11-11 08:00:00+07'),
   (2, 'yeu_cau_san_xuat', 8, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 1, "so_luong": 2, "nhan_vien_duoc_giao_id": 3}', NULL, '2026-11-12 08:00:00+07'),
-  (2, 'phieu_nhap', 2, 'tao', NULL, 'nhap', NULL, '{"so_dong": 1}', NULL, '2026-11-12 09:00:00+07');
+  (2, 'phieu_nhap', 2, 'tao', NULL, 'nhap', NULL, '{"so_dong": 1}', NULL, '2026-11-12 09:00:00+07'),
+  -- NCC 3–5 và YCSX 9 (Nháp, giao NV-000011)
+  (2, 'nha_cung_cap', 3, 'tao', NULL, NULL, NULL, '{"ma_ncc": "NCC-000003", "ten_ncc": "Công ty TNHH Săm lốp Đông Á"}', NULL, '2026-11-03 14:00:00+07'),
+  (2, 'nha_cung_cap', 4, 'tao', NULL, NULL, NULL, '{"ma_ncc": "NCC-000004", "ten_ncc": "Cửa hàng Phụ tùng Xe đạp Hải Âu"}', NULL, '2026-11-05 09:00:00+07'),
+  (2, 'yeu_cau_san_xuat', 9, 'tao', NULL, 'nhap', NULL, '{"loai_yeu_cau": "xuat_giao", "mat_hang_id": 4, "so_luong": 2, "nhan_vien_duoc_giao_id": 11}', NULL, '2026-11-13 10:00:00+07'),
+  (2, 'nha_cung_cap', 5, 'tao', NULL, NULL, NULL, '{"ma_ncc": "NCC-000005", "ten_ncc": "Công ty TNHH Xích Líp Việt Tiến"}', NULL, '2026-11-14 10:00:00+07');
 
 -- ---------------------------------------------------------------------
 -- Lưu lượng truy cập minh họa cho biểu đồ Tổng quan admin.
@@ -447,6 +542,20 @@ BEGIN
       SELECT n.so_luong_can FROM public."NhuCauLinhKien" n
       WHERE n.yeu_cau_san_xuat_id = p.yeu_cau_san_xuat_id AND n.mat_hang_id = c.mat_hang_id)
   ) THEN RAISE EXCEPTION 'Phiếu xuất linh kiện phải đúng nhu cầu đã chốt (BR-010)'; END IF;
+  -- Dữ liệu kiểm thử admin: phân bổ tài khoản theo vai trò/trạng thái.
+  IF (SELECT array_agg(row(v.ma_vai_tro, n.trang_thai, n.cnt)::text ORDER BY v.ma_vai_tro, n.trang_thai)
+      FROM (SELECT vai_tro_id, trang_thai, count(*) cnt FROM public."NhanVien" GROUP BY 1, 2) n
+      JOIN public."VaiTro" v ON v.id = n.vai_tro_id)
+     IS DISTINCT FROM ARRAY['(nhan_vien,bi_khoa,1)', '(nhan_vien,hoat_dong,7)', '(quan_ly,bi_khoa,1)',
+                            '(quan_ly,hoat_dong,3)', '(quan_tri_vien,bi_khoa,1)', '(quan_tri_vien,hoat_dong,2)'] THEN
+    RAISE EXCEPTION 'Phân bổ tài khoản admin không đúng kịch bản (15 tài khoản, 3 bị khóa)'; END IF;
+  -- UC-07 R4: NV-000003/4 còn yêu cầu chưa kết thúc; NV-000011 chỉ có 1 yêu cầu Nháp; các NV khác không có yêu cầu.
+  IF (SELECT array_agg(row(nhan_vien_duoc_giao_id, trang_thai)::text ORDER BY id) FROM public."YeuCauSanXuat"
+      WHERE nhan_vien_duoc_giao_id NOT IN (3, 4)) IS DISTINCT FROM ARRAY['(11,nhap)'] THEN
+    RAISE EXCEPTION 'Chỉ NV-000003, NV-000004, NV-000011 được giao yêu cầu sản xuất'; END IF;
+  IF EXISTS (SELECT 1 FROM public."LichSuThaoTac" WHERE loai_doi_tuong = 'nhan_vien'
+             AND (du_lieu_truoc::text ~* 'mat_khau"\s*:\s*"' OR du_lieu_sau::text ~* 'mat_khau"\s*:\s*"')) THEN
+    RAISE EXCEPTION 'Lịch sử tài khoản không được chứa mật khẩu (UC-08 R7)'; END IF;
 END $$;
 
 COMMIT;
