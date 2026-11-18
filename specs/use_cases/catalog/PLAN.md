@@ -125,8 +125,8 @@ Giữ route hiện hữu, chỉ thêm PATCH NCC. Envelope `{data, meta}` và `{e
 - `q` strip whitespace ngoài, rỗng thành không lọc; literal substring không phân biệt
   hoa/thường trên mã/tên, giữ dấu; không tìm SKU, không wildcard `%/_`. Dùng thao tác
   text chuẩn, không ghép user input thành regex/SQL. Cache và SQL có test UTF-8 thực.
-- `tinh`/`phuong` query trống sau trim coi như không lọc; giá trị có nội dung so bằng
-  sau normalize whitespace ngoài và chữ hoa/thường, giữ dấu. Normalize ở predicate,
+- `tinh`/`phuong` query trống sau trim coi như không lọc; giá trị có nội dung chứa chuỗi con
+  sau normalize whitespace ngoài, không phân biệt hoa/thường, giữ dấu, `%`/`_` literal. Normalize ở predicate,
   không sửa giá trị NCC lưu/response. Cho lọc phường một mình, không suy luận địa giới.
 - Có `is_active` thì chỉ lọc TP; kết hợp loai=linh_kien bị service từ chối 422 theo
   chính sách Q3. Nếu không có filter trạng thái, linh kiện active vẫn có trong danh sách.

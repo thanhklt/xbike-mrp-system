@@ -19,6 +19,7 @@ class SqlAlchemySupplierRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    # UC-13 Tra cứu nhà cung cấp — Main 3–4; R2, R3, A1 (specs/use_cases/catalog/UC-13.md)
     async def list_suppliers(self, params: NhaCungCapListQuery) -> RecordPage[SupplierResponse]:
         query = select(NhaCungCap)
         if params.q:
@@ -29,13 +30,9 @@ class SqlAlchemySupplierRepository:
                 )
             )
         if params.tinh is not None:
-            query = query.where(
-                func.lower(func.btrim(NhaCungCap.tinh, " \t\r\n\f\v")) == params.tinh.lower()
-            )
+            query = query.where(NhaCungCap.tinh.icontains(params.tinh, autoescape=True))
         if params.phuong is not None:
-            query = query.where(
-                func.lower(func.btrim(NhaCungCap.phuong, " \t\r\n\f\v")) == params.phuong.lower()
-            )
+            query = query.where(NhaCungCap.phuong.icontains(params.phuong, autoescape=True))
         total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         offset = (params.page - 1) * params.page_size
         if offset >= total:
