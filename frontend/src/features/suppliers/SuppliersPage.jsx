@@ -9,6 +9,11 @@ import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Field } from "../../components/Field.jsx";
 import { Button } from "../../components/Button.jsx";
 import { ErrorNotice } from "../../components/QueryState.jsx";
+
+function supplierAddressLabel(address) {
+  return address?.replace(/\s*\(địa chỉ minh họa\)\s*$/u, "");
+}
+
 export function SuppliersPage({ readOnly = false }) {
   const base = readOnly ? "/admin/nha-cung-cap" : "/kho/nha-cung-cap";
   const { id } = useParams();
@@ -83,9 +88,11 @@ export function SuppliersPage({ readOnly = false }) {
                     ["Tỉnh / thành", snapshot.data.tinh],
                   ]}
                 />
-                <Link to={`/kho/phieu-nhap?ncc_id=${snapshot.data.id}`}>
-                  Xem phiếu nhập của nhà cung cấp →
-                </Link>
+                {!readOnly && (
+                  <Link to={`/kho/phieu-nhap?ncc_id=${snapshot.data.id}`}>
+                    Xem phiếu nhập của nhà cung cấp →
+                  </Link>
+                )}
               </div>
             ) : (
               <SupplierForm base={base} />

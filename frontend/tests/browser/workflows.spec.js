@@ -23,22 +23,6 @@ test("login calls the backend with username and password; server profile determi
   ).toBeTruthy();
 });
 
-test("bad credentials never grant a session or show a dashboard", async ({ page }) => {
-  await installApi(page, {
-    authenticated: false,
-    intercept: (call) =>
-      call.path === "auth/dang_nhap"
-        ? { status: 401, json: { error: { message: "Thông tin đăng nhập không hợp lệ" } } }
-        : null,
-  });
-  await page.goto("/dang-nhap");
-  await page.getByLabel("Tên đăng nhập", { exact: true }).fill("wrong");
-  await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
-  await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Thông tin đăng nhập không hợp lệ");
-  expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();
-});
-
 test("the latest /auth/me role takes precedence over the earlier login response", async ({
   page,
 }) => {

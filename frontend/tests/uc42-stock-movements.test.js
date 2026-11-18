@@ -134,7 +134,7 @@ test("movement page uses the reporting endpoint and the approved navigation labe
     navigationFor("quan_ly")
       .flatMap((group) => group.items)
       .filter(([path]) => path === "/kho/giao-dich"),
-    [["/kho/giao-dich", "Lịch sử biến động kho"]],
+    [["/kho/giao-dich", "Biến động kho"]],
   );
 });
 

@@ -173,7 +173,7 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
       danger: remove,
       impact: remove
         ? "Xóa bản nháp, không thay đổi tồn kho."
-        : "Sau khi bấm xác nhận, không thể chỉnh sửa được.",
+        : "Cộng số lượng từng mặt hàng vào kho và ghi giao dịch một lần. Sau khi xác nhận, phiếu không thể chỉnh sửa.",
       onConfirm: async () => {
         const result = await action.mutateAsync({
           path: `${API.receipts}/${record.id}${remove ? "" : "/hoan_tat"}`,

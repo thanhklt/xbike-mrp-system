@@ -595,6 +595,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
       records.push(next);
       return respond({ data: next, meta: {} }, 201, { etag: '"v1"' });
+    }
     if (resource === "nhan_vien" && method === "PATCH" && body.ten_dang_nhap !== undefined) {
       body.ten_dang_nhap = body.ten_dang_nhap.trim();
       if (records.some((entry) => entry.id !== id && entry.ten_dang_nhap === body.ten_dang_nhap))

@@ -190,8 +190,11 @@ test("item status rejects component filters before sending a request", async ({ 
   });
   await type.selectOption("linh_kien");
   await response;
-  await expect(page.locator("table tbody tr")).toHaveCount(1);
-  await expect(page.locator("table tbody tr")).toContainText("MH-000002");
+  const rows = page.locator("table tbody tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.getByRole("link", { name: /^MH-/ })).toHaveText([
+    "MH-000001", "MH-000002", "MH-000003",
+  ]);
   const itemCalls = () => readOnlyApi.calls.filter((call) => call.path === "mat_hang");
   const callCount = itemCalls().length;
   await status.selectOption("true");
@@ -214,7 +217,9 @@ test("item status rejects component filters before sending a request", async ({ 
   )).toBe(false);
 });
 
-test("admin item lookup shows all read-only fields and three stock balances", async ({ page }) => {
+test("admin item lookup shows all read-only fields and three stock balances", async ({ page, readOnlyApi }) => {
+  const frame = readOnlyApi.resources.mat_hang.find((item) => item.id === 1);
+  Object.assign(frame, { so_luong_dang_giu: 40, so_luong_con_dung: 80 });
   await page.goto("/admin/mat-hang");
   await expect(page.getByRole("heading", { name: "Tra cứu mặt hàng", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Đơn giá", exact: true })).toBeVisible();
@@ -228,7 +233,7 @@ test("admin item lookup shows all read-only fields and three stock balances", as
   for (const [label, value] of [
     ["Mã", "MH-000001"],
     ["Tên mặt hàng", "Khung xe"],
-    ["Loại", "Nguyên vật liệu"],
+    ["Loại", "Linh kiện"],
     ["SKU", "FRAME-01"],
     ["Đơn vị tính", "cái"],
     ["Đơn giá", money(250000)],
@@ -328,9 +333,11 @@ test.describe("warehouse history heading", () => {
       await expect(heading).toHaveText("Lịch sử thao tác");
       await expect(heading).toBeVisible();
       await expect(heading).toHaveCSS("font-size", "40px");
-      const bodyColor = await page.locator("body").evaluate((body) => getComputedStyle(body).color);
-      expect(bodyColor).not.toBe("rgb(255, 255, 255)");
-      await expect(heading).toHaveCSS("color", bodyColor);
+      const warehouseColor = await page.locator(".warehouse-shell").evaluate(
+        (shell) => getComputedStyle(shell).color,
+      );
+      expect(warehouseColor).toBe("rgb(244, 238, 232)");
+      await expect(heading).toHaveCSS("color", warehouseColor);
       await expect(page.locator("main .page-heading")).toHaveCount(0);
       await expect(page.locator("main .admin-page-heading p.muted")).toHaveCount(0);
       expect(
@@ -338,10 +345,14 @@ test.describe("warehouse history heading", () => {
       ).toBe(true);
       await page.goto("/kho/mat-hang");
       await expect(page.locator("main .page-heading h1")).toHaveText("Mặt hàng và tồn kho");
-      await expect(page.locator("main .page-heading h1")).toHaveCSS("font-size", "24px");
-      await expect(page.locator("main .page-heading p.muted")).toHaveText(
+      await expect(page.locator("main .page-heading h1")).toHaveCSS(
+        "font-size", width === 375 ? "24px" : "26px",
+      );
+      const subtitle = page.locator("main .page-heading p.muted");
+      await expect(subtitle).toHaveText(
         "Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ.",
       );
+      await expect(subtitle).toBeHidden();
       await expect(page.getByRole("link", { name: "Thêm mặt hàng" })).toBeVisible();
     });
   }

@@ -85,7 +85,9 @@ test("UC-10/11: QLK creates and edits a component with generated code and v4 pay
   await dialog.getByLabel("SKU", { exact: true }).fill("WHS-01");
   await dialog.getByLabel("Tên mặt hàng", { exact: true }).fill("Linh kiện thử giao diện");
   const units = dialog.getByRole("combobox", { name: "Đơn vị tính", exact: true });
-  await expect(units.locator("option")).toHaveText(["cái", "chiếc", "bộ", "kg"]);
+  await expect(units.locator("option")).toHaveText([
+    "cái", "chiếc", "bộ", "cặp", "cuộn", "hộp", "gói", "tấm", "thanh", "mét", "kg", "lít",
+  ]);
   await units.selectOption({ label: "bộ" });
   await dialog.getByLabel("Đơn giá (VND)", { exact: true }).fill("10000");
   await dialog.getByRole("button", { name: "Lưu", exact: true }).click();
@@ -456,8 +458,16 @@ test("QLK filters and page sizes query the server; report labels keep exact serv
       ),
     )
     .toBe(true);
+  // Lọc lại hoặc xóa lọc không được đưa số dòng/trang về mặc định.
+  const lastItemCall = () => state.calls.filter((call) => call.path === "mat_hang").at(-1);
+  await page.getByLabel("Tìm kiếm", { exact: true }).fill("Khung");
+  await page.getByRole("button", { name: "Lọc", exact: true }).click();
+  await expect.poll(() => lastItemCall().params).toMatchObject({ q: "Khung", page_size: "50" });
   await page.getByRole("button", { name: "Xóa lọc", exact: true }).click();
   await expect(page.getByLabel("Loại mặt hàng", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Tìm kiếm", { exact: true })).toHaveValue("");
+  await expect.poll(() => lastItemCall().params.loai_mat_hang ?? "").toBe("");
+  expect(lastItemCall().params.page_size).toBe("50");
   await page.goto("/kho/thong-ke");
   await page.getByLabel("Năm", { exact: true }).fill("2026");
   await page.getByLabel("Tháng", { exact: true }).fill("11");

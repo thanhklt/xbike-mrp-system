@@ -62,13 +62,14 @@ test("UC-11: editing a finished item omits immutable type, generated code and fo
 });
 
 test("report unit labels are accented while unknown server units remain readable", () => {
-  assert.deepEqual(["cai", "chiec", "bo", "kg", "met", "cuon", null].map(unitLabel), [
+  assert.deepEqual(["cai", "chiec", "bo", "kg", "met", "cuon", "thung_lon", null].map(unitLabel), [
     "cái",
     "chiếc",
     "bộ",
     "kg",
-    "met",
-    "cuon",
+    "mét",
+    "cuộn",
+    "thung lon",
     "—",
   ]);
 });
@@ -79,7 +80,15 @@ test("UC-10/11: unit choices display accents and keep database codes in item pay
     { value: "cai", label: "cái" },
     { value: "chiec", label: "chiếc" },
     { value: "bo", label: "bộ" },
+    { value: "cap", label: "cặp" },
+    { value: "cuon", label: "cuộn" },
+    { value: "hop", label: "hộp" },
+    { value: "goi", label: "gói" },
+    { value: "tam", label: "tấm" },
+    { value: "thanh", label: "thanh" },
+    { value: "met", label: "mét" },
     { value: "kg", label: "kg" },
+    { value: "lit", label: "lít" },
   ]);
   for (const { value } of options) {
     assert.equal(itemPayload({ ...values, don_vi_tinh: value }).don_vi_tinh, value);
@@ -88,7 +97,7 @@ test("UC-10/11: unit choices display accents and keep database codes in item pay
 });
 
 test("UC-11: legacy units remain selectable and are omitted when unchanged", () => {
-  for (const unit of ["chiếc", "hop"]) {
+  for (const unit of ["chiếc", "thung_lon"]) {
     const record = { ...values, sku: "FRAME", ten_mat_hang: "Khung xe", don_vi_tinh: unit };
     const options = itemUnitOptions(unit);
     assert.ok(options.some((option) => option.value === unit));
@@ -97,5 +106,5 @@ test("UC-11: legacy units remain selectable and are omitted when unchanged", () 
     assert.equal(payload.ten_mat_hang, "Khung xe mới");
     assert.equal("don_vi_tinh" in payload, false);
   }
-  assert.equal(itemUnitOptions().length, 4);
+  assert.equal(itemUnitOptions().length, 12);
 });
