@@ -318,20 +318,8 @@ class YeuCauChoBoSung(BaseModel):
     da_du: bool
 
 
-class TongHopLinhKien(BaseModel):
-    mat_hang_id: int
-    ma_mat_hang: str
-    ten_mat_hang: str
-    don_vi_tinh: str
-    tong_can: int
-    so_luong_con_dung: int
-    so_luong_thieu: int
-    so_yeu_cau: int
-
-
 class NhuCauBoSungData(BaseModel):
     yeu_cau: list[YeuCauChoBoSung]
-    tong_hop: list[TongHopLinhKien]
 
 
 class NhuCauBoSungResponse(BaseModel):

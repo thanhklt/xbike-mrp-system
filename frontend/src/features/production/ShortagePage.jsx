@@ -8,33 +8,23 @@ import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useChoices, useResource } from "../../lib/api/useResources.js";
 import {
   SHORTAGE_COLUMNS,
-  SUMMARY_COLUMNS,
   shortageRequestEntries,
   shortageRows,
 } from "./shortageView.js";
 
-// UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–4; A1, D3 trang chỉ xem cho QLK (specs/use_cases/production/UC-27.md)
+// UC-27 Xem nhu cầu bổ sung linh kiện — Main 1–4, A1 hiển thị yêu cầu chờ và mở form nhập bổ sung (specs/use_cases/production/UC-27.md)
 export function ShortagePage() {
   const query = useResource(API.shortages);
   const catalog = useCatalog();
   const employees = useChoices(API.employees);
   const items = catalog.data?.data || [];
-  const { yeu_cau: requests = [], tong_hop: summary = [] } = query.data?.data || {};
+  const { yeu_cau: requests = [] } = query.data?.data || {};
   return (
     <>
       <PageHeader
         title="Nhu cầu bổ sung linh kiện"
-        subtitle="Xem linh kiện cần bổ sung để đáp ứng các yêu cầu sản xuất đang chờ."
+        subtitle="Xem linh kiện còn thiếu của từng yêu cầu sản xuất đang chờ và lập phiếu nhập bổ sung."
       />
-      <Card title="Tổng hợp theo linh kiện">
-        <QueryState query={query}>
-          <DataTable
-            rows={shortageRows(summary)}
-            columns={SUMMARY_COLUMNS}
-            empty="Không có linh kiện cần bổ sung."
-          />
-        </QueryState>
-      </Card>
       <Card title="Yêu cầu chờ bổ sung">
         <QueryState query={query}>
           <QueryState query={catalog}>
@@ -52,10 +42,20 @@ export function ShortagePage() {
                       {record.da_du ? (
                         <Notice>Đã đủ linh kiện, chờ nhân viên kiểm tra lại.</Notice>
                       ) : (
-                        <DataTable
-                          rows={shortageRows(record.linh_kien_thieu)}
-                          columns={SHORTAGE_COLUMNS}
-                        />
+                        <>
+                          <DataTable
+                            rows={shortageRows(record.linh_kien_thieu)}
+                            columns={SHORTAGE_COLUMNS}
+                          />
+                          <div className="actions actions-end">
+                            <Link
+                              className="btn btn-secondary"
+                              to={`/kho/phieu-nhap/moi?yeu_cau_san_xuat_id=${record.id}`}
+                            >
+                              Lập phiếu nhập bổ sung
+                            </Link>
+                          </div>
+                        </>
                       )}
                     </section>
                   ))

@@ -455,6 +455,14 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
           <Button variant="secondary" disabled={cancelPending || cancelMutation.isPending} onClick={() => cancel()}>
             Hủy yêu cầu…
           </Button>
+          {record.trang_thai === "cho_bo_sung_linh_kien" && (
+            <Link
+              className="btn btn-secondary"
+              to={`/kho/phieu-nhap/moi?yeu_cau_san_xuat_id=${record.id}`}
+            >
+              Lập phiếu nhập bổ sung
+            </Link>
+          )}
           {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (
             <Link
               className="btn btn-secondary"

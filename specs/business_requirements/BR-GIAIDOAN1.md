@@ -243,20 +243,21 @@ Nhân viên biết ngay yêu cầu của mình làm được tới đâu: dùng 
 # BR-009: xBike MRP — Theo dõi nhu cầu bổ sung linh kiện
 
 ## Goal
-Quản lý kho nhìn một chỗ là biết phải nhập bao nhiêu mỗi loại linh kiện để gỡ toàn bộ các yêu cầu đang chờ.
+Quản lý kho xem các yêu cầu đang chờ bổ sung linh kiện, biết từng yêu cầu thiếu gì và lập nhanh phiếu nhập bổ sung.
 
 ## Success Metrics
-- shortage_summary_accuracy = 100% (tổng thiếu khớp với tính tay trên kịch bản nghiệm thu)
+- prefill_accuracy = 100% (dòng điền sẵn khớp linh kiện thiếu của yêu cầu)
 
 ## In Scope (Giai đoạn 1)
 - Danh sách yêu cầu Chờ bổ sung linh kiện, cũ nhất lên đầu, kèm linh kiện thiếu của từng yêu cầu
-- Tổng hợp theo linh kiện: tổng cần, còn dùng được, thiếu
-- Chỉ để xem; Quản lý kho tự lập phiếu nhập theo BR-006
-- Kịch bản nghiệm thu: hai yêu cầu mỗi yêu cầu thiếu 10 khung, khung còn dùng được là 0 → tổng thiếu 20
+- Từ một yêu cầu còn thiếu, Quản lý kho mở form tạo phiếu nhập đã điền sẵn linh kiện thiếu (số lượng = thiếu, đơn giá = đơn giá mặt hàng) và ghi chú mã yêu cầu. Quản lý kho tự chọn nhà cung cấp, ngày nhập, sửa rồi lưu theo BR-006. Phiếu nhập không gắn với yêu cầu.
+- Trong kịch bản nghiệm thu, Quản lý kho chọn lập phiếu nhập bổ sung cho yêu cầu thiếu 10 khung và 4 lốp. Form có 2 dòng, khung 10 và lốp 4.
 
 ## Out of Scope
 - Thông báo đẩy, email, realtime
-- Tự tạo phiếu nhập từ danh sách thiếu
+- Hệ thống tự lưu hoặc tự hoàn tất phiếu nhập
+- Gắn phiếu nhập với yêu cầu sản xuất
+- Tổng hợp nhu cầu theo linh kiện trên nhiều yêu cầu
 - Đề xuất nhà cung cấp
 
 ---

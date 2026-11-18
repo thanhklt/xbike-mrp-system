@@ -37,7 +37,6 @@ from app.modules.san_xuat.schemas import (
     NhuCauThieuLine,
     PhieuXuatHuyLine,
     ResponseMeta,
-    TongHopLinhKien,
     YeuCauChoBoSung,
     YeuCauCreate,
     YeuCauDetailResponse,
@@ -132,14 +131,13 @@ def tinh_ket_qua_kiem_tra(
     )
 
 
-# UC-27 Xem nhu cầu bổ sung linh kiện — Main 2–3; D3–D4 tính thiếu riêng và tổng hợp (specs/use_cases/production/UC-27.md)
-def tong_hop_nhu_cau_bo_sung(
+# UC-27 Xem nhu cầu bổ sung linh kiện — Main 2; R1 linh kiện thiếu của từng yêu cầu (specs/use_cases/production/UC-27.md)
+def danh_sach_nhu_cau_bo_sung(
     yeu_cau: list[YeuCauRead],
     nhu_cau: dict[int, dict[int, int]],
     kha_dung: dict[int, HangKhaDung],
 ) -> NhuCauBoSungData:
     requests = []
-    totals: dict[int, TongHopLinhKien] = {}
     for record in yeu_cau:
         missing = []
         for item_id, quantity in sorted(nhu_cau.get(record.id, {}).items()):
@@ -154,14 +152,6 @@ def tong_hop_nhu_cau_bo_sung(
                     **identity, so_luong_can=quantity,
                     so_luong_thieu=quantity - item.so_luong_con_dung,
                 ))
-            if item_id not in totals:
-                totals[item_id] = TongHopLinhKien(
-                    **identity, tong_can=0, so_luong_thieu=0, so_yeu_cau=0,
-                )
-            total = totals[item_id]
-            total.tong_can += quantity
-            total.so_yeu_cau += 1
-            total.so_luong_thieu = max(0, total.tong_can - total.so_luong_con_dung)
         requests.append(YeuCauChoBoSung(
             **record.model_dump(include={
                 "id", "ma_yeu_cau_san_xuat", "mat_hang_id", "loai_yeu_cau",
@@ -170,10 +160,7 @@ def tong_hop_nhu_cau_bo_sung(
             }),
             linh_kien_thieu=missing, da_du=not missing,
         ))
-    return NhuCauBoSungData(
-        yeu_cau=requests,
-        tong_hop=sorted(totals.values(), key=lambda row: (-row.so_luong_thieu, row.ma_mat_hang)),
-    )
+    return NhuCauBoSungData(yeu_cau=requests)
 
 
 class YeuCauSanXuatService:
@@ -231,7 +218,7 @@ class YeuCauSanXuatService:
         item_ids = sorted({item_id for quantities in needs.values() for item_id in quantities})
         available = await self.repository.kha_dung(item_ids, lock=False) if item_ids else {}
         return NhuCauBoSungResponse(
-            data=tong_hop_nhu_cau_bo_sung(requests, needs, available),
+            data=danh_sach_nhu_cau_bo_sung(requests, needs, available),
             meta=ResponseMeta(request_id=request_id),
         )
 
