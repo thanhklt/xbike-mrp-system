@@ -35,12 +35,22 @@ export function Collection({
   const [expanded, setExpanded] = useState(false);
   const [resetCount, setResetCount] = useState(0);
   const searchTimer = useRef(null);
+  const pendingSearch = useRef(null);
   const advancedId = useId();
 
   useEffect(() => {
     if (syncDraftWithParams || cycleFilters) {
+      const next = filterParams(collection.params);
+      const pending = pendingSearch.current;
+      if (cycleFilters && pending !== null && pending !== (next.q ?? "")) {
+        const nextWithSearch = { ...next, q: pending };
+        setDraft(nextWithSearch);
+        apply(nextWithSearch);
+        return;
+      }
       clearTimeout(searchTimer.current);
-      setDraft(filterParams(collection.params));
+      pendingSearch.current = null;
+      setDraft(next);
       setFilterError(null);
     }
   }, [collection.params, syncDraftWithParams, cycleFilters]);
@@ -51,9 +61,11 @@ export function Collection({
     const message = (cycleFilters ? dateRangeError(next) : null) ?? validate?.(next) ?? null;
     setFilterError(message);
     if (!message) collection.filter(next);
+    pendingSearch.current = null;
   }
   function resetFilters() {
     clearTimeout(searchTimer.current);
+    pendingSearch.current = null;
     const next = search ? { q: "" } : {};
     for (const field of filters) next[field.name] = field.options?.[0]?.value ?? "";
     setDraft({ ...filterParams(collection.params), ...next });
@@ -121,6 +133,7 @@ export function Collection({
           setDraft(next);
           if (cycleFilters) {
             clearTimeout(searchTimer.current);
+            pendingSearch.current = next.q;
             searchTimer.current = setTimeout(() => apply(next), 300);
           }
         }}
