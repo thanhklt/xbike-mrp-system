@@ -66,7 +66,17 @@ export function EmployeeSelect({
 export function newLine(values = {}) {
   return { key: crypto.randomUUID(), mat_hang_id: "", so_luong: "1", don_gia_thuc: "0", ...values };
 }
-export function DocumentLines({ lines, onChange, items = [], prices = false, types, outputId }) {
+export function DocumentLines({
+  lines,
+  onChange,
+  items = [],
+  prices = false,
+  types,
+  outputId,
+  columnAfterItem,
+  allowDuplicateItems = false,
+  afterAdd,
+}) {
   function update(key, patch) {
     onChange(lines.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
@@ -83,6 +93,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
           <thead>
             <tr>
               <th className="item-column">Mặt hàng</th>
+              {columnAfterItem && <th>{columnAfterItem.label}</th>}
               <th className="quantity-column numeric">Số lượng</th>
               {prices && <th className="quantity-column numeric">Đơn giá (đ)</th>}
               <th>ĐVT</th>
@@ -92,7 +103,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
           <tbody>
             {lines.map((line, index) => (
               <tr key={line.key}>
-                <td>
+                <td data-label="Mặt hàng">
                   <select
                     aria-label={`Mặt hàng dòng ${index + 1}`}
                     required
@@ -112,6 +123,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                         key={item.id}
                         value={item.id}
                         disabled={
+                          !allowDuplicateItems &&
                           item.id !== Number(line.mat_hang_id) &&
                           lines.some(
                             (other) =>
@@ -125,7 +137,12 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                     ))}
                   </select>
                 </td>
-                <td>
+                {columnAfterItem && (
+                  <td data-label={columnAfterItem.label}>
+                    {columnAfterItem.render(line, index, (patch) => update(line.key, patch))}
+                  </td>
+                )}
+                <td data-label="Số lượng">
                   <input
                     aria-label={`Số lượng dòng ${index + 1}`}
                     required
@@ -138,7 +155,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                   />
                 </td>
                 {prices && (
-                  <td>
+                  <td data-label="Đơn giá (đ)">
                     <input
                       aria-label={`Đơn giá dòng ${index + 1}`}
                       required
@@ -151,7 +168,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                     />
                   </td>
                 )}
-                <td>
+                <td data-label="ĐVT">
                   {unitLabel(
                     items.find((item) => item.id === Number(line.mat_hang_id))?.don_vi_tinh,
                   )}
@@ -177,6 +194,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
         <Button variant="secondary" onClick={() => onChange([...lines, newLine()])}>
           + Thêm dòng
         </Button>
+        {afterAdd}
       </div>
     </div>
   );

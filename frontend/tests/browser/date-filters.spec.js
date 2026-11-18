@@ -114,7 +114,7 @@ test("receipt create and edit display dd/mm/yyyy while sending ISO dates and rej
   const date = dialog.getByLabel("Ngày nhập", { exact: true });
   await expect(date).toHaveValue("");
   await expect(date).toHaveAttribute("placeholder", "dd/mm/yyyy");
-  await dialog.getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await dialog.getByLabel("Nhà cung cấp dòng 1", { exact: true }).selectOption("1");
   await dialog.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("1");
   await dialog.getByLabel("Số lượng dòng 1", { exact: true }).fill("2");
   await dialog.getByLabel("Đơn giá dòng 1", { exact: true }).fill("1000");

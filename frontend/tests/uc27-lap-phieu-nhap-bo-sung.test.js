@@ -5,15 +5,20 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const prefillFile = new URL("../src/features/receiving/receiptPrefill.js", import.meta.url);
+const draftsFile = new URL("../src/features/receiving/receiptDrafts.js", import.meta.url);
 const { outputFiles } = await build({
-  entryPoints: [fileURLToPath(prefillFile)],
+  entryPoints: [prefillFile, draftsFile].map((file) => fileURLToPath(file)),
   bundle: true,
   format: "esm",
   outdir: "out",
   write: false,
 });
-const bundle = outputFiles.find(({ path }) => path.endsWith(".js"));
-const { prefillReceipt } = await import(`data:text/javascript,${encodeURIComponent(bundle.text)}`);
+function importBundle(name) {
+  const bundle = outputFiles.find(({ path }) => path.endsWith(`${name}.js`));
+  return import(`data:text/javascript,${encodeURIComponent(bundle.text)}`);
+}
+const { prefillReceipt } = await importBundle("receiptPrefill");
+const { receiptDraftsBySupplier } = await importBundle("receiptDrafts");
 const receiving = readFileSync(new URL("../src/features/receiving/ReceivingPage.jsx", import.meta.url), "utf8");
 const requests = readFileSync(new URL("../src/features/production/RequestsPage.jsx", import.meta.url), "utf8");
 const request = {
@@ -70,21 +75,27 @@ test("receipt creation reads the shortage for the requested id and resets when t
   assert.match(receiving, /prefillReceipt\(request, items\)/);
   assert.match(receiving, /key=\{shouldPrefill \? requestId : undefined\}/);
   assert.match(receiving, /shouldPrefill \? <QueryState query=\{shortages\}>\{editor\}<\/QueryState> : editor/);
-  assert.match(receiving, /ghi_chu: record \? record\.ghi_chu \|\| "" : prefill\?\.ghi_chu \?\? ""/);
-  assert.match(receiving, /\) \|\| prefill\?\.lines \|\| \[newLine\(\)\]/);
+  assert.match(receiving, /ghi_chu: record \? record\.ghi_chu \|\| "" : \(?prefill\?\.ghi_chu \?\? ""/);
+  assert.match(receiving, /\) \|\|\s+prefill\?\.lines \|\| \[newLine\(\)\]/);
 });
 
 // UC-20 A1: Lưu phiếu nhập độc lập với yêu cầu sản xuất
 test("receipt submit keeps the existing POST body", () => {
-  const submit = receiving.match(/function submit\(event\) \{([\s\S]*?)\n  \}/)?.[1];
-  assert.ok(submit);
-  const body = submit.match(/const body = \{([\s\S]*?)\};/)?.[1];
-  assert.ok(body);
-  assert.deepEqual([...body.matchAll(/^\s*(\w+):/gm)].map(([, key]) => key), [
-    "ncc_id", "ngay_nhap", "ghi_chu", "chi_tiet",
-  ]);
-  assert.doesNotMatch(submit, /yeu_cau_san_xuat_id/);
-  assert.match(submit, /method: record \? "patch" : "post",\s*body,/);
+  const { lines, ghi_chu } = prefillReceipt(request, [{ id: 2, don_gia: 350 }]);
+  assert.deepEqual(
+    receiptDraftsBySupplier(lines.map((line) => ({ ...line, ncc_id: "1" })), {
+      ngay_nhap: "2026-11-18", ghi_chu,
+    }),
+    [{
+      ncc_id: 1,
+      ngay_nhap: "2026-11-18",
+      ghi_chu,
+      chi_tiet: [
+        { mat_hang_id: 2, so_luong: 10, don_gia_thuc: 350 },
+        { mat_hang_id: 3, so_luong: 4, don_gia_thuc: 0 },
+      ],
+    }],
+  );
 });
 
 // UC-20 A1: Quản lý kho mở form từ chi tiết yêu cầu đang chờ bổ sung

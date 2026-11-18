@@ -72,7 +72,7 @@ test("saving a receipt keeps it draft and canceling confirmation sends no comple
 }) => {
   const state = await installApi(page);
   await page.goto("/kho/phieu-nhap/moi");
-  await page.locator("dialog.record-dialog").getByLabel("Nhà cung cấp", { exact: true }).selectOption("1");
+  await page.getByLabel("Nhà cung cấp dòng 1", { exact: true }).selectOption("1");
   await page.getByLabel("Ngày nhập", { exact: true }).fill("17/11/2026");
   await page.getByLabel("Mặt hàng dòng 1", { exact: true }).selectOption("1");
   await page.getByLabel("Số lượng dòng 1", { exact: true }).fill("3");
