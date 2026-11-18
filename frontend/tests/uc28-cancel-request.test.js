@@ -78,11 +78,12 @@ test("cancel confirmation describes every hold and affected issue without mutati
 
 // UC-28 D4: Đúng cột, numeric, tiêu đề và empty theo checklist giao diện
 test("cancel tables use approved headings columns and empty messages", () => {
-  assert.deepEqual(CANCEL_HOLD_COLUMNS, [
+  assert.deepEqual(CANCEL_HOLD_COLUMNS.map(({ render: _render, ...column }) => column), [
     { key: "ma_mat_hang", label: "Mã" }, { key: "ten_mat_hang", label: "Tên" },
     { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell }, { key: "loai_giu", label: "Loại giữ" },
     { key: "so_luong", label: "Số lượng", numeric: true },
   ]);
+  assert.equal(CANCEL_HOLD_COLUMNS[2].render({ don_vi_tinh: "bo" }), "bộ");
   assert.deepEqual(CANCEL_ISSUE_COLUMNS, [
     { key: "ma_phieu_xuat", label: "Mã phiếu" }, { key: "loai_phieu", label: "Loại phiếu" },
     { key: "trang_thai", label: "Trạng thái" }, { key: "xu_ly", label: "Xử lý" },

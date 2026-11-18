@@ -154,7 +154,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ma_mat_hang: "MH-000001",
       ten_mat_hang: "Khung xe",
       sku: "FRAME-01",
-      loai_mat_hang: "nguyen_vat_lieu",
+      loai_mat_hang: "linh_kien",
       don_vi_tinh: "cai",
       mau_sac: "den",
       mo_ta: "Khung xe thép",
@@ -186,7 +186,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       ma_mat_hang: "MH-000003",
       ten_mat_hang: "Cụm bánh xe",
       sku: "WHEEL-01",
-      loai_mat_hang: "ban_thanh_pham",
+      loai_mat_hang: "linh_kien",
       don_vi_tinh: "bo",
       mau_sac: null,
       mo_ta: null,
@@ -215,6 +215,10 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     },
   ];
   const now = "2026-11-05T01:00:00Z";
+  for (const item of items) {
+    item.so_luong_dang_giu = item.id === 4 ? 6 : 0;
+    item.so_luong_con_dung = item.so_luong_ton - item.so_luong_dang_giu;
+  }
   const lines = [{ id: 1, mat_hang_id: 1, so_luong: 10, don_gia_thuc: 250000, tong_gia: 2500000 }];
   const request = {
     id: 1,
@@ -284,6 +288,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         },
       ],
       mat_hang: items,
+      chung_tu_hoan_thanh_sx: [],
       nha_cung_cap: [
         {
           id: 1,
@@ -300,8 +305,8 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
           id: 1,
           mat_hang_id: 4,
           version: 1,
-          start_time: now,
-          end_time: null,
+          created_at: now,
+          kich_hoat_gan_nhat_at: now,
           is_active: true,
           da_duoc_su_dung: true,
           chi_tiet: [
@@ -566,17 +571,30 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
     if (!rawId && method === "POST") {
       const nextId = Math.max(...records.map((entry) => entry.id), 0) + 1;
       const created = { ...records[0], ...body, id: nextId, trang_thai: "nhap", created_at: now };
+      if (resource === "nha_cung_cap") created.ma_ncc = `NCC-${String(nextId).padStart(6, "0")}`;
+      if (resource === "mat_hang") {
+        Object.assign(created, { ma_mat_hang: `MH-${String(nextId).padStart(6, "0")}`, so_luong_ton: 0, so_luong_dang_giu: 0, so_luong_con_dung: 0, is_active: true });
+        if (body.bom) {
+          state.resources.bom.push({ id: Math.max(...state.resources.bom.map((entry) => entry.id), 0) + 1, mat_hang_id: nextId, version: 1, created_at: now, kich_hoat_gan_nhat_at: now, is_active: true, da_duoc_su_dung: false, chi_tiet: body.bom.chi_tiet });
+        }
+      }
       for (const key of ["ma_phieu_nhap", "ma_phieu_xuat", "ma_yeu_cau_san_xuat", "ma_phieu"])
         if (created[key]) created[key] = `${created[key]}-NEW`;
       records.push(created);
       return respond({ data: created, meta: {} }, 201, { etag: '"v1"' });
     }
     if (!record) return respond({ error: { message: "Không tìm thấy" } }, 404);
-    if (resource !== "bom" && incoming.headers()["if-match"] !== version())
+    if (incoming.headers()["if-match"] !== version())
       return respond(
         { error: { code: "du_lieu_da_thay_doi", message: "Dữ liệu đã thay đổi" }, meta: {} },
         412,
       );
+    if (resource === "bom" && action === "phien_ban" && method === "POST") {
+      const next = { ...record, ...body, id: Math.max(...records.map((entry) => entry.id)) + 1, version: Math.max(...records.filter((entry) => entry.mat_hang_id === record.mat_hang_id).map((entry) => entry.version)) + 1, is_active: true, created_at: now, kich_hoat_gan_nhat_at: now, da_duoc_su_dung: false };
+      for (const entry of records.filter((entry) => entry.mat_hang_id === record.mat_hang_id)) entry.is_active = false;
+      state.versions[`${resource}/${id}`] = (state.versions[`${resource}/${id}`] || 1) + 1;
+      records.push(next);
+      return respond({ data: next, meta: {} }, 201, { etag: '"v1"' });
     if (resource === "nhan_vien" && method === "PATCH" && body.ten_dang_nhap !== undefined) {
       body.ten_dang_nhap = body.ten_dang_nhap.trim();
       if (records.some((entry) => entry.id !== id && entry.ten_dang_nhap === body.ten_dang_nhap))

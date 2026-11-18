@@ -106,6 +106,44 @@ async def test_uc14_uc44_http_roundtrip_and_unsupported_delete(client):
     assert (await client.delete(path, headers=headers())).status_code == 405
 
 
+async def test_uc13_ac06_partial_address_filters_over_http(client):
+    for tinh, phuong in [
+        ("Thành phố Hà Nội", "Phường Đống Đa"),
+        ("THÀNH PHỐ HÀ NỘI", "PHƯỜNG ĐỐNG ĐA"),
+        ("Thành phố Hồ Chí Minh", "Phường Đống Đa"),
+    ]:
+        created = await client.post(
+            "/api/v1/nha_cung_cap",
+            headers=headers(),
+            json={**SUPPLIER, "tinh": tinh, "phuong": phuong},
+        )
+        assert created.status_code == 201, created.text
+
+    found = []
+    for page in [1, 2, 3]:
+        response = await client.get(
+            "/api/v1/nha_cung_cap",
+            headers=headers(3),
+            params={"tinh": " HA NOI ", "phuong": "dong da", "page_size": 1, "page": page},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["meta"]["total"] == 2 and body["meta"]["total_pages"] == 2
+        assert body["meta"]["request_id"]
+        found.extend(row["id"] for row in body["data"])
+        if page == 1:
+            assert body["data"][0]["tinh"] == "Thành phố Hà Nội"
+    assert found == [1, 2]
+
+    response = await client.get(
+        "/api/v1/nha_cung_cap",
+        headers=headers(),
+        params={"tinh": "ha noi", "phuong": "minh hoa"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == [] and response.json()["meta"]["total"] == 0
+
+
 @pytest.mark.parametrize("path", ["mat_hang/1", "nha_cung_cap/1"])
 async def test_cat_ac05_repeated_if_match_is_rejected(client, path):
     if path.startswith("nha"):

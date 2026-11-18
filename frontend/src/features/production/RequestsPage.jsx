@@ -89,6 +89,8 @@ export function RequestsPage() {
       <Collection
         collection={collection}
         filters={requestListFilters(manager)}
+        allowReset={manager}
+        pageSizes={manager ? [20, 50, 100] : undefined}
         columns={[
           {
             key: "ma_yeu_cau_san_xuat",
@@ -395,7 +397,13 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
                 max="2147483647"
                 {...field("so_luong")}
               />
-              <Field label="Hạn hoàn thành" type="date" required {...field("han_hoan_thanh")} />
+              <Field
+                label="Hạn hoàn thành"
+                type="date"
+                name="han_hoan_thanh"
+                required
+                {...field("han_hoan_thanh")}
+              />
             </div>
             <EmployeeSelect
               employees={employees.data}
@@ -411,7 +419,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
                 {submitButton}
               </div>
             ) : (
-              submitButton
+              <div className="actions actions-end request-create-actions">{submitButton}</div>
             )}
           </form>
         </QueryState>
@@ -437,9 +445,9 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
           {!["nhap", "cho_bo_sung_linh_kien"].includes(record.trang_thai) && (
             <Link
               className="btn btn-secondary"
-              to={`/kho/phieu-xuat/moi?loai_phieu=xuat_thanh_pham&yeu_cau_san_xuat_id=${record.id}`}
+              to="/kho/phieu-xuat"
             >
-              Tạo phiếu xuất thành phẩm
+              Xem phiếu xuất kho →
             </Link>
           )}
         </div>

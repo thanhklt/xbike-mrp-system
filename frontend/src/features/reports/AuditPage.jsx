@@ -62,9 +62,12 @@ export function AuditPage() {
       {/* Tắt ô tìm kiếm: backend chỉ tìm mã thô trong loại đối tượng/thao tác/lý do, đã có bộ lọc chuyên biệt. */}
       <Collection
         collection={collection}
+        allowReset={warehouse}
+        pageSizes={warehouse ? [20, 50, 100] : undefined}
         search={false}
         validate={dateRangeError}
         filters={filters}
+        optionLabels={warehouse ? { sort: { id: "Tăng dần", "-id": "Giảm dần" } } : undefined}
         columns={[
           { key: "created_at", label: "Thời gian", render: (row) => dateTime(row.created_at) },
           {

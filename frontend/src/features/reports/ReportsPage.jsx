@@ -84,7 +84,7 @@ export function ReportsPage() {
             name="loai_mat_hang"
             value={form.loai_mat_hang}
             onChange={change}
-            options={[{ value: "", label: "Tất cả loại" }, ...REPORT_ITEM_TYPES]}
+            options={[{ value: "", label: "Tất cả" }, ...REPORT_ITEM_TYPES]}
           />
           <QueryState query={choices}>
             <Field
@@ -94,7 +94,7 @@ export function ReportsPage() {
               value={form.mat_hang_id}
               onChange={change}
             >
-              <option value="">Tất cả mặt hàng</option>
+              <option value="">Tất cả</option>
               {(choices.data ?? []).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.ma_mat_hang} · {item.ten_mat_hang}
@@ -102,9 +102,14 @@ export function ReportsPage() {
               ))}
             </Field>
           </QueryState>
-          <Button type="submit" disabled={query.isFetching}>
-            Xem báo cáo
-          </Button>
+          <div className="filter-actions">
+            <Button type="submit" disabled={query.isFetching}>
+              Xem báo cáo
+            </Button>
+            <Button variant="secondary" onClick={() => setForm(defaultReportForm())}>
+              Xóa lọc
+            </Button>
+          </div>
         </form>
       </Card>
       <Card

@@ -1,8 +1,12 @@
 """SQLAlchemy persistence for suppliers; no commit or business policy."""
 
-from sqlalchemy import func, or_, select
+from unicodedata import normalize
+
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import ConflictException
 from app.core.persistence import select_by_id
@@ -13,6 +17,19 @@ from app.modules.nha_cung_cap.schemas import (
     SupplierResponse,
 )
 from app.shared.records import CreatedRecord, RecordPage
+
+_VIETNAMESE_MARKS = "\u0300\u0301\u0302\u0303\u0306\u0309\u031b\u0323"
+_ADDRESS_TRANSLATION = str.maketrans("đ", "d", _VIETNAMESE_MARKS)
+
+
+def _address_contains(column: InstrumentedAttribute[str], term: str) -> ColumnElement[bool]:
+    """UC-13 AC-6: fold Vietnamese accents in predicates, preserving stored addresses."""
+    folded_term = normalize("NFD", term.lower()).translate(_ADDRESS_TRANSLATION)
+    # PostgreSQL 16 built-ins support composed/decomposed text without an unaccent extension.
+    folded_column = func.translate(
+        func.normalize(func.lower(column), literal_column("NFD")), "đ" + _VIETNAMESE_MARKS, "d"
+    )
+    return folded_column.contains(folded_term, autoescape=True)
 
 
 class SqlAlchemySupplierRepository:
@@ -30,9 +47,9 @@ class SqlAlchemySupplierRepository:
                 )
             )
         if params.tinh is not None:
-            query = query.where(NhaCungCap.tinh.icontains(params.tinh, autoescape=True))
+            query = query.where(_address_contains(NhaCungCap.tinh, params.tinh))
         if params.phuong is not None:
-            query = query.where(NhaCungCap.phuong.icontains(params.phuong, autoescape=True))
+            query = query.where(_address_contains(NhaCungCap.phuong, params.phuong))
         total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         offset = (params.page - 1) * params.page_size
         if offset >= total:
