@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { CHECK_COLUMNS, unitCell } from "../src/features/production/requestForm.js";
+import { CHECK_COLUMNS } from "../src/features/production/requestForm.js";
 import {
   SHORTAGE_COLUMNS,
-  SUMMARY_COLUMNS,
   shortageRequestEntries,
   shortageRows,
 } from "../src/features/production/shortageView.js";
@@ -17,10 +16,6 @@ const source = readFileSync(
   new URL("../src/features/production/ShortagePage.jsx", import.meta.url), "utf8",
 );
 const routes = readFileSync(new URL("../src/routes/index.jsx", import.meta.url), "utf8");
-const summary = {
-  mat_hang_id: 2, ma_mat_hang: "MH-000002", ten_mat_hang: "Khung", don_vi_tinh: "cái",
-  tong_can: 20, so_luong_con_dung: 0, so_luong_thieu: 20, so_yeu_cau: 2,
-};
 const record = {
   id: 1, ma_yeu_cau_san_xuat: "YCSX-202611-000001", mat_hang_id: 5,
   loai_yeu_cau: "xuat_giao", so_luong_can_san_xuat: 1200,
@@ -28,31 +23,7 @@ const record = {
   kiem_tra_lan_dau_at: "2026-11-16T08:00:00Z",
 };
 
-// UC-27 AC-1: Bảng tổng hợp hiển thị đúng các số từ API, giữ cả thiếu 0 và id ổn định
-test("summary displays twenty required and missing frames for two requests", () => {
-  const zero = { ...summary, mat_hang_id: 3, ma_mat_hang: "MH-000003", tong_can: 5,
-    so_luong_con_dung: 6, so_luong_thieu: 0, so_yeu_cau: 1 };
-  const input = [summary, zero];
-  const before = structuredClone(input);
-  const rows = shortageRows(input);
-  assert.deepEqual(rows, [{ ...summary, id: 2 }, { ...zero, id: 3 }]);
-  assert.deepEqual(SUMMARY_COLUMNS.map(({ key }) => rows[0][key]), [
-    "MH-000002", "Khung", "cái", 20, 0, 20, 2,
-  ]);
-  assert.deepEqual(SUMMARY_COLUMNS, [
-    { key: "ma_mat_hang", label: "Mã" },
-    { key: "ten_mat_hang", label: "Tên" },
-    { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell },
-    { key: "tong_can", label: "Tổng cần", numeric: true },
-    { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
-    { key: "so_luong_thieu", label: "Thiếu", numeric: true },
-    { key: "so_yeu_cau", label: "Số yêu cầu", numeric: true },
-  ]);
-  assert.deepEqual(input, before);
-  assert.match(source, /<DataTable\s+rows=\{shortageRows\(summary\)\}\s+columns=\{SUMMARY_COLUMNS\}/);
-});
-
-// UC-27 D3: Bảng thiếu dùng đúng CHECK_COLUMNS UC-26, không định nghĩa lại sáu cột
+// UC-27 AC-1: Bảng thiếu của từng yêu cầu dùng sáu cột UC-26
 test("request shortage table reuses UC26 columns and preserves separate shortages", () => {
   assert.equal(SHORTAGE_COLUMNS, CHECK_COLUMNS);
   assert.equal(SHORTAGE_COLUMNS.length, 6);
@@ -67,7 +38,7 @@ test("request shortage table reuses UC26 columns and preserves separate shortage
   assert.match(source, /<DataTable\s+rows=\{shortageRows\(record\.linh_kien_thieu\)\}\s+columns=\{SHORTAGE_COLUMNS\}\s*\/>/);
 });
 
-// UC-27 D5: Đủ thông tin đã chốt, định dạng ngày/số, tên từ catalog và nhân viên dùng chung
+// UC-27 AC-1: Hiển thị thông tin nhận diện từng yêu cầu chờ bổ sung
 test("waiting request information formats all six approved fields", () => {
   const items = [{ id: 5, ten_mat_hang: "Mountain Pro" }];
   const employees = [{ id: 20, ho_ten: "Nguyễn An" }];
@@ -89,46 +60,48 @@ test("waiting request information formats all six approved fields", () => {
   assert.equal((source.match(/useChoices\(API\.employees\)/g) || []).length, 1);
 });
 
-// UC-27 AC-2: Chỉ xem, không Button/action/tạo phiếu nhập hoặc lời gọi ghi, Link duy nhất tới yêu cầu
-test("page has no receipt creation action or write calls", () => {
+// UC-27 AC-1: Mở form nhập bổ sung từ yêu cầu còn thiếu
+test("only a request with shortages links to the receipt form for that request", () => {
   assert.doesNotMatch(source, /\bButton\b|\baction\s*=|useWrite|useMutation|writeResource|mutate|\.(post|put|patch|delete)\s*\(|\bfetch\s*\(/);
-  assert.doesNotMatch(source, /phieu-nhap|API\.receipts|onClick|<form\b|<button\b/);
-  const links = [...source.matchAll(/<Link\s+to=\{([^}]+\}[^}]*|[^}]+)\}/g)];
-  assert.equal(links.length, 1);
-  assert.match(links[0][0], /\/kho\/yeu-cau\//);
+  assert.doesNotMatch(source, /API\.receipts|onClick|<form\b|<button\b/);
+  const shortageBranch = source.match(/\{record\.da_du \? \([\s\S]*?\) : \(\s*<>([\s\S]*?)<\/>\s*\)\}/)?.[1];
+  assert.ok(shortageBranch);
+  assert.match(shortageBranch, /<DataTable[\s\S]*?\/>\s*<div className="actions actions-end">\s*<Link\s+className="btn btn-secondary"\s+to=\{`\/kho\/phieu-nhap\/moi\?yeu_cau_san_xuat_id=\$\{record\.id\}`\}\s*>\s*Lập phiếu nhập bổ sung\s*<\/Link>\s*<\/div>/);
+  assert.equal((source.match(/Lập phiếu nhập bổ sung/g) || []).length, 1);
+  assert.equal((source.match(/<Link\b/g) || []).length, 2);
   assert.match(source, /useResource\(API\.shortages\)/);
 });
 
-// UC-27 D2: Trang dùng một query, QueryState từng Card và bố cục chỉ đọc theo checklist
-test("page loads once and uses shared read only page layout and query states", () => {
+// UC-27 AC-1: Trang hiển thị một khối yêu cầu chờ bổ sung
+test("page loads shortages once and uses shared layout and query states", () => {
   assert.equal(API.shortages, "/nhu_cau_bo_sung_linh_kien");
   assert.equal((source.match(/useResource\(/g) || []).length, 1);
-  assert.equal((source.match(/<QueryState query=\{query\}>/g) || []).length, 2);
-  assert.match(source, /return \(\s*<>\s*<PageHeader\s+title="Nhu cầu bổ sung linh kiện"\s+subtitle="[^"]+\."\s*\/>/);
+  assert.equal((source.match(/<QueryState query=\{query\}>/g) || []).length, 1);
+  assert.match(source, /return \(\s*<>\s*<PageHeader\s+title="Nhu cầu bổ sung linh kiện"\s+subtitle="Xem linh kiện còn thiếu của từng yêu cầu sản xuất đang chờ và lập phiếu nhập bổ sung\."\s*\/>/);
   assert.deepEqual([...source.matchAll(/<Card title="([^"]+)">/g)].map((match) => match[1]), [
-    "Tổng hợp theo linh kiện", "Yêu cầu chờ bổ sung",
+    "Yêu cầu chờ bổ sung",
   ]);
   assert.match(source, /query\.data\?\.data \|\| \{\}/);
   assert.doesNotMatch(source, /style=|\.css["']|<Field|Pagination|sort\(|\.reverse\(|tone="warning"|chưa có API/);
 });
 
-// UC-27 A1: Hai khối rỗng dùng câu chính xác, không dựng dòng giả
-test("empty waiting list uses the approved table and request notices", () => {
+// UC-27 AC-1: Danh sách rỗng hiển thị thông báo của luồng A1
+test("empty waiting list uses the approved request notice", () => {
   assert.deepEqual(shortageRows([]), []);
-  assert.match(source, /yeu_cau: requests = \[\], tong_hop: summary = \[\]/);
-  assert.match(source, /empty="Không có linh kiện cần bổ sung\."/);
+  assert.match(source, /yeu_cau: requests = \[\]/);
+  assert.doesNotMatch(source, /tong_hop|Không có linh kiện cần bổ sung\./);
   assert.match(source, /\{requests\.length \? \(?\s*requests\.map/);
   assert.match(source, /\)\)\s*\)?\s*: \(\s*<Notice>Không có yêu cầu chờ bổ sung linh kiện\.<\/Notice>/);
 });
 
-// UC-27 D3: da_du hiện Notice info thay bảng thiếu, không bỏ yêu cầu khỏi danh sách
+// UC-27 AC-2: Yêu cầu đã đủ chờ kiểm tra lại
 test("replenished request shows waiting for recheck notice instead of its shortage table", () => {
-  assert.match(source, /\{record\.da_du \? \(\s*<Notice>Đã đủ linh kiện, chờ nhân viên kiểm tra lại\.<\/Notice>\s*\) : \(\s*<DataTable/);
+  assert.match(source, /\{record\.da_du \? \(\s*<Notice>Đã đủ linh kiện, chờ nhân viên kiểm tra lại\.<\/Notice>\s*\) : \(\s*<>\s*<DataTable/);
   assert.doesNotMatch(source, /requests\.filter|record\.da_du\s*&&|tone=/);
   assert.match(source, /<section key=\{record\.id\} className="stack">/);
 });
 
-// UC-27 D6: Menu QLK ngay sau yêu cầu, nhãn mới; route được bảo vệ, NV/Admin không truy cập
+// UC-27 AC-1: Quản lý kho truy cập trang từ menu Vận hành
 test("manager navigation and protected route expose the shortage page after production requests", () => {
   const group = navigationFor("quan_ly").find(({ title }) => title === "Vận hành");
   const index = group.items.findIndex(([path]) => path === "/kho/nhu-cau-bo-sung");

@@ -6,6 +6,7 @@ import {
   useChoices,
   useCollection,
   useDetail,
+  useResource,
   useWrite,
 } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
@@ -24,13 +25,20 @@ import {
   statusFilter,
   dateFilters,
 } from "../../components/ResourceFields.jsx";
-import { ErrorNotice, QueryState } from "../../components/QueryState.jsx";
+import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
 import { dateRangeError } from "../../components/filterFields.js";
+import { prefillReceipt } from "./receiptPrefill.js";
 const base = "/kho/phieu-nhap";
 export function ReceivingPage() {
   const { id } = useParams();
   const [search] = useSearchParams();
+  const requestId = search.get("yeu_cau_san_xuat_id");
+  const shouldPrefill = id === "moi" && requestId !== null;
+  const shortageQuery = useResource(API.shortages, {}, shouldPrefill);
+  const shortages = shortageQuery.isFetching && !shortageQuery.isFetchedAfterMount
+    ? { ...shortageQuery, isPending: true }
+    : shortageQuery;
   const collection = useCollection(API.receipts, {
     sort: "-created_at",
     ncc_id: search.get("ncc_id") || "",
@@ -99,17 +107,33 @@ export function ReceivingPage() {
           base={base}
           title={id === "moi" ? "Tạo phiếu nhập" : "Chi tiết phiếu nhập"}
         >
-          {(snapshot) => (
-            <QueryState query={catalog}>
-              <ReceiptEditor snapshot={snapshot} items={items} suppliers={suppliers} />
-            </QueryState>
-          )}
+          {(snapshot) => {
+            const request = shouldPrefill && !shortages.isPending
+              ? shortages.data?.data?.yeu_cau?.find((entry) => entry.id === Number(requestId))
+              : undefined;
+            const prefill = prefillReceipt(request, items);
+            const editor = (
+              <ReceiptEditor
+                key={shouldPrefill ? requestId : undefined}
+                snapshot={snapshot}
+                items={items}
+                suppliers={suppliers}
+                prefill={prefill}
+                prefillMissing={shouldPrefill && prefill === null}
+              />
+            );
+            return (
+              <QueryState query={catalog}>
+                {shouldPrefill ? <QueryState query={shortages}>{editor}</QueryState> : editor}
+              </QueryState>
+            );
+          }}
         </RecordPanel>
       </div>
     </>
   );
 }
-function ReceiptEditor({ snapshot, items, suppliers }) {
+function ReceiptEditor({ snapshot, items, suppliers, prefill, prefillMissing: initialPrefillMissing }) {
   const record = snapshot?.data;
   const editable = !record || record.trang_thai === "nhap";
   const navigate = useNavigate();
@@ -119,9 +143,10 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
   const initial = {
     ncc_id: String(record?.ncc_id || ""),
     ngay_nhap: record?.ngay_nhap ?? "",
-    ghi_chu: record?.ghi_chu || "",
+    ghi_chu: record ? record.ghi_chu || "" : prefill?.ghi_chu ?? "",
   };
   const [values, setValues] = useState(initial);
+  const [prefillMissing] = useState(initialPrefillMissing);
   const [lines, setLines] = useState(
     () =>
       record?.chi_tiet.map((line) =>
@@ -131,7 +156,7 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
           so_luong: String(line.so_luong),
           don_gia_thuc: String(line.don_gia_thuc ?? 0),
         }),
-      ) || [newLine()],
+      ) || prefill?.lines || [newLine()],
   );
   const dirty =
     JSON.stringify(values) !== JSON.stringify(initial) ||
@@ -202,6 +227,9 @@ function ReceiptEditor({ snapshot, items, suppliers }) {
       {editable ? (
         <QueryState query={suppliers}>
           <form className="stack" onSubmit={submit}>
+            {prefillMissing && (
+              <Notice>Yêu cầu này không còn linh kiện thiếu. Phiếu nhập được tạo trống.</Notice>
+            )}
             <div className="form-grid">
               <Field
                 as="select"

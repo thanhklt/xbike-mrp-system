@@ -495,7 +495,7 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         message: "Items retrieved successfully",
       });
     if (path === "nhu_cau_bo_sung_linh_kien")
-      return respond({ data: { yeu_cau: [], tong_hop: [] }, meta: {} });
+      return respond({ data: { yeu_cau: [] }, meta: {} });
     if (path === "nhan_vien/me/doi_mat_khau" && method === "POST") {
       if (role !== "nhan_vien") {
         return respond({ error: { message: "Không có quyền" } }, 403);

@@ -23,7 +23,7 @@ from app.modules.san_xuat.router import nhu_cau_bo_sung_router
 from app.modules.san_xuat.schemas import YeuCauRead
 from app.modules.san_xuat.service.yeu_cau_san_xuat import (
     YeuCauSanXuatService,
-    tong_hop_nhu_cau_bo_sung,
+    danh_sach_nhu_cau_bo_sung,
 )
 
 URL = "/api/v1/nhu_cau_bo_sung_linh_kien"
@@ -112,16 +112,12 @@ def assert_no_writes(api):
     assert api.session.mock_calls == []
 
 
-# UC-27 AC-1: Hai yêu cầu thiếu 10 khung cộng thành 20, đủ dữ liệu từng dòng
-async def test_two_requests_aggregate_twenty_frames(api):
+# UC-27 R1: Mỗi yêu cầu thiếu 10 khung, đủ dữ liệu từng dòng
+async def test_two_requests_each_need_ten_frames(api):
     response = await api.client.get(URL)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
-    assert data["tong_hop"] == [{
-        "mat_hang_id": 2, "ma_mat_hang": "MH-000002", "ten_mat_hang": "Khung",
-        "don_vi_tinh": "cái", "tong_can": 20, "so_luong_con_dung": 0,
-        "so_luong_thieu": 20, "so_yeu_cau": 2,
-    }]
+    assert set(data) == {"yeu_cau"}
     assert [row["id"] for row in data["yeu_cau"]] == [1, 2]
     for row in data["yeu_cau"]:
         assert row["linh_kien_thieu"] == [{
@@ -135,19 +131,20 @@ async def test_two_requests_aggregate_twenty_frames(api):
     assert response.json()["meta"]["request_id"]
 
 
-# UC-27 AC-1: Còn dùng được 5 chỉ trừ một lần ở tổng hợp, mỗi yêu cầu so riêng
-async def test_available_five_means_fifteen_total_and_five_each(api):
+# UC-27 R1: Còn dùng được 5 khung thì mỗi yêu cầu thiếu 5 khung
+async def test_five_available_leaves_each_request_short_five_frames(api):
     api.available[2] = replace(FRAME, so_luong_con_dung=5)
     response = await api.client.get(URL)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
-    assert data["tong_hop"][0] == {
-        "mat_hang_id": 2, "ma_mat_hang": "MH-000002", "ten_mat_hang": "Khung",
-        "don_vi_tinh": "cái", "tong_can": 20, "so_luong_con_dung": 5,
-        "so_luong_thieu": 15, "so_yeu_cau": 2,
-    }
-    assert [row["linh_kien_thieu"][0]["so_luong_thieu"] for row in data["yeu_cau"]] == [5, 5]
-    assert [row["linh_kien_thieu"][0]["so_luong_con_dung"] for row in data["yeu_cau"]] == [5, 5]
+    assert [row["id"] for row in data["yeu_cau"]] == [1, 2]
+    for row in data["yeu_cau"]:
+        assert row["linh_kien_thieu"] == [{
+            "mat_hang_id": 2, "ma_mat_hang": "MH-000002", "ten_mat_hang": "Khung",
+            "don_vi_tinh": "cái", "so_luong_can": 10, "so_luong_con_dung": 5,
+            "so_luong_thieu": 5,
+        }]
+        assert row["da_du"] is False
 
 
 # UC-27 AC-3: Mốc kiểm tra đầu tăng dần, cùng mốc dùng id; không theo ngày tạo/gửi/hạn
@@ -184,7 +181,7 @@ async def test_repository_waiting_sql_filters_orders_and_maps_records():
     assert session.scalars.await_count == 1
 
 
-# UC-27 D3: Đã đủ vẫn trong danh sách, so sánh cả bằng và lớn hơn nhu cầu
+# UC-27 AC-2: Yêu cầu đã đủ vẫn chờ kiểm tra lại, trả da_du và danh sách thiếu rỗng
 @pytest.mark.parametrize("remaining", [10, 12, 25])
 async def test_replenished_requests_remain_without_missing_lines(api, remaining):
     api.available[2] = replace(FRAME, so_luong_con_dung=remaining)
@@ -194,13 +191,11 @@ async def test_replenished_requests_remain_without_missing_lines(api, remaining)
     assert [row["id"] for row in data["yeu_cau"]] == [1, 2]
     assert [row["linh_kien_thieu"] for row in data["yeu_cau"]] == [[], []]
     assert [row["da_du"] for row in data["yeu_cau"]] == [True, True]
-    assert data["tong_hop"][0]["so_luong_thieu"] == max(0, 20 - remaining)
-    assert data["tong_hop"][0]["so_yeu_cau"] == 2
     assert [row.trang_thai for row in api.stored.values()] == ["cho_bo_sung_linh_kien"] * 2
 
 
-# UC-27 D4: Hàm thuần giữ dòng thiếu 0, đếm đúng số yêu cầu, sắp thiếu giảm dần rồi mã
-def test_pure_summary_keeps_zero_shortages_and_orders_by_shortage_then_code():
+# UC-27 R1: Hàm chỉ trả linh kiện còn thiếu của từng yêu cầu và giữ nguyên dữ liệu đầu vào
+def test_shortage_list_filters_sufficient_components_without_mutating_inputs():
     records = [request_record(), request_record(2)]
     needs = {1: {2: 10, 3: 2, 4: 8, 6: 1}, 2: {2: 10, 3: 3, 4: 2}}
     available = {
@@ -209,12 +204,12 @@ def test_pure_summary_keeps_zero_shortages_and_orders_by_shortage_then_code():
         6: HangKhaDung("MH-000006", "Ốc", "cái", 0),
     }
     before = deepcopy((records, needs, available))
-    result = tong_hop_nhu_cau_bo_sung(records, needs, available)
-    assert [(row.mat_hang_id, row.tong_can, row.so_luong_con_dung,
-             row.so_luong_thieu, row.so_yeu_cau) for row in result.tong_hop] == [
-        (2, 20, 0, 20, 2), (6, 1, 0, 1, 1), (4, 10, 10, 0, 2), (3, 5, 6, 0, 2),
-    ]
-    assert [[line.mat_hang_id for line in row.linh_kien_thieu] for row in result.yeu_cau] == [[2, 6], [2]]
+    result = danh_sach_nhu_cau_bo_sung(records, needs, available)
+    assert [
+        [(line.mat_hang_id, line.so_luong_thieu) for line in row.linh_kien_thieu]
+        for row in result.yeu_cau
+    ] == [[(2, 10), (6, 1)], [(2, 10)]]
+    assert [row.da_du for row in result.yeu_cau] == [False, False]
     assert (records, needs, available) == before
 
 
@@ -237,19 +232,17 @@ async def test_request_metadata_uses_finalized_production_quantity(api):
     assert api.stored[1].so_luong != api.stored[1].so_luong_can_san_xuat
 
 
-# UC-27 A1: Không yêu cầu chờ trả hai mảng rỗng, 200; không đọc nhu cầu hoặc khả dụng
-async def test_empty_waiting_list_returns_empty_arrays(api):
+# UC-27 A1: Không có yêu cầu chờ thì trả yeu_cau rỗng với 200 và chỉ đọc danh sách
+async def test_empty_waiting_list_returns_empty_requests(api):
     api.stored.clear()
     response = await api.client.get(URL)
     assert response.status_code == 200, response.text
-    assert response.json()["data"] == {"yeu_cau": [], "tong_hop": []}
+    assert response.json()["data"] == {"yeu_cau": []}
     assert api.repo.mock_calls == [call.yeu_cau_cho_bo_sung()]
-    assert tong_hop_nhu_cau_bo_sung([], api.needs, api.available).model_dump() == {
-        "yeu_cau": [], "tong_hop": [],
-    }
+    assert danh_sach_nhu_cau_bo_sung([], api.needs, api.available).model_dump() == {"yeu_cau": []}
 
 
-# UC-27 AC-2: ASGI GET không thay dữ liệu, không gọi audit/transaction/khóa; chỉ ba lần đọc
+# UC-27 D2: GET chỉ đọc dữ liệu, không gọi audit, transaction hay khóa
 async def test_get_is_read_only_without_audit_transaction_or_locks(api):
     before = deepcopy((api.stored, api.needs, api.available))
     response = await api.client.get(URL)
@@ -259,17 +252,17 @@ async def test_get_is_read_only_without_audit_transaction_or_locks(api):
     assert_no_writes(api)
 
 
-# UC-27 AC-2: Gọi service trực tiếp vẫn chỉ đọc, trả meta tương quan đã truyền vào
+# UC-27 D2: Gọi service trực tiếp vẫn chỉ đọc và trả request_id đã truyền vào
 async def test_service_is_read_only_and_preserves_request_id(api):
     before = deepcopy((api.stored, api.needs, api.available))
     result = await api.service.xem_nhu_cau_bo_sung(MANAGER, "uc27-read")
     assert result.meta.request_id == "uc27-read"
-    assert result.data.tong_hop[0].so_luong_thieu == 20
+    assert [row.linh_kien_thieu[0].so_luong_thieu for row in result.data.yeu_cau] == [10, 10]
     assert (api.stored, api.needs, api.available) == before
     assert_no_writes(api)
 
 
-# UC-27 AC-2: Endpoint chỉ GET, mọi phương thức ghi trả 405 trước khi đọc nghiệp vụ
+# UC-27 D2: Endpoint chỉ GET, mọi phương thức ghi trả 405 trước khi đọc nghiệp vụ
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
 async def test_write_methods_are_not_allowed(api, method):
     response = await api.client.request(method, URL, json={})
@@ -313,8 +306,8 @@ def test_main_registers_only_get_for_shortages():
     assert "parameters" not in operations["get"]
 
 
-# UC-27 D4: Nhu cầu của mọi trạng thái khác bị loại và không đọc khả dụng linh kiện riêng của chúng
-async def test_other_states_never_contribute_to_shortages(api):
+# UC-27 R1: Chỉ đọc nhu cầu và linh kiện của các yêu cầu chờ bổ sung
+async def test_only_waiting_requests_and_their_components_are_read(api):
     for id_, state in enumerate(["nhap", "da_gui", "dang_thuc_hien", "hoan_thanh", "da_huy"], 3):
         api.stored[id_] = request_record(id_, trang_thai=state)
         api.needs[id_] = {2: 1000, 99: 500}
@@ -322,25 +315,32 @@ async def test_other_states_never_contribute_to_shortages(api):
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert [row["id"] for row in data["yeu_cau"]] == [1, 2]
-    assert len(data["tong_hop"]) == 1
-    assert (data["tong_hop"][0]["tong_can"], data["tong_hop"][0]["so_yeu_cau"]) == (20, 2)
+    assert [
+        [(line["mat_hang_id"], line["so_luong_can"], line["so_luong_thieu"])
+         for line in row["linh_kien_thieu"]]
+        for row in data["yeu_cau"]
+    ] == [[(2, 10, 10)], [(2, 10, 10)]]
     api.repo.nhu_cau_cua_cac_yeu_cau.assert_awaited_once_with([1, 2])
     api.repo.kha_dung.assert_awaited_once_with([2], lock=False)
 
 
-# UC-27 D3: Lần đọc sau dùng còn dùng được hiện tại, không dùng cache lần kiểm tra trước
+# UC-27 R1: Lần đọc sau tính lại linh kiện thiếu theo số lượng còn dùng được hiện tại
 async def test_next_read_uses_current_availability(api):
     first = await api.client.get(URL)
     assert first.status_code == 200
-    assert first.json()["data"]["tong_hop"][0]["so_luong_thieu"] == 20
+    first_requests = first.json()["data"]["yeu_cau"]
+    assert [row["linh_kien_thieu"][0]["so_luong_thieu"] for row in first_requests] == [10, 10]
+    assert [row["da_du"] for row in first_requests] == [False, False]
     api.available[2] = replace(FRAME, so_luong_con_dung=20)
     second = await api.client.get(URL)
     assert second.status_code == 200
-    assert second.json()["data"]["tong_hop"][0]["so_luong_thieu"] == 0
-    assert [row["da_du"] for row in second.json()["data"]["yeu_cau"]] == [True, True]
+    second_requests = second.json()["data"]["yeu_cau"]
+    assert [row["id"] for row in second_requests] == [row["id"] for row in first_requests]
+    assert [row["linh_kien_thieu"] for row in second_requests] == [[], []]
+    assert [row["da_du"] for row in second_requests] == [True, True]
 
 
-# UC-27 D4: Repository thật đọc nhu cầu theo lô và tái sử dụng khả dụng hiện tại, không khóa
+# UC-27 R1: Repository đọc theo lô nhu cầu từng yêu cầu và khả dụng hiện tại của linh kiện
 async def test_repository_reads_batched_needs_and_unlocked_availability():
     session = AsyncMock(spec=AsyncSession)
     repo = SqlAlchemyYeuCauSanXuatRepository(session)

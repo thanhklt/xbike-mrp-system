@@ -40,9 +40,9 @@ và `phieu_cua_yeu_cau` để đọc phiếu trong luồng hủy/bắt đầu.
 
 ## GET /api/v1/nhu_cau_bo_sung_linh_kien
 
-Nguồn: UC-27 Main 1–4, R1–R3, AC-1–AC-3, A1; D1–D5.
+Nguồn theo UC-27 Main 1–3, R1–R3, AC-2, AC-3 và A1.
 Chỉ QLK; N và Admin trả 403. Không tham số, không phân trang; query bất kỳ trả 422.
-Response `{data: {yeu_cau: [...], tong_hop: [...]}, meta: {request_id}}`.
+Response `{data: {yeu_cau: [...]}, meta: {request_id}}`.
 Không ETag/If-Match, không transaction ghi, khóa dòng, audit, giữ hàng hay cập nhật trạng thái.
 Lỗi dùng envelope hợp đồng như các endpoint sản xuất khác (`nhu_cau_bo_sung_linh_kien` có trong danh sách resource của `app/core/exceptions.py`).
 
@@ -72,8 +72,8 @@ sequenceDiagram
             DB-->>P: Yêu cầu chờ
             P-->>S: list YeuCauRead
             alt A1 - Không có yêu cầu chờ
-                S->>S: tong_hop_nhu_cau_bo_sung([], {}, {})
-                S-->>R: yeu_cau = [], tong_hop = [], meta
+                S->>S: danh_sach_nhu_cau_bo_sung([], {}, {})
+                S-->>R: data.yeu_cau = [], meta
             else Có yêu cầu chờ
                 S->>P: nhu_cau_cua_cac_yeu_cau(ids)
                 P->>DB: SELECT NhuCauLinhKien WHERE yeu_cau_san_xuat_id IN ids
@@ -85,10 +85,9 @@ sequenceDiagram
                     DB-->>P: Còn dùng được hiện tại
                     P-->>S: dict HangKhaDung
                 end
-                S->>S: tong_hop_nhu_cau_bo_sung(yeu_cau, nhu_cau, kha_dung)
-                Note over S: Mỗi yêu cầu so riêng với còn dùng được;<br/>chỉ đưa dòng cần lớn hơn còn dùng được vào linh_kien_thieu.<br/>Vẫn giữ yêu cầu đã đủ với da_du = true.
-                Note over S: Tổng hợp mọi linh kiện trong nhu cầu các yêu cầu chờ:<br/>tong_can = tổng cần; thiếu = max(0, tong_can - còn dùng được).<br/>Đếm so_yeu_cau; giữ thiếu 0; sắp thiếu DESC rồi mã ASC.
-                S-->>R: yeu_cau, tong_hop, meta
+                S->>S: danh_sach_nhu_cau_bo_sung(yeu_cau, nhu_cau, kha_dung)
+                Note over S: Mỗi yêu cầu so riêng với còn dùng được.<br/>Chỉ đưa dòng cần lớn hơn còn dùng được vào linh_kien_thieu.<br/>Vẫn giữ yêu cầu đã đủ với da_du = true.
+                S-->>R: data.yeu_cau, meta
             end
             R-->>C: 200 NhuCauBoSungResponse
         end
@@ -98,8 +97,7 @@ sequenceDiagram
 `yeu_cau` giữ thứ tự D1; mỗi dòng gồm id, mã yêu cầu, `mat_hang_id` thành phẩm,
 loại yêu cầu, số cần sản xuất đã chốt, hạn hoàn thành, `nhan_vien_duoc_giao_id`,
 `kiem_tra_lan_dau_at`, `linh_kien_thieu`, `da_du`. Mỗi dòng thiếu gồm id linh kiện,
-mã, tên, đơn vị tính, cần, còn dùng được, thiếu. Tổng hợp trừ còn dùng được đúng
-một lần cho mỗi linh kiện; không cộng các lượng thiếu riêng của từng yêu cầu.
+mã, tên, đơn vị tính, cần, còn dùng được, thiếu.
 Chỉ đọc ba truy vấn theo lô khi có nhu cầu; A1 chỉ đọc danh sách yêu cầu.
 Đây là dữ liệu tại lúc đọc, không bảo đảm snapshot chung giữa các truy vấn.
 Lỗi hạ tầng không xử lý riêng trong service, đi qua exception handler chung (500).
