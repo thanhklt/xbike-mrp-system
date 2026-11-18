@@ -15,6 +15,7 @@ import { SavedLines, statusFilter, dateFilters } from "../../components/Resource
 import { dateRangeError } from "../../components/filterFields.js";
 import { ErrorNotice, Notice, QueryState } from "../../components/QueryState.jsx";
 import { canCreateIssue, issueTypeLabel } from "./issueForm.js";
+import { pricedIssue } from "./issuePricing.js";
 
 const managerBase = "/kho/phieu-xuat";
 const issueLabel = (value) => (value === "xuat_thanh_pham" ? "Thành phẩm" : "Linh kiện");
@@ -90,10 +91,12 @@ function ManagerIssuePage({ id }) {
   );
 }
 
+// UC-34–40: QLK can review catalog prices before approval freezes them.
 function ManagerIssueDetail({ snapshot, items }) {
   const record = snapshot.data;
   const creator = useDetail(API.employees, record.nhan_vien_id);
   const source = useDetail(API.requests, record.yeu_cau_san_xuat_id);
+  const { lines, total } = pricedIssue(record, items);
   return (
     <div className="stack">
       <div className="actions">
@@ -110,13 +113,15 @@ function ManagerIssueDetail({ snapshot, items }) {
           ["Loại phiếu", issueLabel(record.loai_phieu)],
           [
             "Nguồn",
-            <QueryState query={source}>{source.data?.data.ma_yeu_cau_san_xuat}</QueryState>,
+            <QueryState query={source}>
+              <Link to={`/kho/yeu-cau/${record.yeu_cau_san_xuat_id}`}>{source.data?.data.ma_yeu_cau_san_xuat}</Link>
+            </QueryState>,
           ],
-          ["Tổng tiền đã chốt", money(record.tong_tien)],
+          ["Tổng tiền", money(total)],
           ["Lý do từ chối", record.ly_do_tu_choi],
         ]}
       />
-      <SavedLines lines={record.chi_tiet} items={items} prices />
+      <SavedLines lines={lines} items={items} prices />
       <ApprovalActions
         kind="issue"
         path={API.issues}
