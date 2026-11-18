@@ -392,9 +392,9 @@ test.describe("Employee Documents & Password Workflows", () => {
     await expect(page.getByText("PX-LK-202611-001")).toBeVisible();
 
     // Change status filter to "Chờ duyệt" -> MUST reset page to 1
-    await page.locator(".btn-dropdown-trigger").first().click();
+    await page.locator("#filter-trang_thai").selectOption("nhap");
     await expect(page).toHaveURL(/trang_thai=nhap/);
-    await page.locator(".btn-dropdown-trigger").first().click();
+    await page.locator("#filter-trang_thai").selectOption("cho_duyet");
 
     await expect(page).not.toHaveURL(/page=2/);
     await expect(page).toHaveURL(/trang_thai=cho_duyet/);
@@ -405,14 +405,14 @@ test.describe("Employee Documents & Password Workflows", () => {
     await expect(page).toHaveURL(/trang_thai=cho_duyet/);
     await expect(page.getByText("Trang 1 / 1")).toBeVisible();
 
-    // Back visits the preceding cyclic choice, then restores page 2 and "Tất cả".
+    // Back visits the preceding choice, then restores page 2 and "Tất cả".
     await page.goBack();
     await expect(page).toHaveURL(/trang_thai=nhap/);
-    await expect(page.locator(".btn-dropdown-trigger").first()).toContainText("Bản nháp");
+    await expect(page.locator("#filter-trang_thai")).toHaveValue("nhap");
     await page.goBack();
     await expect(page).toHaveURL(/page=2/);
     await expect(page.getByText("Trang 2 / 2")).toBeVisible();
-    await expect(page.locator(".btn-dropdown-trigger").first()).toHaveText(/Tất cả/);
+    await expect(page.locator("#filter-trang_thai")).toHaveValue("");
 
     // Switch to TP tab, open detail, close detail, F5
     await page.getByRole("tab", { name: "Xuất thành phẩm" }).click();
@@ -466,7 +466,7 @@ test.describe("Employee Documents & Password Workflows", () => {
     await expect(page.getByText("Trang 2 / 2")).toBeVisible();
 
     // Filter by "Nháp" -> resets page to 1
-    await page.locator(".btn-dropdown-trigger").first().click();
+    await page.locator("#filter-trang_thai").selectOption("nhap");
 
     await expect(page).not.toHaveURL(/page=2/);
     await expect(page).toHaveURL(/trang_thai=nhap/);
@@ -480,7 +480,7 @@ test.describe("Employee Documents & Password Workflows", () => {
     await page.goBack();
     await expect(page).toHaveURL(/page=2/);
     await expect(page.getByText("Trang 2 / 2")).toBeVisible();
-    await expect(page.locator(".btn-dropdown-trigger").first()).toHaveText(/Tất cả/);
+    await expect(page.locator("#filter-trang_thai")).toHaveValue("");
   });
 
   test("delayed detail navigation from record A to record B does not show stale sibling data during load or on error", async ({ page }) => {

@@ -3450,112 +3450,22 @@ html[data-employee-theme="true"] .toast {
   color-scheme: dark;
 }
 
-/* Button Dropdown for Employee Filters */
-.button-dropdown {
-  position: relative;
+.employee-shell .filters .admin-select-shell {
   width: 100%;
+  min-width: 0;
+  flex: none;
 }
 
-.btn-dropdown-trigger {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  min-height: 50px;
-  border: 1px solid #6a5140;
-  border-radius: 10px;
-  background: #30261e;
-  color: #f4ede6;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-  box-sizing: border-box;
-}
-
-.btn-dropdown-trigger:hover:not(:disabled) {
-  border-color: #fda965;
-  background: #382c23;
-}
-
-.btn-dropdown-trigger:focus-visible {
-  outline: 2px solid #fda965;
-  outline-offset: 2px;
-}
-
-.btn-dropdown-trigger:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-dropdown-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.btn-dropdown-chevron {
+.employee-shell .filters .admin-select-shell > svg {
   flex-shrink: 0;
-  color: #c9b09a;
-  transition: transform 0.2s ease;
 }
 
-.btn-dropdown-chevron.open {
-  transform: rotate(180deg);
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  width: 100%;
-  min-width: 100%;
-  max-width: 100%;
-  max-height: 280px;
-  overflow-y: auto;
-  background: #251c16;
-  border: 1px solid #6a5140;
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-  padding: 6px;
-  z-index: 1000;
-  box-sizing: border-box;
-}
-
-.dropdown-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  color: #f4ede6;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
-  user-select: none;
-}
-
-.dropdown-option:hover,
-.dropdown-option:focus {
-  background: #382c23;
-  color: #ffffff;
-  outline: none;
-}
-
-.dropdown-option.selected {
-  background: rgba(253, 169, 101, 0.15);
-  color: #fda965;
-  font-weight: 600;
-}
-
-.dropdown-check {
-  color: #fda965;
-  flex-shrink: 0;
+.employee-shell .filters .admin-select-shell select {
+  min-height: 48px;
+  padding: 0 8px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .employee-shell :is(.employee-overview, .employee-inventory) .filters .btn {

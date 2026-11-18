@@ -18,7 +18,7 @@ test("request search matches partial product names without case or accents and s
   expect(state.calls.filter((call) => call.method !== "GET")).toEqual([]);
 });
 
-test("employee cyclic filters preserve collapse, apply valid dates, and leave other roles unchanged", async ({ page }) => {
+test("employee dropdown filters preserve collapse, apply valid dates, and leave other roles unchanged", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/yeu-cau");
@@ -28,20 +28,20 @@ test("employee cyclic filters preserve collapse, apply valid dates, and leave ot
   await expect(form.getByRole("button", { name: "Hiện thêm" })).toHaveAttribute("aria-expanded", "false");
   await form.getByRole("button", { name: "Hiện thêm" }).click();
 
-  const typeButton = form.locator("#filter-loai_yeu_cau");
-  await typeButton.click();
-  await expect(typeButton).toContainText("Sản xuất để xuất giao");
-  const sortButton = form.locator("#filter-sort");
-  await sortButton.click();
-  await sortButton.click();
-  await sortButton.click();
-  await expect(sortButton).toContainText("Mới nhất trước");
-  const statusButton = form.locator("#filter-trang_thai");
-  await statusButton.focus();
-  await page.keyboard.press("Enter");
-  await expect(statusButton).toContainText("Đã giao");
-  await expect(statusButton).toBeFocused();
-  await expect(form.getByRole("listbox")).toHaveCount(0);
+  const typeSelect = form.getByRole("combobox", { name: "Loại yêu cầu", exact: true });
+  await typeSelect.selectOption("xuat_giao");
+  await expect(typeSelect).toHaveValue("xuat_giao");
+  const sortSelect = form.getByRole("combobox", { name: "Sắp xếp", exact: true });
+  await sortSelect.selectOption("-created_at");
+  await expect(sortSelect).toHaveValue("-created_at");
+  const statusSelect = form.getByRole("combobox", { name: "Trạng thái", exact: true });
+  await statusSelect.selectOption("da_gui");
+  await statusSelect.focus();
+  await expect(statusSelect).toBeFocused();
+  const employeeDropdownStyle = await statusSelect.locator("..").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.backgroundColor, style.borderColor, style.borderRadius];
+  });
 
   await expect(form.getByLabel("Từ ngày")).toHaveAttribute("placeholder", "dd/mm/yyyy");
   await form.getByLabel("Từ ngày").fill("01/11/2026");
@@ -52,8 +52,7 @@ test("employee cyclic filters preserve collapse, apply valid dates, and leave ot
   await form.getByRole("button", { name: "Ẩn bớt" }).click();
   await expect(form.getByLabel("Loại yêu cầu")).toBeHidden();
   await form.getByRole("button", { name: "Hiện thêm" }).click();
-  await expect(typeButton).toContainText("Sản xuất để xuất giao");
-  await expect(form.locator("input[name='loai_yeu_cau']")).toHaveValue("xuat_giao");
+  await expect(typeSelect).toHaveValue("xuat_giao");
   await expect(form.getByLabel("Từ ngày")).toHaveValue("01/11/2026");
   const desktopReset = await form.getByRole("button", { name: "Reset tìm kiếm", exact: true }).boundingBox();
   expect(desktopReset.height).toBeLessThanOrEqual(52);
@@ -68,9 +67,9 @@ test("employee cyclic filters preserve collapse, apply valid dates, and leave ot
   expect(resetBounds.x + resetBounds.width).toBeLessThanOrEqual(375);
   await page.screenshot({ path: "test-results/employee-request-filters-mobile.png", fullPage: true });
   await reset.click();
-  await expect(typeButton).toContainText("Tất cả");
-  await expect(statusButton).toContainText("Tất cả");
-  await expect(sortButton).toContainText("Mặc định");
+  await expect(typeSelect).toHaveValue("");
+  await expect(statusSelect).toHaveValue("");
+  await expect(sortSelect).toHaveValue("");
   await expect(form.getByLabel("Từ ngày")).toHaveValue("");
   await expect(form.getByLabel("Đến ngày")).toHaveValue("");
   expect(state.unexpected).toEqual([]);
@@ -92,6 +91,14 @@ test("employee cyclic filters preserve collapse, apply valid dates, and leave ot
   await expect(page.locator(".button-dropdown")).toHaveCount(0);
 
   await installApi(page, { role: "quan_tri_vien" });
+  await page.goto("/admin/tai-khoan");
+  const adminStatus = page.getByRole("combobox", { name: "Trạng thái", exact: true });
+  await adminStatus.focus();
+  const adminDropdownStyle = await adminStatus.locator("..").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return [style.backgroundColor, style.borderColor, style.borderRadius];
+  });
+  expect(employeeDropdownStyle).toEqual(adminDropdownStyle);
   await page.goto("/admin/mat-hang");
   await expect(page.locator("select[name='loai_mat_hang']")).toBeVisible();
   await expect(page.getByRole("button", { name: "Lọc", exact: true })).toBeVisible();
