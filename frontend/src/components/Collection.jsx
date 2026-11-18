@@ -5,6 +5,11 @@ import { Field } from "./Field.jsx";
 import { DateInput } from "./DateInput.jsx";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
+
+// Bộ lọc không mang theo phân trang: giữ số dòng/trang người dùng đã chọn.
+function filterParams({ page: _page, page_size: _pageSize, ...filters }) {
+  return filters;
+}
 export function Collection({
   collection,
   columns,
@@ -16,8 +21,8 @@ export function Collection({
   pageSizes,
   optionLabels = {},
 }) {
-  const [draft, setDraft] = useState(collection.params);
-  const [initial] = useState(collection.params);
+  const [draft, setDraft] = useState(() => filterParams(collection.params));
+  const [initial] = useState(() => filterParams(collection.params));
   const [filterError, setFilterError] = useState(null);
   function apply(next) {
     const message = validate?.(next) ?? null;

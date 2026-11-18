@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useCollection, useDetail, useWrite } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
 import {
   ITEM_LABELS,
-  ITEM_TYPES,
   money,
-  nullable,
   number,
   dateTime,
   unitLabel,
@@ -23,6 +21,13 @@ import { Button } from "../../components/Button.jsx";
 import { ErrorNotice, QueryState } from "../../components/QueryState.jsx";
 import { DocumentLines, newLine, itemTypeOptions } from "../../components/ResourceFields.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
+import { itemPayload, itemUnitOptions } from "./itemForm.js";
+
+const warehouseTypes = [
+  { value: "", label: "Tất cả" },
+  { value: "linh_kien", label: "Linh kiện" },
+  { value: "thanh_pham", label: "Thành phẩm" },
+];
 const modes = {
   manage: { base: "/kho/mat-hang", title: "Mặt hàng và tồn kho", showPrice: true },
   employee: { base: "/nv/ton-kho", title: "Tra cứu tồn kho", showPrice: false },
@@ -32,6 +37,9 @@ const modes = {
 export function MaterialsPage({ mode = "manage" }) {
   const { base, title, showPrice } = modes[mode];
   const readOnly = mode !== "manage";
+  const invalidStatusMessage = mode === "admin"
+    ? "Trạng thái chỉ lọc được cho thành phẩm."
+    : "Linh kiện không có trạng thái";
   const { id } = useParams();
   const collection = useCollection(API.items, { sort: readOnly ? "id" : "ma_mat_hang" });
   const detail = useDetail(API.items, id);
@@ -56,9 +64,11 @@ export function MaterialsPage({ mode = "manage" }) {
       <div>
         <Collection
           collection={collection}
+          allowReset={!readOnly}
+          pageSizes={readOnly ? undefined : [20, 50, 100]}
           validate={(draft) =>
             draft.loai_mat_hang === "linh_kien" && (draft.is_active ?? "") !== ""
-              ? "Trạng thái chỉ lọc được cho thành phẩm."
+              ? invalidStatusMessage
               : null
           }
           filters={[
@@ -124,7 +134,7 @@ export function MaterialsPage({ mode = "manage" }) {
                 </>
               ),
             },
-            ...(showPrice
+            ...(!readOnly
               ? [
                   {
                     key: "so_luong_dang_giu",
@@ -140,7 +150,7 @@ export function MaterialsPage({ mode = "manage" }) {
                   },
                 ]
               : []),
-            ...(!readOnly
+            ...(showPrice
               ? [
                   {
                     key: "don_gia",
@@ -153,15 +163,15 @@ export function MaterialsPage({ mode = "manage" }) {
             {
               key: "is_active",
               label: "Trạng thái",
-              render: (row) => mode === "admin" ? (
-                <AdminStatusBadge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
-                  {row.is_active ? "Đang dùng" : "Ngừng dùng"}
-                </AdminStatusBadge>
-              ) : (
-                <Badge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
-                  {row.is_active ? "Đang dùng" : "Ngừng dùng"}
-                </Badge>
-              ),
+              render: (row) => {
+                if (mode !== "admin" && row.loai_mat_hang === "linh_kien") return "—";
+                const StatusBadge = mode === "admin" ? AdminStatusBadge : Badge;
+                return (
+                  <StatusBadge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
+                    {row.is_active ? "Đang dùng" : "Ngừng dùng"}
+                  </StatusBadge>
+                );
+              },
             },
             {
               key: "action",
@@ -344,7 +354,7 @@ function ItemForm({ snapshot }) {
                 title: record.is_active ? "Ngừng sử dụng mặt hàng" : "Dùng lại thành phẩm",
                 description: `${record.ma_mat_hang} · ${record.ten_mat_hang}. Mặt hàng ngừng hoạt động không được dùng trong chứng từ mới.`,
                 impact: record.is_active
-                  ? "Mặt hàng, số dư tồn và chứng từ cũ vẫn sẽ được giữ nguyên số lượng nhưng không thể sử dụng mặt hàng."
+                  ? "Giữ nguyên mặt hàng, số dư tồn và chứng từ cũ. Các yêu cầu đã gửi vẫn tiếp tục được xử lý."
                   : "Backend kiểm tra và dùng lại công thức ngừng gần nhất; không thay đổi tồn kho.",
                 danger: record.is_active,
                 onConfirm: async () => {

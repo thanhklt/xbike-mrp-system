@@ -23,6 +23,7 @@ import {
   Users,
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
+import adminArtworkSource from "../assets/images/admin/sidebar-artwork.webp";
 import artworkSource from "../assets/images/login/slide-02-touring.webp";
 import styles from "./Sidebar.module.css";
 
@@ -125,10 +126,17 @@ export function Sidebar({
             ))}
           </div>
         ))}
-        <div className={styles.artwork} aria-hidden="true">
-          <img src={artworkSource} alt="" />
-        </div>
+        {!adminTheme && (
+          <div className={styles.artwork} aria-hidden="true">
+            <img src={artworkSource} alt="" />
+          </div>
+        )}
       </nav>
+      {adminTheme && (
+        <div className={styles.adminArtwork} aria-hidden="true">
+          <img src={adminArtworkSource} alt="" />
+        </div>
+      )}
     </aside>
   );
 }

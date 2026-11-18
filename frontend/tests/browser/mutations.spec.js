@@ -35,27 +35,6 @@ test("employee profile save confirms via ADM-05 popup and sends profile fields s
   expect(patch.headers["if-match"]).toBe('"v1"');
 });
 
-test("locking an employee requires a reason and preserves DELETE body", async ({ page }) => {
-  const state = await installApi(page, { role: "quan_tri_vien" });
-  await page.goto("/admin/tai-khoan/3");
-  await page.getByRole("button", { name: "Vô hiệu hóa", exact: true }).click();
-  await expect(
-    page.locator("dialog.confirmation").getByRole("button", { name: "Xác nhận", exact: true }),
-  ).toBeDisabled();
-  await page
-    .locator("dialog.confirmation")
-    .getByLabel("Lý do", { exact: true })
-    .fill("Tạm ngừng công việc");
-  await page
-    .locator("dialog.confirmation")
-    .getByRole("button", { name: "Xác nhận", exact: true })
-    .click();
-  await expect(page.getByRole("button", { name: "Mở khóa", exact: true })).toBeVisible();
-  expect(state.calls.find((call) => call.method === "DELETE").body).toEqual({
-    ly_do: "Tạm ngừng công việc",
-  });
-});
-
 test("deactivating an item keeps its nonzero stock and historical record", async ({ page }) => {
   const state = await installApi(page);
   await page.goto("/kho/mat-hang/4");

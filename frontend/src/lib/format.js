@@ -44,6 +44,7 @@ function codeLabel(map, code) {
 }
 export const unitLabel = (code) => codeLabel(UNIT_LABELS, code);
 export const colorLabel = (code) => codeLabel(COLOR_LABELS, code);
+export const UNIT_OPTIONS = Object.entries(UNIT_LABELS).map(([value, label]) => ({ value, label }));
 export const STATUS_LABELS = {
   nhap: "Bản nháp",
   da_gui: "Đã giao",

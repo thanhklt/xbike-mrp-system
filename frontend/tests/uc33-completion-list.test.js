@@ -227,10 +227,10 @@ test("role access navigation placement and route gate enforce manager scope", ()
     const links = navigationFor(role).flatMap((group) => group.items);
     assert.equal(links.some(([url]) => url === path), role === "quan_ly");
   }
-  const production = navigationFor("quan_ly").find(({ title }) => title === "Sản xuất");
-  const index = production.items.findIndex(([url]) => url === path);
-  assert.deepEqual(production.items[index - 1], ["/kho/nhu-cau-bo-sung", "Nhu cầu bổ sung linh kiện"]);
-  assert.deepEqual(production.items[index], [path, "Chứng từ hoàn thành sản xuất"]);
+  const operations = navigationFor("quan_ly").find(({ title }) => title === "Vận hành");
+  const index = operations.items.findIndex(([url]) => url === path);
+  assert.deepEqual(operations.items[index - 1], ["/kho/phieu-xuat", "Phiếu xuất kho"]);
+  assert.deepEqual(operations.items[index], [path, "Hoàn thành sản xuất"]);
   const gates = [...routes.matchAll(/<Route element=\{<RoleGate \/>\}>([\s\S]*?)<\/Route>/g)].map((match) => match[1]);
   const managerGate = gates.find((gate) => gate.includes('path="/kho"'));
   assert.match(managerGate, /<Route path="\/kho\/chung-tu-hoan-thanh" element=\{<CompletionListPage \/>\} \/>/);

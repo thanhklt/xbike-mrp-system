@@ -110,6 +110,6 @@ test("completion API call is deferred until confirmation", async () => {
   assert.match(options.impact, /Cộng số lượng từng mặt hàng vào kho/);
   await options.onConfirm();
   assert.deepEqual(ui.writes, [{
-    path: "/api/v1/phieu_nhap/1/hoan_tat", method: "post", etag: '"draft-reviewed"',
+    path: "/api/v1/phieu_nhap/1/hoan_tat", method: "post", body: {}, etag: '"draft-reviewed"',
   }]);
 });
