@@ -25,6 +25,8 @@ function editor() {
   let slot = 0;
   const ports = {
     React, base: "/kho/phieu-nhap", API: { receipts: "/api/v1/phieu_nhap" },
+    styles: {},
+    useRef: (initial) => ({ current: initial }),
     useState: (initial) => {
       const index = slot++;
       if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;

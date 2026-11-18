@@ -1,0 +1,137 @@
+.formFields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.formFields :global(.line-editor td) {
+  vertical-align: top;
+}
+
+:global(.record-dialog):has(.createForm) {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.createForm .formFields > :global(.stack) {
+  gap: 12px;
+}
+
+.metadata {
+  display: grid;
+  grid-template-columns: minmax(160px, 12rem) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.note textarea {
+  resize: vertical;
+}
+
+:global(.warehouse-shell) .createForm :global(.table-scroll .line-editor) {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.createForm :global(.line-editor th) {
+  min-width: 0;
+  padding: 10px 8px;
+}
+
+.createForm :global(.line-editor th:nth-child(3)) {
+  width: clamp(80px, 13vw, 112px);
+}
+
+.createForm :global(.line-editor th:nth-child(4)) {
+  width: clamp(102px, 16vw, 144px);
+}
+
+.createForm :global(.line-editor th:nth-child(n + 5)) {
+  width: 62px;
+}
+
+.createForm :global(.line-editor :is(th, td):nth-child(n + 5)) {
+  text-align: center;
+}
+
+.createForm :global(.line-editor select) {
+  text-overflow: ellipsis;
+}
+
+.createForm :global(.line-editor [data-label="ĐVT"]) {
+  padding-top: 18px;
+}
+
+.createForm :global(.line-add) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.createForm :global(.line-add .actions) {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 620px) {
+  .metadata {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 700px) {
+  .createForm :global(.line-editor),
+  .createForm :global(.line-editor tbody) {
+    display: block;
+  }
+
+  .createForm :global(.line-editor thead) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .createForm :global(.line-editor tr) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(44px, 1fr);
+    align-items: end;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .createForm :global(.line-editor tr + tr) {
+    margin-top: 8px;
+  }
+
+  .createForm :global(.line-editor td) {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .createForm :global(.line-editor td:nth-child(-n + 2)) {
+    grid-column: span 2;
+  }
+
+  .createForm :global(.line-editor td[data-label])::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    content: attr(data-label);
+  }
+
+  .createForm :global(.line-editor [data-label="ĐVT"]) {
+    padding: 0 2px 10px;
+  }
+}
