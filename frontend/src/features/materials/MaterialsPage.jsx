@@ -51,7 +51,7 @@ export function MaterialsPage({ mode = "manage" }) {
       ) : (
         <PageHeader
           title={title}
-          subtitle="Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."
+          subtitle={mode === "employee" ? undefined : "Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."}
           action={
             !readOnly && (
               <Link className="btn btn-primary" to={`${base}/moi`}>
@@ -61,9 +61,13 @@ export function MaterialsPage({ mode = "manage" }) {
           }
         />
       )}
-      <div>
+      <div className={mode === "employee" ? "employee-inventory" : undefined}>
         <Collection
           collection={collection}
+          title={mode === "employee" ? "Danh sách tồn kho" : "Danh sách"}
+          filterIcon={mode === "employee"}
+          cycleFilters={mode === "employee"}
+          searchPlaceholder={mode === "employee" ? "Tìm mã hoặc tên mặt hàng…" : undefined}
           allowReset={!readOnly}
           pageSizes={readOnly ? undefined : [20, 50, 100]}
           validate={(draft) =>
@@ -76,7 +80,9 @@ export function MaterialsPage({ mode = "manage" }) {
               name: "loai_mat_hang",
               label: "Loại mặt hàng",
               as: "select",
-              options: readOnly ? itemTypeOptions : warehouseTypes,
+              options: readOnly
+                ? itemTypeOptions.filter(({ value }) => ["", "linh_kien", "thanh_pham"].includes(value))
+                : warehouseTypes,
             },
             {
               name: "is_active",
@@ -109,8 +115,13 @@ export function MaterialsPage({ mode = "manage" }) {
           columns={[
             {
               key: "ma_mat_hang",
-              label: "Mã",
-              render: (row) => <Link to={`${base}/${row.id}`}>{row.ma_mat_hang}</Link>,
+              label: mode === "employee" ? "Mã hàng / SKU" : "Mã",
+              render: (row) => mode === "employee" ? (
+                <>
+                  <Link to={`${base}/${row.id}`}>{row.sku}</Link>
+                  <small>{row.ma_mat_hang}</small>
+                </>
+              ) : <Link to={`${base}/${row.id}`}>{row.ma_mat_hang}</Link>,
             },
             {
               key: "ten_mat_hang",
@@ -122,7 +133,8 @@ export function MaterialsPage({ mode = "manage" }) {
                 </>
               ),
             },
-            { key: "sku", label: "SKU" },
+            ...(mode !== "employee" ? [{ key: "sku", label: "SKU" }] : []),
+            ...(mode === "employee" ? [{ key: "loai_mat_hang", label: "Loại", render: (row) => ITEM_LABELS[row.loai_mat_hang] }] : []),
             {
               key: "so_luong_ton",
               label: readOnly ? "Tồn kho" : "Tồn thực tế",
@@ -181,7 +193,7 @@ export function MaterialsPage({ mode = "manage" }) {
                   className={readOnly ? undefined : "warehouse-item-edit"}
                   to={`${base}/${row.id}`}
                 >
-                  {readOnly ? "Xem" : "Sửa"} →
+                  {mode === "employee" ? "Xem" : readOnly ? "Xem →" : "Sửa →"}
                 </Link>
               ),
             },
@@ -224,9 +236,11 @@ export function MaterialsPage({ mode = "manage" }) {
             ) : readOnly ? (
               <InfoGrid
                 entries={[
+                  ["Mã hàng", snapshot?.data.sku],
+                  ["Loại hàng", ITEM_LABELS[snapshot?.data.loai_mat_hang]],
+                  ["Tồn kho hiện tại", `${number(snapshot?.data.so_luong_ton)} ${unitLabel(snapshot?.data.don_vi_tinh) || ""}`],
                   ["Tên mặt hàng", snapshot?.data.ten_mat_hang],
-                  ["SKU", snapshot?.data.sku],
-                  ["Tồn kho", number(snapshot?.data.so_luong_ton)],
+                  ["Mã nội bộ", snapshot?.data.ma_mat_hang],
                   ["Đơn vị tính", unitLabel(snapshot?.data.don_vi_tinh)],
                   ["Cập nhật tồn", dateTime(snapshot?.data.ton_kho_updated_at)],
                 ]}

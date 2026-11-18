@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronRight, Home, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider.jsx";
@@ -43,18 +43,64 @@ function adminBreadcrumbs(pathname) {
   return [{ label: "Tổng quan" }];
 }
 
-// UC-02 Đăng xuất — Main 1: cung cấp thao tác đăng xuất trong menu (specs/use_cases/identity_access/UC-02.md)
+function employeeBreadcrumbs(pathname) {
+  if (pathname === "/nv/yeu-cau") return [{ label: "Việc được giao" }];
+  if (pathname.startsWith("/nv/yeu-cau/")) {
+    return [
+      { label: "Việc được giao", to: "/nv/yeu-cau" },
+      { label: "Chi tiết yêu cầu" },
+    ];
+  }
+  if (pathname === "/nv/ton-kho") return [{ label: "Tra cứu tồn kho" }];
+  if (pathname.startsWith("/nv/ton-kho/")) {
+    return [
+      { label: "Tra cứu tồn kho", to: "/nv/ton-kho" },
+      { label: "Chi tiết tồn kho" },
+    ];
+  }
+  if (pathname === "/nv/phieu-xuat") return [{ label: "Phiếu xuất" }];
+  if (pathname.startsWith("/nv/phieu-xuat/")) {
+    return [
+      { label: "Phiếu xuất", to: "/nv/phieu-xuat" },
+      { label: "Chi tiết phiếu xuất" },
+    ];
+  }
+  if (pathname === "/nv/chung-tu-hoan-thanh") return [{ label: "Chứng từ hoàn thành" }];
+  if (pathname.startsWith("/nv/chung-tu-hoan-thanh/")) {
+    return [
+      { label: "Chứng từ hoàn thành", to: "/nv/chung-tu-hoan-thanh" },
+      { label: "Chi tiết chứng từ hoàn thành" },
+    ];
+  }
+  if (pathname === "/nv/phieu") return [{ label: "Phiếu của tôi" }];
+  if (pathname.startsWith("/nv/xuat-nvl")) return [{ label: "Phiếu xuất linh kiện" }];
+  if (pathname.startsWith("/nv/xuat-tp")) return [{ label: "Phiếu xuất thành phẩm" }];
+  if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
+  return [{ label: "Tổng quan" }];
+}
+
 export function MainLayout() {
   const { user, logout } = useAuth();
   const { confirm } = useFeedback();
   const [menuOpen, setMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isAdmin = user.ma_vai_tro === "quan_tri_vien";
+  const isEmployee = user.ma_vai_tro === "nhan_vien";
   const isWarehouse = user.ma_vai_tro === "quan_ly";
   const groups = navigationFor(user.ma_vai_tro);
   const name = user.ho_ten || user.ten_dang_nhap;
   const avatarText = initials(name);
+
+  useEffect(() => {
+    function closeOutside(event) {
+      const menu = userMenuRef.current;
+      if (menu?.open && !menu.contains(event.target)) menu.open = false;
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, []);
 
   useEffect(() => {
     if (isAdmin) {
@@ -62,22 +108,29 @@ export function MainLayout() {
     } else {
       delete document.documentElement.dataset.adminTheme;
     }
-    if (isWarehouse) document.documentElement.dataset.warehouseTheme = "true";
-    else delete document.documentElement.dataset.warehouseTheme;
+    if (isEmployee) {
+      document.documentElement.dataset.employeeTheme = "true";
+    } else {
+      delete document.documentElement.dataset.employeeTheme;
+    }
+    if (isWarehouse) {
+      document.documentElement.dataset.warehouseTheme = "true";
+    } else {
+      delete document.documentElement.dataset.warehouseTheme;
+    }
     return () => {
       delete document.documentElement.dataset.adminTheme;
+      delete document.documentElement.dataset.employeeTheme;
       delete document.documentElement.dataset.warehouseTheme;
     };
-  }, [isAdmin, isWarehouse]);
+  }, [isAdmin, isEmployee, isWarehouse]);
 
-  // UC-02 Đăng xuất — Main 1–3, A3: hỏi xác nhận, chỉ đăng xuất khi đồng ý (specs/use_cases/identity_access/UC-02.md)
   function signOut() {
     confirm({
       title: "Đăng xuất",
       description: "Bạn có muốn kết thúc phiên làm việc?",
       hideImpact: true,
       variant: "logout",
-      // UC-02 Đăng xuất — Main 2–3: xóa phiên và chuyển về đăng nhập (specs/use_cases/identity_access/UC-02.md)
       onConfirm: () => {
         logout();
         navigate("/dang-nhap", { replace: true });
@@ -86,30 +139,36 @@ export function MainLayout() {
   }
 
   const userMenu = (
-    <details className="user-menu">
-      <summary>
-        <span className="avatar">{avatarText}</span>
+    <details className="user-menu" ref={userMenuRef}>
+      <summary aria-label={`Tài khoản: ${name}`}>
+        <span className="avatar" aria-hidden="true">{avatarText}</span>
         <span>
           <strong>{name}</strong>
-          <small>{isAdmin ? "Quản trị viên hệ thống" : ROLE_LABELS[user.ma_vai_tro]}</small>
+          <small>
+            {isAdmin
+              ? "Quản trị viên hệ thống"
+              : isEmployee && user.ma_nhan_vien
+                ? `Nhân viên · ${user.ma_nhan_vien}`
+                : ROLE_LABELS[user.ma_vai_tro]}
+          </small>
         </span>
-        <ChevronDown size={18} />
+        <ChevronDown size={18} aria-hidden="true" />
       </summary>
       <div className="user-dropdown">
         <NavLink to="/ho-so">
-          <UserRound size={16} /> Hồ sơ
+          <UserRound size={16} aria-hidden="true" /> Hồ sơ
         </NavLink>
         <button type="button" onClick={signOut}>
-          <LogOut size={16} /> Đăng xuất
+          <LogOut size={16} aria-hidden="true" /> Đăng xuất
         </button>
       </div>
     </details>
   );
 
-  if (isAdmin) {
-    const crumbs = adminBreadcrumbs(pathname);
+  if (isAdmin || isEmployee) {
+    const crumbs = isAdmin ? adminBreadcrumbs(pathname) : employeeBreadcrumbs(pathname);
     return (
-      <div className="app-shell admin-shell">
+      <div className={`app-shell admin-shell ${isEmployee ? "employee-shell" : ""}`}>
         <a className="skip-link" href="#main-content">
           Đến nội dung chính
         </a>
@@ -118,7 +177,8 @@ export function MainLayout() {
             groups={groups}
             mobileOpen={menuOpen}
             onNavigate={() => setMenuOpen(false)}
-            adminTheme
+            adminTheme={isAdmin}
+            employeeTheme={isEmployee}
           />
           {menuOpen && (
             <div
@@ -138,7 +198,7 @@ export function MainLayout() {
                   aria-controls="main-navigation"
                   onClick={() => setMenuOpen(!menuOpen)}
                 >
-                  {menuOpen ? <X size={22} /> : <Menu size={22} />}
+                  {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
                 </button>
                 <nav className="admin-breadcrumb" aria-label="Đường dẫn trang">
                   <Home size={18} className="admin-breadcrumb-home" aria-hidden="true" />
@@ -160,7 +220,10 @@ export function MainLayout() {
                   ))}
                 </nav>
               </div>
-              {userMenu}
+              <div className="admin-topbar-right">
+                {isEmployee && <span className="module-pill">Kho &amp; sản xuất</span>}
+                {userMenu}
+              </div>
             </header>
             <main id="main-content" className="page-body admin-page-body" tabIndex={-1}>
               <Outlet />
@@ -189,7 +252,7 @@ export function MainLayout() {
             aria-controls="main-navigation"
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
           </button>
           {!isWarehouse && (
             <div className="brand">

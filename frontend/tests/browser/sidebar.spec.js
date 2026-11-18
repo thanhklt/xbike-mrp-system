@@ -141,11 +141,12 @@ test("account menu logout keeps confirmation, cancel preserves the session and c
   await page.goto("/nv");
   const sidebar = page.getByRole("complementary", { name: "Thanh điều hướng" });
   await expect(sidebar.getByRole("button", { name: "Đăng xuất", exact: true })).toHaveCount(0);
-  await page.locator(".user-menu summary").click();
-  await page
+  const accountToggle = page.locator(".user-menu summary");
+  const logoutButton = page
     .locator(".user-dropdown")
-    .getByRole("button", { name: "Đăng xuất", exact: true })
-    .click();
+    .getByRole("button", { name: "Đăng xuất", exact: true });
+  await accountToggle.click();
+  await logoutButton.click();
   const confirmation = page.locator("dialog.confirmation");
   await expect(confirmation).toBeVisible();
   await confirmation.getByRole("button", { name: "Hủy", exact: true }).click();
@@ -154,10 +155,10 @@ test("account menu logout keeps confirmation, cancel preserves the session and c
   expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBe(
     "browser-test-token",
   );
-  await page
-    .locator(".user-dropdown")
-    .getByRole("button", { name: "Đăng xuất", exact: true })
-    .click();
+  if (!(await logoutButton.isVisible())) {
+    await accountToggle.click();
+  }
+  await logoutButton.click();
   await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
   await expect(page).toHaveURL(/\/dang-nhap$/);
   expect(await page.evaluate(() => localStorage.getItem("xbike_access_token"))).toBeNull();

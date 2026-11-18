@@ -360,15 +360,21 @@ test.describe("warehouse history heading", () => {
 
 test.describe("employee inventory lookup", () => {
   test.use({ role: "nhan_vien" });
-  test("keeps its five detail fields and redirects creation to the list", async ({ page }) => {
+  test("keeps employee detail fields and redirects creation to the list", async ({ page }) => {
     await page.goto("/nv/ton-kho/1");
     const dialog = page.getByRole("dialog", { name: "Chi tiết mặt hàng", exact: true });
     await expect(dialog.locator(".info-grid dt")).toHaveText([
+      "Mã hàng",
+      "Loại hàng",
+      "Tồn kho hiện tại",
       "Tên mặt hàng",
-      "SKU",
-      "Tồn kho",
+      "Mã nội bộ",
       "Đơn vị tính",
       "Cập nhật tồn",
+    ]);
+    await expect(dialog.locator(".info-grid dd")).toHaveText([
+      "FRAME-01", "Linh kiện", "120 cái", "Khung xe", "MH-000001", "cái",
+      dateTime("2026-11-05T01:00:00Z"),
     ]);
     await expect(dialog.locator("input, select, textarea, form")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Đóng", exact: true }).click();

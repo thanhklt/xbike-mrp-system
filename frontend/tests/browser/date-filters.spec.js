@@ -21,13 +21,18 @@ for (const [role, path, endpoint] of cases) {
   test(`${path}: date range displays dd/mm/yyyy and queries ISO dates`, async ({ page }) => {
     const state = await installApi(page, { role });
     await page.goto(path);
+    if (role === "nhan_vien") {
+      await page.getByRole("button", { name: "Hiện thêm", exact: true }).click();
+    }
     const from = page.getByLabel("Từ ngày", { exact: true });
     const to = page.getByLabel("Đến ngày", { exact: true });
     await expect(from).toHaveAttribute("placeholder", "dd/mm/yyyy");
     await expect(to).toHaveAttribute("placeholder", "dd/mm/yyyy");
     await from.fill("01/11/2026");
     await to.fill("30/11/2026");
-    await page.getByRole("button", { name: "Lọc", exact: true }).click();
+    if (role !== "nhan_vien") {
+      await page.getByRole("button", { name: "Lọc", exact: true }).click();
+    }
     await expect
       .poll(() =>
         state.calls.some(

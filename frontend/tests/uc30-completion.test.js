@@ -11,7 +11,7 @@ import {
   canApproveCompletion, approveConfirmEntries, approveImpact,
 } from "../src/features/production/completionForm.js";
 import { API } from "../src/lib/api/endpoints.js";
-import { dateTime, itemName, number } from "../src/lib/format.js";
+import { dateTime, number } from "../src/lib/format.js";
 
 const source = readFileSync(new URL("../src/features/production/RequestsPage.jsx", import.meta.url), "utf8");
 const row = {
@@ -166,7 +166,7 @@ test("send confirmation contains document product quantity unit and stock impact
   assert.equal(options.description, draft.ma_phieu);
   assert.equal(options.impact, "Chưa cộng tồn thành phẩm.");
   assert.deepEqual(options.content.props.entries, [
-    ["Mã chứng từ", draft.ma_phieu], ["Thành phẩm", itemName(items, 5)],
+    ["Mã chứng từ", draft.ma_phieu], ["Thành phẩm", "Xe đạp — MH-000005"],
     ["Số lượng hoàn thành", "7"], ["Đơn vị tính", "xe"],
   ]);
   ui.state.query.data = { data: draft, etag: '"updated-while-confirming"' };
@@ -205,7 +205,7 @@ test("rejected completion shows rejection and resends directly through the same 
   assert.equal(options.title, "Gửi lại chứng từ hoàn thành");
   assert.equal(options.description, completion.ma_phieu);
   assert.equal(options.impact, "Chưa cộng tồn thành phẩm.");
-  assert.deepEqual(options.content.props.entries, completionConfirmEntries(draft, row, items));
+  assert.deepEqual(options.content.props.entries, completionConfirmEntries(draft, row, items, true));
   await options.onConfirm();
   assert.deepEqual(ui.state.writes, [{ path: "/chung_tu_hoan_thanh_sx/12/gui", body: {}, etag: '"completion-reviewed"' }]);
   assert.deepEqual(ui.state.notices, ["Đã gửi chứng từ hoàn thành."]);

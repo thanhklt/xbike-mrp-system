@@ -247,6 +247,7 @@ test("leaving with the pointer keeps autoplay paused while focus remains inside"
 
 test("reduced motion stops autoplay but allows manual selection", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/dang-nhap");
   await page.clock.runFor(10000);
   await expect(dots(page).nth(0)).toHaveAttribute("aria-current", "true");
   await dots(page).nth(2).click();

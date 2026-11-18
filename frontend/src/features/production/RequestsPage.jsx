@@ -56,6 +56,7 @@ import {
   completionConfirmEntries,
   completionSendLabel,
 } from "./completionForm.js";
+import { canCreateIssue } from "../material-issuing/issueForm.js";
 
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
@@ -69,7 +70,13 @@ export function RequestsPage() {
   const collection = useCollection(API.requests, {});
   const detail = useDetail(API.requests, id);
   const catalog = useCatalog();
-  const employees = useChoices(API.employees, {}, manager);
+  const rawEmployees = useChoices(API.employees, {}, manager);
+  const employees = manager
+    ? rawEmployees
+    : {
+        ...rawEmployees,
+        data: user ? [{ ...user, isCurrentUser: true }] : [],
+      };
   const items = catalog.data?.data || [];
   return (
     <>
@@ -89,6 +96,9 @@ export function RequestsPage() {
       <Collection
         collection={collection}
         filters={requestListFilters(manager)}
+        searchPlaceholder={manager ? undefined : "Tìm mã yêu cầu hoặc tên thành phẩm…"}
+        expandableFilters={!manager}
+        cycleFilters={!manager}
         allowReset={manager}
         pageSizes={manager ? [20, 50, 100] : undefined}
         columns={[
@@ -121,7 +131,7 @@ export function RequestsPage() {
           {
             key: "action",
             label: "Thao tác",
-            render: (row) => <Link to={`${base}/${row.id}`}>Mở →</Link>,
+            render: (row) => <Link to={`${base}/${row.id}`}>{manager ? "Mở →" : "Mở"}</Link>,
           },
         ]}
       />
@@ -198,10 +208,12 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
       const { data: ketQua } = await readResource(`${API.requests}/${record.id}/kiem_tra`);
       confirm({
         title: ketQua.lan_dau ? "Kiểm tra yêu cầu sản xuất" : "Kiểm tra lại yêu cầu sản xuất",
+        variant: "request-check",
         description: record.ma_yeu_cau_san_xuat,
         content: <>
           <InfoGrid entries={checkConfirmEntries(ketQua, record.loai_yeu_cau)} />
-          <DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} />
+          <div className="request-check-table"><DataTable rows={checkLines(ketQua)} columns={CHECK_COLUMNS} /></div>
+          <RequestCheckCards rows={checkLines(ketQua)} />
         </>,
         impact: checkImpact(ketQua),
         onConfirm: async () => {
@@ -345,6 +357,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
           </div>
           <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
           <CompletionSection record={record} items={items} manager={manager} userId={userId} />
+          {!manager && <IssueLinks record={record} userId={userId} />}
         </>
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
@@ -456,6 +469,35 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, chec
   );
 }
 
+function RequestCheckCards({ rows }) {
+  return <div className="request-check-cards">
+      {rows.length ? rows.map((line) => <section key={line.id} aria-label={`Linh kiện ${line.ma_mat_hang}`}>
+        <InfoGrid entries={CHECK_COLUMNS.map((column) => [column.label, line[column.key]])} />
+      </section>) : <Notice>Chưa có dữ liệu phù hợp.</Notice>}
+    </div>;
+}
+
+function IssueLinks({ record, userId }) {
+  const issues = useResource(`${API.issues}/theo_yeu_cau/${record.id}`, {}, record.nhan_vien_duoc_giao_id === userId);
+  const completion = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {},
+    Boolean(record.nhan_vien_duoc_giao_id === userId && record.started_at && record.so_luong_can_san_xuat > 0));
+  if (record.nhan_vien_duoc_giao_id !== userId) return null;
+  const saved = issues.data?.data || [];
+  return <QueryState query={issues}><div className="actions actions-end">
+    {saved.length > 0 && (
+      <Link className="btn btn-secondary" to={`/nv/phieu-xuat?yeu_cau_san_xuat_id=${record.id}`}>
+        Xem phiếu xuất
+      </Link>
+    )}
+    {!saved.some((issue) => issue.loai_phieu === "xuat_linh_kien") && canCreateIssue(record, "xuat_linh_kien", userId, completion.data?.data) && (
+      <Link className="btn btn-secondary" to={`/nv/xuat-nvl/moi?yeu_cau_san_xuat_id=${record.id}`}>Lập phiếu xuất linh kiện</Link>
+    )}
+    {!saved.some((issue) => issue.loai_phieu === "xuat_thanh_pham") && canCreateIssue(record, "xuat_thanh_pham", userId, completion.data?.data) && (
+      <Link className="btn btn-secondary" to={`/nv/xuat-tp/moi?yeu_cau_san_xuat_id=${record.id}`}>Lập phiếu xuất thành phẩm</Link>
+    )}
+  </div></QueryState>;
+}
+
 function CompletionSection({ record, items, manager, userId }) {
   // Chứng từ chỉ có sau khi bắt đầu sản xuất; không đọc với yêu cầu chưa bắt đầu.
   const query = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {}, Boolean(record.id && record.started_at));
@@ -535,7 +577,7 @@ function CompletionSection({ record, items, manager, userId }) {
     confirm({
       title: completion.trang_thai === "tu_choi" ? "Gửi lại chứng từ hoàn thành" : "Gửi chứng từ hoàn thành",
       description: completion.ma_phieu,
-      content: <InfoGrid entries={completionConfirmEntries(completion, record, items)} />,
+      content: <InfoGrid entries={completionConfirmEntries(completion, record, items, !manager)} />,
       impact: "Chưa cộng tồn thành phẩm.",
       onConfirm: async () => {
         await completionMutation.mutateAsync({

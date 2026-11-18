@@ -103,7 +103,14 @@ test("started detail shows the saved Vietnam time in the approved position", () 
 test("menus point to requests and remove retired production entries", () => {
   assert.deepEqual(navigationFor("nhan_vien"), [
     { title: "Chung", items: [["/nv", "Tổng quan"]] },
-    { title: "Sản xuất", items: [["/nv/yeu-cau", "Việc được giao"]] },
+    {
+      title: "Sản xuất",
+      items: [
+        ["/nv/yeu-cau", "Việc được giao"],
+        ["/nv/phieu-xuat", "Phiếu xuất"],
+        ["/nv/chung-tu-hoan-thanh", "Chứng từ hoàn thành"],
+      ],
+    },
     { title: "Theo dõi", items: [["/nv/ton-kho", "Tra cứu tồn kho"]] },
   ]);
   const managerItems = navigationFor("quan_ly").flatMap((group) => group.items);
@@ -131,10 +138,14 @@ test("retired pages and APIs are gone and order wildcard routes redirect", async
       assert.equal(leaf.props.replace, true);
     }
   }
-  for (const path of ["/nv/hoan-thanh", "/nv/hoan-thanh/1", "/kho/duyet-hoan-thanh/1"]) {
-    assert.equal(matchRoutes(config, path).at(-1).route.element.props.code, 404);
+  for (const path of ["/nv/hoan-thanh", "/nv/hoan-thanh/1", "/nv/phieu"]) {
+    const leaf = matchRoutes(config, path).at(-1).route.element;
+    assert.equal(leaf.type, Navigate);
+    assert.equal(leaf.props.to, "/nv/yeu-cau");
+    assert.equal(leaf.props.replace, true);
   }
-  assert.doesNotMatch(routes, /path="\/(?:kho\/duyet-hoan-thanh|nv\/hoan-thanh)/);
+  assert.equal(matchRoutes(config, "/kho/duyet-hoan-thanh/1").at(-1).route.element.props.code, 404);
+  assert.doesNotMatch(routes, /path="\/kho\/duyet-hoan-thanh/);
   assert.equal(Object.hasOwn(API, "orders"), false);
   assert.equal(API.completions, "/chung_tu_hoan_thanh_sx");
   for (const page of ["ProductionPage", "CompletionsPage"]) {
@@ -206,9 +217,9 @@ test("employee dashboard renders only requests waiting to start and approved col
     { label: "Đang thực hiện", path: API.requests, params: { trang_thai: "dang_thuc_hien" }, href: "/nv/yeu-cau" },
   ]);
   assert.match(html, /Yêu cầu chờ bắt đầu sản xuất/);
-  assert.match(html, /href="\/nv\/yeu-cau">Xem yêu cầu của tôi →/);
+  assert.match(html, /href="\/nv\/yeu-cau">Xem yêu cầu của tôi<\/a>/);
   assert.match(html, /href="\/nv\/yeu-cau\/1">YCSX-202611-000001/);
-  assert.match(html, /href="\/nv\/yeu-cau\/1">Mở →/);
+  assert.match(html, /href="\/nv\/yeu-cau\/1">Mở<\/a>/);
   assert.match(html, /<span>dang_thuc_hien<\/span>/);
   assert.match(html, /Xe/);
   assert.doesNotMatch(html, /Lệnh|lệnh|Hoàn thành chờ duyệt|Tạo chứng từ hoàn thành/);
@@ -235,15 +246,9 @@ test("warehouse dashboard keeps request metrics and shows the two pending queues
   assert.doesNotMatch(html, /Tra cứu tồn kho nhanh|Hoạt động gần đây|Lệnh/);
 });
 
-// UC-29 D6: Giữ Phiếu của tôi cho phiếu xuất v4, bỏ tab/tham chiếu v3, giữ nhãn audit cũ
-test("my documents retains v4 issues without completion or order references", () => {
-  const documents = read("../src/features/production/MyDocumentsPage.jsx");
-  assert.match(documents, /useCollection\(API.issues/);
-  assert.match(documents, /loai_phieu: kind/);
-  assert.match(documents, /\["xuat_linh_kien", "Phiếu xuất linh kiện liên quan"\]/);
-  assert.match(documents, /\["xuat_thanh_pham", "Phiếu xuất thành phẩm liên quan"\]/);
-  assert.doesNotMatch(documents, /completion|API.completions|lenh_san_xuat_id|Lệnh/);
-  assert.match(documents, /Yêu cầu #\$\{row.yeu_cau_san_xuat_id\}/);
+test("retired employee document list redirects to assigned requests instead of a manager-only API", () => {
+  assert.match(read("../src/routes/index.jsx"), /path="\/nv\/phieu" element=\{<Navigate to="\/nv\/yeu-cau" replace/);
+  assert.doesNotMatch(read("../src/features/dashboard/DashboardPage.jsx"), /to="\/nv\/(phieu|xuat-nvl|xuat-tp)"/);
   assert.doesNotMatch(read("../src/components/ApprovalActions.jsx"), /Lệnh sản xuất|lenh_san_xuat_id/);
   assert.match(read("../src/features/dashboard/auditFormat.js"), /lenh_san_xuat/);
 });

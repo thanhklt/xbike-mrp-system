@@ -1,5 +1,7 @@
 """UC-34..40: business guards without HTTP/database dependencies."""
 
+import json
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,7 +14,12 @@ from app.core.errors import (
 )
 from app.modules.phieu_xuat.errors import IssueDependencyInvalid
 from app.modules.phieu_xuat.ports import IssuePart, IssueSource
-from app.modules.phieu_xuat.schemas import PhieuXuatCreate, PhieuXuatQuery
+from app.modules.phieu_xuat.schemas import (
+    PhieuXuatCreate,
+    PhieuXuatCuaToiQuery,
+    PhieuXuatQuery,
+    PhieuXuatRead,
+)
 from app.modules.phieu_xuat.service import PhieuXuatService
 
 
@@ -38,6 +45,34 @@ def test_uc35_gi_ac12_missing_validator(value):
 def test_uc35_gi_ac12_only_one_canonical_strong_validator(value):
     with pytest.raises(PreconditionFailedException):
         PhieuXuatService._require_if_match(value)
+
+
+def test_issue_etag_matches_legacy_snapshot():
+    payload = {
+        "id": 1,
+        "ma_phieu_xuat": "PX-202611-000001",
+        "nhan_vien_id": 2,
+        "loai_phieu": "xuat_linh_kien",
+        "yeu_cau_san_xuat_id": 5,
+        "tong_tien": None,
+        "trang_thai": "nhap",
+        "created_at": "2026-11-18T00:00:00Z",
+        "updated_at": "2026-11-18T00:00:00Z",
+        "gui_at": None,
+        "nguoi_xu_ly_id": None,
+        "xu_ly_at": None,
+        "ly_do_tu_choi": None,
+        "phien_ban": 1,
+        "chi_tiet": [
+            {"id": 1, "mat_hang_id": 7, "so_luong": 3, "don_gia_thuc": None, "tong_gia": None}
+        ],
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    legacy_etag = f'"{sha256(canonical.encode()).hexdigest()}"'
+
+    _, etag = PhieuXuatService.response(PhieuXuatRead.model_validate(payload), "test")
+
+    assert etag == legacy_etag
 
 
 def test_uc34_gi_ac03_input_only_source_and_kind():
@@ -103,3 +138,44 @@ def test_uc35_gi_ac15_17_stock_policy_rejects_non_integer_prices():
     )
     with pytest.raises(IssueDependencyInvalid):
         PhieuXuatService._stock_policy(record, source, [stock])
+
+
+@pytest.mark.parametrize("roles", [["quan_ly"], ["quan_tri_vien"], []])
+async def test_list_my_issues_requires_nhan_vien_role(roles):
+    repo = SimpleNamespace(begin_read_snapshot=AsyncMock(), list_my_issues=AsyncMock())
+    service = PhieuXuatService(repo, None, None, None)
+    with pytest.raises(ForbiddenException):
+        await service.list_my_issues(PhieuXuatCuaToiQuery(), {"sub": "2", "roles": roles}, "test")
+    repo.begin_read_snapshot.assert_not_awaited()
+    repo.list_my_issues.assert_not_awaited()
+
+
+async def test_list_my_issues_scoped_to_actor():
+    from app.shared.records import RecordPage
+    repo = SimpleNamespace(
+        begin_read_snapshot=AsyncMock(),
+        list_my_issues=AsyncMock(return_value=RecordPage(items=[], total=0)),
+    )
+    service = PhieuXuatService(repo, None, None, None)
+    query = PhieuXuatCuaToiQuery(loai_phieu="xuat_linh_kien")
+    res = await service.list_my_issues(query, {"sub": "42", "roles": ["nhan_vien"]}, "test")
+    assert res.meta.total == 0
+    repo.begin_read_snapshot.assert_awaited_once()
+    repo.list_my_issues.assert_awaited_once_with(query, 42)
+
+
+def test_phieu_xuat_cua_toi_query_rejects_nhan_vien_id():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        PhieuXuatCuaToiQuery(nhan_vien_id=2)
+
+
+def test_phieu_xuat_cua_toi_query_supports_q_and_sort_and_rejects_invalid():
+    from pydantic import ValidationError
+    q = PhieuXuatCuaToiQuery(q="PX-01", sort="-id")
+    assert q.q == "PX-01"
+    assert q.sort == "-id"
+    with pytest.raises(ValidationError):
+        PhieuXuatCuaToiQuery(sort="unsupported_column")
+    with pytest.raises(ValidationError):
+        PhieuXuatCuaToiQuery(extra_field="invalid")

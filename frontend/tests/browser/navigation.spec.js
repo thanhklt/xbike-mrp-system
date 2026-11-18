@@ -23,7 +23,13 @@ const menus = {
     "/kho/thong-ke",
     "/kho/giao-dich",
   ],
-  nhan_vien: ["/nv", "/nv/yeu-cau", "/nv/ton-kho"],
+  nhan_vien: [
+    "/nv",
+    "/nv/yeu-cau",
+    "/nv/phieu-xuat",
+    "/nv/chung-tu-hoan-thanh",
+    "/nv/ton-kho",
+  ],
 };
 
 for (const [role, paths] of Object.entries(menus)) {
@@ -42,17 +48,24 @@ for (const [role, paths] of Object.entries(menus)) {
       await expect(sidebar.locator('a[href="/ho-so"]')).toHaveCount(0);
       await expect(sidebar.getByRole("button", { name: "Đăng xuất", exact: true })).toHaveCount(0);
       await page.screenshot({ path: `test-results/sidebar-${role}-${width}.png`, fullPage: true });
-      if (role === "quan_tri_vien") {
-        if (width === 375) {
+      if (width === 375) {
+        if (role === "quan_tri_vien") {
           await sidebar.getByRole("link", { name: "Quản lý tài khoản", exact: true }).click();
           await expect(page).toHaveURL(/\/admin\/tai-khoan$/);
           await expect(page.getByRole("button", { name: "Mở điều hướng" })).toHaveAttribute(
             "aria-expanded",
             "false",
           );
+        } else if (role === "nhan_vien") {
+          await sidebar.getByRole("link", { name: "Việc được giao", exact: true }).click();
+          await expect(page).toHaveURL(/\/nv\/yeu-cau$/);
+          await expect(page.getByRole("button", { name: "Mở điều hướng" })).toHaveAttribute(
+            "aria-expanded",
+            "false",
+          );
+        } else {
+          await page.getByRole("button", { name: "Đóng điều hướng", exact: true }).click();
         }
-      } else if (width === 375) {
-        await page.getByRole("button", { name: "Đóng điều hướng", exact: true }).click();
       }
       const dropdown = page.locator(".user-dropdown");
       await expect(dropdown).toBeHidden();

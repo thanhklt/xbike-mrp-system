@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   ArrowLeftRight,
   BadgeCheck,
@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Factory,
+  FileCheck,
   GitBranch,
   History,
   Home,
@@ -24,7 +25,11 @@ import {
 } from "lucide-react";
 import logo from "../assets/images/brand/xbike-logo.svg";
 import adminArtworkSource from "../assets/images/admin/sidebar-artwork.webp";
+import employeeArtworkSource from "../assets/images/brand/employee-bicycle.png";
 import artworkSource from "../assets/images/login/slide-02-touring.webp";
+import { API } from "../lib/api/endpoints.js";
+import { useResource } from "../lib/api/useResources.js";
+import { canAccessPath } from "../features/auth/permissions.js";
 import styles from "./Sidebar.module.css";
 
 const sectionIcons = {
@@ -43,6 +48,7 @@ const sectionIcons = {
   "phieu-xuat": PackageMinus,
   "duyet-hoan-thanh": ClipboardCheck,
   "hoan-thanh": ClipboardCheck,
+  "chung-tu-hoan-thanh": FileCheck,
   "dieu-chinh": SlidersHorizontal,
   ticket: Ticket,
   "thong-ke": BarChart3,
@@ -63,10 +69,21 @@ const warehouseIcons = {
   "lich-su": History,
 };
 
-function SidebarLink({ path, label, onNavigate, adminTheme, warehouseTheme }) {
+const employeeIcons = {
+  "/nv": Home,
+  "/nv/yeu-cau": ClipboardList,
+  "/nv/lenh-sx": Factory,
+  "/nv/hoan-thanh": FileCheck,
+  "/nv/chung-tu-hoan-thanh": FileCheck,
+  "/nv/phieu-xuat": Package,
+  "/nv/ton-kho": Boxes,
+};
+
+function SidebarLink({ path, label, onNavigate, adminTheme, warehouseTheme, employeeTheme, badge }) {
   const segment = path.split("/").at(-1);
   const Icon =
     (warehouseTheme && warehouseIcons[segment]) ||
+    employeeIcons[path] ||
     (segment === "admin" && adminTheme ? Home : sectionIcons[segment]) ||
     LayoutDashboard;
   return (
@@ -78,8 +95,9 @@ function SidebarLink({ path, label, onNavigate, adminTheme, warehouseTheme }) {
       onClick={onNavigate}
       className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ""}`}
     >
-      <Icon size={adminTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
+      <Icon size={adminTheme || employeeTheme ? 22 : 19} strokeWidth={1.85} aria-hidden="true" />
       <span className={styles.label}>{label}</span>
+      {badge !== undefined && <span className={styles.badge} aria-hidden="true">{badge}</span>}
     </NavLink>
   );
 }
@@ -90,16 +108,58 @@ export function Sidebar({
   onNavigate,
   adminTheme = false,
   warehouseTheme = false,
+  employeeTheme = false,
 }) {
+  const { pathname } = useLocation();
+  const darkTheme = adminTheme || employeeTheme;
+  const assignedRequests = useResource(
+    API.requests,
+    { page: 1, page_size: 1 },
+    employeeTheme && canAccessPath("nhan_vien", pathname),
+  );
+  const completedRequests = useResource(
+    API.requests,
+    { page: 1, page_size: 1, trang_thai: "hoan_thanh" },
+    employeeTheme && canAccessPath("nhan_vien", pathname),
+  );
+  const totalAssigned = assignedRequests.data?.meta?.total;
+  const completedAssigned = completedRequests.data?.meta?.total;
+  const isAssignedPending = assignedRequests.isPending || assignedRequests.isLoading;
+  const isCompletedPending = completedRequests.isPending || completedRequests.isLoading;
+  const isAssignedError = Boolean(assignedRequests.isError || assignedRequests.error);
+  const isCompletedError = Boolean(completedRequests.isError || completedRequests.error);
+
+  const hasValidBadgeCounts =
+    !isAssignedPending &&
+    !isCompletedPending &&
+    !isAssignedError &&
+    !isCompletedError &&
+    typeof totalAssigned === "number" &&
+    typeof completedAssigned === "number";
+
+  const activeAssignedCount = hasValidBadgeCounts
+    ? Math.max(0, totalAssigned - completedAssigned)
+    : undefined;
   return (
     <aside
       id="main-navigation"
       aria-label="Thanh điều hướng"
-      className={`${styles.root} ${adminTheme ? styles.admin : ""} ${mobileOpen ? styles.open : ""}`}
+      className={`${styles.root} ${darkTheme ? styles.admin : ""} ${employeeTheme ? styles.employee : ""} ${mobileOpen ? styles.open : ""}`}
     >
-      {adminTheme ? (
+      {darkTheme ? (
         <div className={styles.adminBrand}>
-          <img src={logo} alt="XBIKE MRP System" className={styles.logo} />
+          {employeeTheme ? (
+            <div className={styles.employeeBrand}>
+              <div className={styles.brandLogo} aria-label="XBIKE MRP SYSTEM">
+                XBIKE
+              </div>
+              <div className={styles.brandSubline}>
+                MRP SYSTEM<span className={styles.brandTrademark}>™</span>
+              </div>
+            </div>
+          ) : (
+            <img src={logo} alt="XBIKE MRP System" className={styles.logo} />
+          )}
         </div>
       ) : (
         <div className={styles.toolbar}>
@@ -113,7 +173,7 @@ export function Sidebar({
       >
         {groups.map((group) => (
           <div className={styles.group} key={group.title}>
-            {!adminTheme && <div className={styles.groupTitle}>{group.title}</div>}
+            {!darkTheme && <div className={styles.groupTitle}>{group.title}</div>}
             {group.items.map(([path, label]) => (
               <SidebarLink
                 key={path}
@@ -122,19 +182,21 @@ export function Sidebar({
                 onNavigate={onNavigate}
                 adminTheme={adminTheme}
                 warehouseTheme={warehouseTheme}
+                employeeTheme={employeeTheme}
+                badge={employeeTheme && path === "/nv/yeu-cau" ? activeAssignedCount : undefined}
               />
             ))}
           </div>
         ))}
-        {!adminTheme && (
+        {!darkTheme && (
           <div className={styles.artwork} aria-hidden="true">
             <img src={artworkSource} alt="" />
           </div>
         )}
       </nav>
-      {adminTheme && (
+      {darkTheme && (
         <div className={styles.adminArtwork} aria-hidden="true">
-          <img src={adminArtworkSource} alt="" />
+          <img src={employeeTheme ? employeeArtworkSource : adminArtworkSource} alt="" />
         </div>
       )}
     </aside>

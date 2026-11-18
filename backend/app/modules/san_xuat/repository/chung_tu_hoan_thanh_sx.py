@@ -1,6 +1,6 @@
 """Completion persistence; transaction boundaries belong to the service."""
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import false, func, select, text, update
@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictException, InvalidWorkflowState
 from app.modules.san_xuat.models import ChungTuHoanThanhSx, YeuCauSanXuat
-from app.modules.san_xuat.schemas import ChungTuListItem, ChungTuListQuery, ChungTuRead
+from app.modules.san_xuat.schemas import (
+    ChungTuCuaToiQuery,
+    ChungTuListItem,
+    ChungTuListQuery,
+    ChungTuRead,
+)
 from app.shared.records import RecordPage
 
 
@@ -41,16 +46,61 @@ class SqlAlchemyChungTuHoanThanhRepository:
             start = datetime.combine(params.tu_ngay, time.min, local_zone).astimezone(timezone.utc)
             query = query.where(ChungTuHoanThanhSx.finish_time >= start)
         if params.den_ngay:
-            end = datetime.combine(params.den_ngay, time.min, local_zone).astimezone(
-                timezone.utc
-            ) + timedelta(days=1)
-            query = query.where(ChungTuHoanThanhSx.finish_time < end)
+            if params.den_ngay < date.max:
+                end = datetime.combine(params.den_ngay, time.min, local_zone).astimezone(
+                    timezone.utc
+                ) + timedelta(days=1)
+                query = query.where(ChungTuHoanThanhSx.finish_time < end)
         total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
         offset = (params.page - 1) * params.page_size
         if offset >= total:
             return RecordPage([], total)
         rows = (await self.session.execute(query.order_by(
             ChungTuHoanThanhSx.finish_time.desc(), ChungTuHoanThanhSx.id.desc(),
+        ).offset(offset).limit(params.page_size))).all()
+        return RecordPage([
+            ChungTuListItem(
+                **ChungTuRead.model_validate(record).model_dump(),
+                ma_yeu_cau_san_xuat=code, mat_hang_id=item_id, loai_yeu_cau=kind,
+            ) for record, code, item_id, kind in rows
+        ], total)
+
+    async def list_my_entries(
+        self, params: ChungTuCuaToiQuery, employee_id: int
+    ) -> RecordPage[ChungTuListItem]:
+        query = select(
+            ChungTuHoanThanhSx,
+            YeuCauSanXuat.ma_yeu_cau_san_xuat,
+            YeuCauSanXuat.mat_hang_id,
+            YeuCauSanXuat.loai_yeu_cau,
+        ).join(
+            YeuCauSanXuat, ChungTuHoanThanhSx.yeu_cau_san_xuat_id == YeuCauSanXuat.id,
+        ).where(YeuCauSanXuat.nhan_vien_duoc_giao_id == employee_id)
+        for column, value in (
+            (YeuCauSanXuat.mat_hang_id, params.mat_hang_id),
+            (ChungTuHoanThanhSx.trang_thai, params.trang_thai),
+            (YeuCauSanXuat.loai_yeu_cau, params.loai_yeu_cau),
+        ):
+            if value is not None:
+                query = query.where(
+                    false() if isinstance(value, int) and value > 2**31 - 1 else column == value
+                )
+        local_zone = ZoneInfo("Asia/Ho_Chi_Minh")
+        if params.tu_ngay:
+            start = datetime.combine(params.tu_ngay, time.min, local_zone).astimezone(timezone.utc)
+            query = query.where(ChungTuHoanThanhSx.finish_time >= start)
+        if params.den_ngay:
+            if params.den_ngay < date.max:
+                end = datetime.combine(params.den_ngay, time.min, local_zone).astimezone(
+                    timezone.utc
+                ) + timedelta(days=1)
+                query = query.where(ChungTuHoanThanhSx.finish_time < end)
+        total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        offset = (params.page - 1) * params.page_size
+        if offset >= total:
+            return RecordPage([], total)
+        rows = (await self.session.execute(query.order_by(
+            ChungTuHoanThanhSx.finish_time.desc().nulls_last(), ChungTuHoanThanhSx.id.desc(),
         ).offset(offset).limit(params.page_size))).all()
         return RecordPage([
             ChungTuListItem(

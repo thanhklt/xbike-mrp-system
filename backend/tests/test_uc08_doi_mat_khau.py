@@ -358,3 +358,182 @@ async def test_failed_save_rolls_back_everything(api, failure):
     target.side_effect = api.pending_history.append if failure == "audit" else None
     assert (await login(api, 5, PASSWORD)).status_code == 200
     assert (await login(api, 5, NEW_PASSWORD)).status_code == 401
+
+
+# -------------------------------------------------------------------------
+# Employee self password change: POST /api/v1/nhan_vien/me/doi_mat_khau
+# -------------------------------------------------------------------------
+async def test_employee_self_change_password_success(api):
+    headers = api.headers(5)
+    second_token = create_access_token(
+        5, api.stored[5].roles,
+        credential_version=password_version(api.stored[5].password_hash),
+        session_version=api.stored[5].phien_ban_dang_nhap,
+    )
+    second_headers = {"Authorization": f"Bearer {second_token}"}
+    # Both active sessions
+    assert (await api.client.get("/api/v1/auth/me", headers=headers)).status_code == 200
+    assert (await api.client.get("/api/v1/auth/me", headers=second_headers)).status_code == 200
+
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 204
+    assert not response.content  # 204 has empty body
+
+    # Both old tokens fail immediately with 401
+    assert (await api.client.get("/api/v1/auth/me", headers=headers)).status_code == 401
+    assert (await api.client.get("/api/v1/auth/me", headers=second_headers)).status_code == 401
+    # Old password fails
+    assert (await login(api, 5, PASSWORD)).status_code == 401
+    # New password succeeds
+    login_res = await login(api, 5, NEW_PASSWORD)
+    assert login_res.status_code == 200
+    new_token = login_res.json()["data"]["access_token"]
+    assert (await api.client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {new_token}"})).status_code == 200
+
+    # Audit recorded
+    password_audits = [a for a in api.history if a.thao_tac == "doi_mat_khau"]
+    assert len(password_audits) == 1
+    audit_entry = password_audits[0]
+    assert audit_entry.nhan_vien_id == 5 and audit_entry.doi_tuong_id == 5
+    assert audit_entry.du_lieu_sau == {"da_doi_mat_khau": True}
+
+
+async def test_employee_self_change_password_wrong_current(api):
+    headers = api.headers(5)
+    before = dict(api.stored)
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": "wrong-password", "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    # Required: HTTP 400 with code mat_khau_hien_tai_khong_dung
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "mat_khau_hien_tai_khong_dung"
+    # Session remains intact!
+    assert (await api.client.get("/api/v1/auth/me", headers=headers)).status_code == 200
+    # Password unchanged
+    assert (await login(api, 5, PASSWORD)).status_code == 200
+    # No password change audit
+    password_audits = [a for a in api.history if a.thao_tac == "doi_mat_khau"]
+    assert len(password_audits) == 0
+    assert api.stored == before
+
+
+@pytest.mark.parametrize("bad_pwd", ["12345", ""])
+async def test_employee_self_change_password_short_or_empty(api, bad_pwd):
+    headers = api.headers(5)
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": bad_pwd},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert (await api.client.get("/api/v1/auth/me", headers=headers)).status_code == 200
+
+
+@pytest.mark.parametrize("role_id", [1, 4])  # 1: admin, 4: quan_ly
+async def test_employee_self_change_password_wrong_role(api, role_id):
+    headers = api.headers(role_id)
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+async def test_employee_self_change_password_extra_fields(api):
+    headers = api.headers(5)
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD, "nhan_vien_id": 2},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+async def test_employee_self_change_password_role_changed_at_lock(api):
+    # Simulated race: token authenticates normally via get_credentials_by_id as nhan_vien,
+    # but concurrent transaction changed role before lock_credentials_by_id
+    original = api.stored[5]
+    headers = api.headers(5)
+    changed = original.model_copy(update={"roles": ["quan_ly"], "ma_vai_tro": "quan_ly", "vai_tro_id": 2})
+    api.repo.lock_credentials_by_id = AsyncMock(return_value=changed)
+    api.repo.set_password_hash.reset_mock()
+    api.audit.append.reset_mock()
+
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    api.repo.lock_credentials_by_id.assert_awaited_once_with(5)
+    api.repo.set_password_hash.assert_not_awaited()
+    api.audit.append.assert_not_awaited()
+
+
+async def test_employee_self_change_password_stale_pbdn_at_lock(api):
+    # Simulated race: token authenticated with pbdn=2, but locked credentials has pbdn=3
+    original = api.stored[5]
+    headers = api.headers(5)
+    changed = original.model_copy(update={"phien_ban_dang_nhap": 3})
+    api.repo.lock_credentials_by_id = AsyncMock(return_value=changed)
+    api.repo.set_password_hash.reset_mock()
+    api.audit.append.reset_mock()
+
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 401
+    assert "sign in again" in response.text
+    api.repo.lock_credentials_by_id.assert_awaited_once_with(5)
+    api.repo.set_password_hash.assert_not_awaited()
+    api.audit.append.assert_not_awaited()
+
+
+async def test_employee_self_change_password_account_locked_at_lock(api):
+    # Simulated race: token authenticated, but locked credentials is now bi_khoa
+    original = api.stored[5]
+    headers = api.headers(5)
+    changed = original.model_copy(update={"trang_thai": "bi_khoa"})
+    api.repo.lock_credentials_by_id = AsyncMock(return_value=changed)
+    api.repo.set_password_hash.reset_mock()
+    api.audit.append.reset_mock()
+
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "tai_khoan_bi_vo_hieu_hoa"
+    api.repo.lock_credentials_by_id.assert_awaited_once_with(5)
+    api.repo.set_password_hash.assert_not_awaited()
+    api.audit.append.assert_not_awaited()
+
+
+async def test_employee_self_change_password_pwdv_changed_at_lock(api):
+    # Simulated race: token authenticated, but another password reset changed pwdv before lock
+    original = api.stored[5]
+    headers = api.headers(5)
+    changed = original.model_copy(update={"password_hash": "$argon2id$v=19$m=65536,t=3,p=4$changed$changed"})
+    api.repo.lock_credentials_by_id = AsyncMock(return_value=changed)
+    api.repo.set_password_hash.reset_mock()
+    api.audit.append.reset_mock()
+
+    response = await api.client.post(
+        f"{URL}/me/doi_mat_khau",
+        json={"mat_khau_hien_tai": PASSWORD, "mat_khau_moi": NEW_PASSWORD},
+        headers=headers,
+    )
+    assert response.status_code == 401
+    api.repo.lock_credentials_by_id.assert_awaited_once_with(5)
+    api.repo.set_password_hash.assert_not_awaited()
+    api.audit.append.assert_not_awaited()

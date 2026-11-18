@@ -16,6 +16,7 @@ from app.modules.inventory.ports import InventoryProductionWriter
 from app.modules.san_xuat.ports import ChungTuHoanThanhRepository, YeuCauSanXuatRepository
 from app.modules.san_xuat.schemas import (
     ChungTuCreate,
+    ChungTuCuaToiQuery,
     ChungTuDetailResponse,
     ChungTuListQuery,
     ChungTuListResponse,
@@ -69,6 +70,16 @@ class ChungTuHoanThanhService:
         if "quan_ly" not in actor.get("roles", []):
             raise ForbiddenException()
         result = await self.repository.list_entries(params)
+        return ChungTuListResponse(data=result.items, meta=ListResponseMeta(
+            request_id=request_id, page=params.page, page_size=params.page_size,
+            total=result.total, total_pages=(result.total + params.page_size - 1) // params.page_size,
+        ))
+
+    async def danh_sach_cua_toi(
+        self, params: ChungTuCuaToiQuery, actor: dict, request_id: str,
+    ) -> ChungTuListResponse:
+        _require_employee(actor)
+        result = await self.repository.list_my_entries(params, int(actor["sub"]))
         return ChungTuListResponse(data=result.items, meta=ListResponseMeta(
             request_id=request_id, page=params.page, page_size=params.page_size,
             total=result.total, total_pages=(result.total + params.page_size - 1) // params.page_size,

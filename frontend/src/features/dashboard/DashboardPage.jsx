@@ -32,8 +32,27 @@ export function DashboardPage() {
   return <EmployeeDashboard />;
 }
 
-function Metric({ label, path, params, href }) {
+function Metric({ label, path, params, href, excludeStatus }) {
   const query = useResource(path, { page: 1, page_size: 1, ...params });
+  const completedQuery = useResource(
+    path,
+    { page: 1, page_size: 1, ...(params || {}), trang_thai: excludeStatus },
+    Boolean(excludeStatus),
+  );
+  const total = query.data?.meta?.total;
+  const completedTotal = completedQuery.data?.meta?.total;
+  const isError = Boolean(query.isError || (excludeStatus && completedQuery.isError));
+  const isPending = Boolean(query.isPending || (excludeStatus && completedQuery.isPending));
+  const hasSettledValidData =
+    !isError &&
+    !isPending &&
+    typeof total === "number" &&
+    (!excludeStatus || typeof completedTotal === "number");
+  const count = hasSettledValidData
+    ? excludeStatus
+      ? Math.max(0, total - completedTotal)
+      : total
+    : undefined;
   return (
     <Link
       className="metric"
@@ -41,8 +60,8 @@ function Metric({ label, path, params, href }) {
       to={href}
     >
       <span>{label}</span>
-      <strong>{query.isError || query.isPending ? "—" : number(query.data?.meta.total)}</strong>
-      {query.isError && <small>Không tải được số liệu</small>}
+      <strong>{isError || isPending || count === undefined ? "—" : number(count)}</strong>
+      {isError && <small>Không tải được số liệu</small>}
     </Link>
   );
 }
@@ -559,13 +578,10 @@ function EmployeeDashboard() {
   const requests = useResource(API.requests, { page: 1, page_size: 100, trang_thai: "dang_thuc_hien" });
   const items = useResource(API.catalog);
   return (
-    <>
-      <PageHeader
-        title="Tổng quan"
-        subtitle="Yêu cầu sản xuất được giao và công việc cần theo dõi."
-      />
-      <div className="metrics">
-        <Metric label="Yêu cầu được giao" path={API.requests} href="/nv/yeu-cau" />
+    <div className="employee-overview">
+      <PageHeader title="Tổng quan" />
+      <div className="metrics employee-stats">
+        <Metric label="Yêu cầu được giao" path={API.requests} href="/nv/yeu-cau" excludeStatus="hoan_thanh" />
         <Metric
           label="Yêu cầu đã giao"
           path={API.requests}
@@ -579,7 +595,7 @@ function EmployeeDashboard() {
           href="/nv/yeu-cau"
         />
       </div>
-      <Card title="Yêu cầu chờ bắt đầu sản xuất" action={<Link to="/nv/yeu-cau">Xem yêu cầu của tôi →</Link>}>
+      <Card title="Yêu cầu chờ bắt đầu sản xuất" action={<Link to="/nv/yeu-cau">Xem yêu cầu của tôi</Link>}>
         <QueryState query={requests}>
           <DataTable
             rows={requests.data?.data
@@ -606,30 +622,17 @@ function EmployeeDashboard() {
               {
                 key: "action",
                 label: "Thao tác",
-                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Mở →</Link>,
+                render: (row) => <Link to={`/nv/yeu-cau/${row.id}`}>Mở</Link>,
               },
             ]}
           />
         </QueryState>
       </Card>
-      <div className="dashboard-columns">
-        <QuickStock />
-        <Card title="Theo dõi công việc">
-          <div className="stack">
-            <p className="muted">
-              Phiếu xuất do Quản lý kho lập và duyệt. Bạn được xem các phiếu liên quan đến yêu cầu
-              sản xuất được giao.
-            </p>
-            <Link to="/nv/xuat-nvl">Xem phiếu xuất vật tư →</Link>
-            <Link to="/nv/xuat-tp">Xem phiếu xuất thành phẩm →</Link>
-            <Link to="/nv/phieu">Theo dõi phiếu xuất liên quan →</Link>
-          </div>
-        </Card>
-      </div>
-    </>
+      <QuickStock showLegend={false} />
+    </div>
   );
 }
-function QuickStock() {
+function QuickStock({ showLegend = true }) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const stock = useResource(API.items, { page: 1, page_size: 5, q: query });
@@ -670,9 +673,11 @@ function QuickStock() {
           )}
         </div>
       </QueryState>
-      <small className="muted">
-        NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm
-      </small>
+      {showLegend && (
+        <small className="muted">
+          NVL = Nguyên vật liệu · BTP = Bán thành phẩm · TP = Thành phẩm
+        </small>
+      )}
     </Card>
   );
 }

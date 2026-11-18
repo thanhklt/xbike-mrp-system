@@ -1,9 +1,16 @@
-export function maskDmy(text) {
-  const digits = String(text ?? "").replace(/\D/g, "").slice(0, 8);
+export function maskDmy(text, shortYear = false) {
+  const maxDigits = shortYear ? 6 : 8;
+  const digits = String(text ?? "").replace(/\D/g, "").slice(0, maxDigits);
   return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join("/");
 }
 
-export function dmyToIso(text) {
+export function dmyToIso(text, shortYear = false) {
+  if (shortYear) {
+    if (!/^\d{2}\/\d{2}\/\d{2}$/.test(text)) return null;
+    const [day, month, yy] = text.split("/");
+    const fullText = `${day}/${month}/20${yy}`;
+    return dmyToIso(fullText, false);
+  }
   if (!/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return null;
   const [day, month, year] = text.split("/").map(Number);
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
@@ -12,8 +19,9 @@ export function dmyToIso(text) {
   return `${text.slice(6)}-${text.slice(3, 5)}-${text.slice(0, 2)}`;
 }
 
-export function isoToDmy(value) {
+export function isoToDmy(value, shortYear = false) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
-  const display = `${value.slice(8)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
-  return dmyToIso(display) === value ? display : "";
+  const dmy4 = `${value.slice(8)}/${value.slice(5, 7)}/${value.slice(0, 4)}`;
+  if (dmyToIso(dmy4, false) !== value) return "";
+  return shortYear ? `${value.slice(8)}/${value.slice(5, 7)}/${value.slice(2, 4)}` : dmy4;
 }

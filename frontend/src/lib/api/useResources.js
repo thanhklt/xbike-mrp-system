@@ -26,6 +26,7 @@ export function useCollection(path, initial = {}, transform = (params) => params
     setPage: (page) => setParams((previous) => ({ ...previous, page })),
     setPageSize: (page_size) =>
       setParams((previous) => ({ ...previous, page_size: Number(page_size), page: 1 })),
+    reset: (next) => setParams((previous) => ({ page_size: previous.page_size, page: 1, ...next })),
   };
 }
 export function useWrite() {

@@ -195,6 +195,13 @@ class DatLaiMatKhauInput(BaseModel):
     mat_khau_moi: SecretStr = Field(min_length=6, max_length=1024, repr=False)
 
 
+class DoiMatKhauMeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mat_khau_hien_tai: SecretStr = Field(min_length=1, max_length=1024, repr=False)
+    mat_khau_moi: SecretStr = Field(min_length=6, max_length=1024, repr=False)
+
+
 class LyDoTuyChonInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

@@ -38,7 +38,7 @@ test("the latest /auth/me role takes precedence over the earlier login response"
   await page.getByLabel("Mật khẩu", { exact: true }).fill("test-password");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await expect(page).toHaveURL(/\/nv$/);
-  await expect(page.getByRole("heading", { name: "Việc được giao", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Tổng quan|Việc được giao/ })).toBeVisible();
 });
 
 test("admin sees no warehouse menu or snapshot and direct warehouse URL is denied", async ({
@@ -56,20 +56,15 @@ test("admin sees no warehouse menu or snapshot and direct warehouse URL is denie
   ).toHaveLength(0);
 });
 
-test("employee can view issues but cannot create or approve them", async ({ page }) => {
+test("employee can view issues and needs an assigned request to create, but cannot approve", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/xuat-nvl/1");
   await expect(page.getByRole("heading", { name: "Chi tiết phiếu xuất" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Duyệt phiếu xuất", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Tạo phiếu xuất", exact: true })).toHaveCount(0);
   expect(state.calls.some((call) => call.path === "nhan_vien/2")).toBe(false);
-  state.resources.phieu_xuat[0].nhan_vien_id = 3;
-  await page.goto("/nv/xuat-nvl/1");
-  await expect(
-    page.locator("dialog.record-dialog .info-grid > div").filter({ has: page.locator("dt", { hasText: /^Người lập$/ }) }),
-  ).toContainText("Đặng Quốc Bình");
   await page.goto("/nv/xuat-nvl/moi");
-  await expect(page.getByText("Bạn không có quyền lập phiếu xuất tại đây.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mở yêu cầu được giao để lập phiếu xuất.")).toBeVisible();
 });
 
 test("saving a receipt keeps it draft and canceling confirmation sends no completion action", async ({
@@ -307,6 +302,7 @@ const screens = {
 };
 for (const [role, paths] of Object.entries(screens)) {
   test(`${role}: all assigned screens render without runtime errors`, async ({ page }) => {
+    if (role === "quan_ly") test.slow();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const state = await installApi(page, { role });

@@ -48,6 +48,8 @@ const navigation = {
       title: "Sản xuất",
       items: [
         ["/nv/yeu-cau", "Việc được giao"],
+        ["/nv/phieu-xuat", "Phiếu xuất"],
+        ["/nv/chung-tu-hoan-thanh", "Chứng từ hoàn thành"],
       ],
     },
     {

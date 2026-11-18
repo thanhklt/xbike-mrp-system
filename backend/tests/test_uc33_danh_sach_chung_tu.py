@@ -28,6 +28,8 @@ HEADERS = {"x-role": "quan_ly", "x-user": "10"}
 @pytest.fixture
 def api(completion_api):
     rows = []
+    # completion_id: assigned_request_employee_id
+    assigned_owners = {2: 20, 9: 20, 4: 20, 3: 21, 8: 20, 1: 21}
     for id_, item, employee, kind, state, instant in [
         (2, 5, 20, "xuat_giao", "cho_duyet", "2026-11-15T17:00:00+00:00"),
         (9, 5, 20, "xuat_giao", "nhap", None),
@@ -63,8 +65,27 @@ def api(completion_api):
         offset = (params.page - 1) * params.page_size
         return RecordPage(matches[offset:offset + params.page_size], len(matches))
 
+    async def listing_my(params, employee_id):
+        # Filtered by assigned request owner, not creator
+        matches = [row for row in rows if assigned_owners.get(row.id) == employee_id]
+        for field in ("mat_hang_id", "trang_thai", "loai_yeu_cau"):
+            value = getattr(params, field)
+            if value is not None:
+                matches = [row for row in matches if getattr(row, field) == value]
+        zone = ZoneInfo("Asia/Ho_Chi_Minh")
+        if params.tu_ngay:
+            start = datetime.combine(params.tu_ngay, time.min, zone)
+            matches = [row for row in matches if row.finish_time and row.finish_time >= start]
+        if params.den_ngay:
+            end = datetime.combine(params.den_ngay, time.min, zone) + timedelta(days=1)
+            matches = [row for row in matches if row.finish_time and row.finish_time < end]
+        matches.sort(key=lambda row: (row.finish_time or datetime.min.replace(tzinfo=zone), row.id), reverse=True)
+        offset = (params.page - 1) * params.page_size
+        return RecordPage(matches[offset:offset + params.page_size], len(matches))
+
     completion_api.rows = rows
     completion_api.repo.list_entries.side_effect = listing
+    completion_api.repo.list_my_entries.side_effect = listing_my
     return completion_api
 
 
@@ -259,3 +280,128 @@ async def test_list_is_read_only(api):
     api.repo.update.assert_not_awaited()
     api.repo.get_for_update.assert_not_awaited()
     api.requests.update.assert_not_awaited()
+
+
+# -------------------------------------------------------------------------
+# Employee own completion list: GET /api/v1/chung_tu_hoan_thanh_sx/cua_toi
+# -------------------------------------------------------------------------
+async def test_employee_can_list_own_completions_including_draft(api):
+    # Employee 20 has 4 completions: id 2 (cho_duyet), 9 (nhap), 4 (da_duyet), 8 (cho_duyet)
+    res = await api.client.get(f"{URL}/cua_toi", headers={"x-role": "nhan_vien", "x-user": "20"})
+    assert res.status_code == 200, res.text
+    ids = [row["id"] for row in res.json()["data"]]
+    assert 9 in ids  # Draft is visible!
+    assert set(ids) == {2, 9, 4, 8}
+    assert res.json()["meta"]["total"] == 4
+
+
+async def test_employee_isolation_completions(api):
+    # Employee 21 only sees their own completions (id 3 and 1)
+    res = await api.client.get(f"{URL}/cua_toi", headers={"x-role": "nhan_vien", "x-user": "21"})
+    assert res.status_code == 200
+    ids = [row["id"] for row in res.json()["data"]]
+    assert set(ids) == {1, 3}
+    assert 9 not in ids
+
+
+@pytest.mark.parametrize("role", ["quan_ly", "quan_tri_vien"])
+async def test_non_employee_cannot_access_cua_toi(api, role):
+    res = await api.client.get(f"{URL}/cua_toi", headers={"x-role": role, "x-user": "10"})
+    assert res.status_code == 403
+
+
+async def test_cua_toi_forbids_nhan_vien_id_query_param(api):
+    res = await api.client.get(
+        f"{URL}/cua_toi",
+        headers={"x-role": "nhan_vien", "x-user": "20"},
+        params={"nhan_vien_id": 21},
+    )
+    assert res.status_code == 422
+
+
+async def test_cua_toi_assigned_vs_creator(api):
+    # Completion 10 was created by employee 99, but YCSX was assigned to employee 20
+    custom_row = ChungTuListItem(
+        id=10,
+        ma_phieu="HTSX-202611-000010",
+        yeu_cau_san_xuat_id=110,
+        so_luong_hoan_thanh=5,
+        nhan_vien_id=99,  # Creator is 99
+        trang_thai="cho_duyet",
+        finish_time=datetime.fromisoformat("2026-11-15T17:00:00+00:00"),
+        created_at=uc30.NOW,
+        updated_at=uc30.NOW,
+        nguoi_xu_ly_id=None,
+        xu_ly_at=None,
+        ly_do_tu_choi=None,
+        phien_ban=1,
+        ma_yeu_cau_san_xuat="YCSX-202611-000110",
+        mat_hang_id=5,
+        loai_yeu_cau="xuat_giao",
+    )
+
+    async def mock_list_my(params, employee_id):
+        if employee_id == 20:
+            return RecordPage([custom_row], 1)
+        return RecordPage([], 0)
+
+    api.repo.list_my_entries.side_effect = mock_list_my
+    res = await api.client.get(f"{URL}/cua_toi", headers={"x-role": "nhan_vien", "x-user": "20"})
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert len(data) == 1
+    assert data[0]["id"] == 10
+    assert data[0]["nhan_vien_id"] == 99  # Creator is 99, but assigned owner 20 sees it!
+
+    # Employee 99 (who is creator but not assigned owner) does NOT see it
+    res_creator = await api.client.get(f"{URL}/cua_toi", headers={"x-role": "nhan_vien", "x-user": "99"})
+    assert res_creator.status_code == 200
+    assert res_creator.json()["data"] == []
+
+
+async def test_cua_toi_oversized_id_returns_empty_list(api):
+    res = await api.client.get(
+        f"{URL}/cua_toi",
+        headers={"x-role": "nhan_vien", "x-user": "20"},
+        params={"mat_hang_id": 2**31},
+    )
+    assert res.status_code == 200
+    assert res.json()["data"] == []
+
+
+@pytest.mark.parametrize(
+    "bad_param",
+    [
+        {"den_ngay": "9999-12-31"},
+        {"mat_hang_id": 0},
+        {"mat_hang_id": -1},
+        {"q": "text"},
+        {"tu_ngay": "2026-11-20", "den_ngay": "2026-11-10"},
+        {"trang_thai": "bad_status"},
+    ],
+)
+async def test_cua_toi_strict_validation(api, bad_param):
+    res = await api.client.get(
+        f"{URL}/cua_toi",
+        headers={"x-role": "nhan_vien", "x-user": "20"},
+        params=bad_param,
+    )
+    assert res.status_code == 422
+
+
+async def test_cua_toi_rejects_repeated_query_and_body(api):
+    # Repeated query
+    res = await api.client.get(
+        f"{URL}/cua_toi?trang_thai=nhap&trang_thai=cho_duyet",
+        headers={"x-role": "nhan_vien", "x-user": "20"},
+    )
+    assert res.status_code == 422
+
+    # Body on GET
+    res_body = await api.client.request(
+        "GET",
+        f"{URL}/cua_toi",
+        headers={"x-role": "nhan_vien", "x-user": "20"},
+        content=b'{"extra": "body"}',
+    )
+    assert res_body.status_code == 422

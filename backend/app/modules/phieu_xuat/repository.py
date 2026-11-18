@@ -11,9 +11,12 @@ from app.modules.phieu_xuat.models import ChiTietPhieuXuat, PhieuXuat
 from app.modules.phieu_xuat.ports import IssuePart, IssueSource, PhieuXuatSnapshot
 from app.modules.phieu_xuat.schemas import (
     PhieuXuatCreate,
+    PhieuXuatCuaToiQuery,
+    PhieuXuatCuaToiRead,
     PhieuXuatQuery,
     PhieuXuatRead,
 )
+from app.modules.san_xuat.models import YeuCauSanXuat
 from app.shared.records import RecordPage
 
 
@@ -77,7 +80,7 @@ class SqlAlchemyPhieuXuatRepository:
         self, params: PhieuXuatQuery, employee_id: int | None
     ) -> RecordPage[PhieuXuatRead]:
         query = select(PhieuXuat)
-        if params.q:
+        if getattr(params, "q", None):
             query = query.where(PhieuXuat.ma_phieu_xuat.icontains(params.q, autoescape=True))
         for name in (
             "loai_phieu",
@@ -111,6 +114,57 @@ class SqlAlchemyPhieuXuatRepository:
         lines = await self._lines([record.id for record in records], lock=False)
         return RecordPage([self._build(record, lines[record.id]) for record in records], total)
 
+    async def list_my_issues(
+        self, params: PhieuXuatCuaToiQuery, employee_id: int
+    ) -> RecordPage[PhieuXuatCuaToiRead]:
+        query = (
+            select(PhieuXuat, YeuCauSanXuat.ma_yeu_cau_san_xuat)
+            .join(YeuCauSanXuat, PhieuXuat.yeu_cau_san_xuat_id == YeuCauSanXuat.id)
+            .where(YeuCauSanXuat.nhan_vien_duoc_giao_id == employee_id)
+        )
+        if getattr(params, "q", None):
+            query = query.where(PhieuXuat.ma_phieu_xuat.icontains(params.q, autoescape=True))
+        for name in (
+            "loai_phieu",
+            "trang_thai",
+            "yeu_cau_san_xuat_id",
+        ):
+            if (value := getattr(params, name)) is not None:
+                query = query.where(getattr(PhieuXuat, name) == value)
+        for day, end in ((params.tu_ngay, False), (params.den_ngay, True)):
+            if day:
+                boundary = func.timezone(
+                    "Asia/Ho_Chi_Minh",
+                    literal(
+                        datetime.combine(day + timedelta(days=int(end)), time.min), type_=DateTime()
+                    ),
+                )
+                query = query.where(
+                    PhieuXuat.created_at < boundary if end else PhieuXuat.created_at >= boundary
+                )
+        total = await self.session.scalar(select(func.count()).select_from(query.subquery())) or 0
+        if (offset := (params.page - 1) * params.page_size) >= total:
+            return RecordPage([], total)
+        sort_value = getattr(params, "sort", "-created_at") or "-created_at"
+        column = getattr(PhieuXuat, sort_value.lstrip("-"))
+        order = column.desc() if sort_value.startswith("-") else column.asc()
+        results = (
+            await self.session.execute(
+                query.order_by(order, PhieuXuat.id.desc()).offset(offset).limit(params.page_size)
+            )
+        ).all()
+        lines = await self._lines([record.id for record, _ in results], lock=False)
+        return RecordPage(
+            [
+                PhieuXuatCuaToiRead(
+                    **self._build(record, lines[record.id]).model_dump(),
+                    ma_yeu_cau_san_xuat=source_code,
+                )
+                for record, source_code in results
+            ],
+            total,
+        )
+
     async def get_issue(self, issue_id: int, *, lock: bool = True) -> PhieuXuatRead | None:
         query = (
             select(PhieuXuat)
@@ -122,12 +176,15 @@ class SqlAlchemyPhieuXuatRepository:
         record = await self.session.scalar(query)
         return await self._resource(record, lock=lock) if record is not None else None
 
-    async def lock_source(self, kind: str, request_id: int) -> IssueSource:
+    async def lock_source(self, kind: str, request_id: int, *, lock: bool = True) -> IssueSource:
         # Shared ordering with cancellation: source request, issue, items, reservations.
         row = (
             (
                 await self.session.execute(
-                    text('SELECT * FROM "YeuCauSanXuat" WHERE id=:id FOR UPDATE'),
+                    text(
+                        'SELECT * FROM "YeuCauSanXuat" WHERE id=:id'
+                        + (" FOR UPDATE" if lock else "")
+                    ),
                     {"id": request_id},
                 )
             )
@@ -204,16 +261,18 @@ class SqlAlchemyPhieuXuatRepository:
             )
         ) is not None
 
-    async def lock_parts(self, item_ids: list[int], *, posting: bool) -> list[IssuePart]:
-        records = (
-            await self.session.scalars(
-                select(MatHang)
-                .where(MatHang.id.in_(item_ids))
-                .order_by(MatHang.id)
-                .with_for_update(read=not posting)
-                .execution_options(populate_existing=True)
-            )
-        ).all()
+    async def lock_parts(
+        self, item_ids: list[int], *, posting: bool, lock: bool = True
+    ) -> list[IssuePart]:
+        query = (
+            select(MatHang)
+            .where(MatHang.id.in_(item_ids))
+            .order_by(MatHang.id)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            query = query.with_for_update(read=not posting)
+        records = (await self.session.scalars(query)).all()
         return [
             IssuePart(r.id, r.loai_mat_hang, r.is_active, r.don_gia, r.so_luong_ton)
             for r in records
@@ -351,7 +410,9 @@ class SqlAlchemyPhieuXuatRepository:
     # UC-28 Hủy yêu cầu sản xuất — D4 đọc phiếu của yêu cầu không khóa (specs/use_cases/production/UC-28.md)
     async def phieu_cua_yeu_cau(self, yeu_cau_id: int) -> list[dict]:
         rows = await self.session.execute(
-            select(PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai)
+            select(
+                PhieuXuat.id, PhieuXuat.ma_phieu_xuat, PhieuXuat.loai_phieu, PhieuXuat.trang_thai
+            )
             .where(PhieuXuat.yeu_cau_san_xuat_id == yeu_cau_id)
             .order_by(PhieuXuat.id)
         )

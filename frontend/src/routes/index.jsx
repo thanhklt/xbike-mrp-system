@@ -12,10 +12,11 @@ import { SuppliersPage } from "../features/suppliers/SuppliersPage.jsx";
 import { BOMPage } from "../features/bom/BOMPage.jsx";
 import { ReceivingPage } from "../features/receiving/ReceivingPage.jsx";
 import { MaterialIssuingPage } from "../features/material-issuing/MaterialIssuingPage.jsx";
+import { EmployeeIssuesPage } from "../features/material-issuing/EmployeeIssuesPage.jsx";
 import { RequestsPage } from "../features/production/RequestsPage.jsx";
 import { CompletionListPage } from "../features/production/CompletionListPage.jsx";
+import { EmployeeCompletionPage } from "../features/production/EmployeeCompletionPage.jsx";
 import { ShortagePage } from "../features/production/ShortagePage.jsx";
-import { MyDocumentsPage } from "../features/production/MyDocumentsPage.jsx";
 import { AdjustmentsPage } from "../features/inventory-adjustments/AdjustmentsPage.jsx";
 import { TicketsPage } from "../features/adjustment-tickets/TicketsPage.jsx";
 import { MovementsPage } from "../features/inventory/MovementsPage.jsx";
@@ -130,13 +131,16 @@ export function AppRoutes() {
               <Route path="/nv/lenh-sx/*" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route
                 path="/nv/xuat-nvl/:id?"
-                element={<MaterialIssuingPage issueType="xuat_vat_tu" />}
+                element={<MaterialIssuingPage issueType="xuat_linh_kien" />}
               />
               <Route
                 path="/nv/xuat-tp/:id?"
                 element={<MaterialIssuingPage issueType="xuat_thanh_pham" />}
               />
-              <Route path="/nv/phieu" element={<MyDocumentsPage />} />
+              <Route path="/nv/phieu-xuat/:id?" element={<EmployeeIssuesPage />} />
+              <Route path="/nv/chung-tu-hoan-thanh/:id?" element={<EmployeeCompletionPage />} />
+              <Route path="/nv/phieu" element={<Navigate to="/nv/yeu-cau" replace />} />
+              <Route path="/nv/hoan-thanh/*" element={<Navigate to="/nv/yeu-cau" replace />} />
               <Route path="/nv/ton-kho/:id?" element={<MaterialsPage mode="employee" />} />
             </Route>
           </Route>

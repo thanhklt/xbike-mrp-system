@@ -188,9 +188,16 @@ export function linePayload(lines, prices = false) {
     ...(prices ? { don_gia_thuc: Number(line.don_gia_thuc) } : {}),
   }));
 }
-export function SavedLines({ lines = [], items = [], prices = false }) {
+export function SavedLines({
+  lines = [],
+  items = [],
+  prices = false,
+  caption = "Danh sách dòng mặt hàng",
+  units = false,
+}) {
   return (
     <DataTable
+      caption={caption}
       rows={lines.map((line, index) => ({ ...line, id: line.id ?? index }))}
       columns={[
         {
@@ -210,7 +217,9 @@ export function SavedLines({ lines = [], items = [], prices = false }) {
           key: "so_luong",
           label: "Số lượng",
           numeric: true,
-          render: (line) => number(line.so_luong),
+          render: (line) => units
+            ? `${number(line.so_luong)} ${unitLabel(items.find((item) => item.id === line.mat_hang_id)?.don_vi_tinh) || ""}`
+            : number(line.so_luong),
         },
         ...(prices
           ? [

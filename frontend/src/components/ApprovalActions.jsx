@@ -15,18 +15,30 @@ export function ApprovalActions({
   items,
   dirty = false,
   allowedActions,
+  assignedId,
 }) {
   const record = snapshot.data;
   const { user } = useAuth();
-  const permissions = allowedActions ?? documentPermissions(kind, user.ma_vai_tro, record, user.id);
+  const permissions =
+    allowedActions ?? documentPermissions(kind, user.ma_vai_tro, record, user.id, assignedId);
   const { confirm, notify } = useFeedback();
   const mutation = useWrite();
   const navigate = useNavigate();
   const reason = dirty ? "Lưu hoặc tải lại bản nháp trước khi thực hiện thao tác." : undefined;
+  const employeeIssue = kind === "issue" && user.ma_vai_tro === "nhan_vien";
+  const sendLabel = employeeIssue
+    ? (record.trang_thai === "tu_choi" ? "Gửi lại" : "Gửi")
+    : "Gửi duyệt";
+  const sendTitle = employeeIssue ? `${sendLabel} phiếu xuất` : "Gửi duyệt chứng từ";
   const code = record.ma_phieu_xuat || record.ma_phieu;
   const content =
     kind === "issue" ? (
-      <SavedLines lines={record.chi_tiet} items={items} />
+      <>
+        {employeeIssue && (
+          <InfoGrid entries={[["Yêu cầu sản xuất", `YCSX #${record.yeu_cau_san_xuat_id}`]]} />
+        )}
+        <SavedLines lines={record.chi_tiet} items={items} units={employeeIssue} />
+      </>
     ) : (
       <InfoGrid
         entries={[
@@ -47,7 +59,9 @@ export function ApprovalActions({
           ? kind === "issue"
             ? "Duyệt thành công sẽ trừ tồn kho một lần và ghi giao dịch xuất. Chứng từ đã duyệt bất biến."
             : "Duyệt thành công sẽ cộng đầu ra sản xuất một lần; không trừ vật tư lần nữa."
-          : "Thao tác này chưa làm thay đổi tồn kho.",
+          : employeeIssue
+            ? "Chưa trừ tồn; hàng vẫn được giữ cho yêu cầu."
+            : "Thao tác này chưa làm thay đổi tồn kho.",
       onConfirm: async (explanation) => {
         const result = await mutation.mutateAsync({
           path: `${path}/${record.id}${action ? `/${action}` : ""}`,
@@ -84,8 +98,8 @@ export function ApprovalActions({
         </Button>
       )}
       {permissions.send && (
-        <Button reason={reason} onClick={() => act("gui", "Gửi duyệt chứng từ")}>
-          Gửi duyệt
+        <Button reason={reason} onClick={() => act("gui", sendTitle)}>
+          {sendLabel}
         </Button>
       )}
       {permissions.reject && (

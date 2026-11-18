@@ -102,10 +102,31 @@ export const today = () => localDateTime().slice(0, 10);
 export const nullable = (value) => value?.trim() || null;
 export const itemName = (items, id) =>
   items?.find((item) => item.id === Number(id))?.ten_mat_hang || `Mặt hàng #${id}`;
+export const itemDisplayName = (items, id, fallback = "—") => {
+  if (id === null || id === undefined) return fallback;
+  const item = items?.find((entry) => entry.id === Number(id));
+  if (!item) return fallback;
+  return item.ma_mat_hang ? `${item.ten_mat_hang} — ${item.ma_mat_hang}` : item.ten_mat_hang;
+};
 export const employeeName = (employees, id) =>
   id === null || id === undefined
     ? "Chưa giao"
     : employees?.find((employee) => employee.id === Number(id))?.ho_ten || `Nhân viên #${id}`;
+export const employeeDisplayName = (employees, id, fallback = "Chưa giao", currentUser = null) => {
+  if (id === null || id === undefined) return "Chưa giao";
+  const employee = employees?.find((entry) => entry.id === Number(id));
+  if (employee) {
+    return employee.ma_nhan_vien
+      ? `${employee.ho_ten || "Chưa có họ tên"} — ${employee.ma_nhan_vien}`
+      : employee.ho_ten || fallback;
+  }
+  if (currentUser && Number(currentUser.id) === Number(id)) {
+    return currentUser.ma_nhan_vien
+      ? `${currentUser.ho_ten || "Chưa có họ tên"} — ${currentUser.ma_nhan_vien}`
+      : currentUser.ho_ten || fallback;
+  }
+  return fallback;
+};
 
 export function initials(name = "") {
   return String(name)

@@ -1,6 +1,7 @@
 import { dateFilters } from "../../components/filterFields.js";
 import {
   dateTime,
+  employeeDisplayName,
   employeeName,
   formatDate,
   itemName,
@@ -102,10 +103,30 @@ export function sendConfirmEntries(values, items, employees) {
 
 // UC-24 Sửa, xóa, gửi yêu cầu sản xuất nháp — Main 2 thông tin chỉ đọc (specs/use_cases/production/UC-24.md)
 // UC-28 Hủy yêu cầu sản xuất — D5 thông tin hủy trong chi tiết (specs/use_cases/production/UC-28.md)
-export function requestDetailEntries(record, items, employees) {
+export function requestDetailEntries(record, items, employees, currentUser = null) {
+  const current = currentUser || employees?.find((e) => e?.isCurrentUser);
+  const isEmployee = Boolean(current);
+  const item = items.find((entry) => entry.id === Number(record.mat_hang_id));
+  const productText =
+    isEmployee && item?.ma_mat_hang
+      ? `${item.ten_mat_hang} — ${item.ma_mat_hang}`
+      : itemName(items, record.mat_hang_id);
+  const assignedText = isEmployee
+    ? employeeDisplayName(employees, record.nhan_vien_duoc_giao_id, "Chưa giao", current)
+    : employeeName(employees, record.nhan_vien_duoc_giao_id);
+  const creatorText = isEmployee
+    ? (record.nhan_vien_id === current?.id
+        ? employeeDisplayName(employees, record.nhan_vien_id, "—", current)
+        : `Nhân viên #${record.nhan_vien_id}`)
+    : employeeName(employees, record.nhan_vien_id);
   return [
-    ...sendConfirmEntries(record, items, employees),
-    ["Người lập", employeeName(employees, record.nhan_vien_id)],
+    ["Loại yêu cầu", REQUEST_TYPE_LABELS[record.loai_yeu_cau]],
+    ["Thành phẩm", productText],
+    ["Số lượng cần", number(record.so_luong)],
+    ["Đơn vị tính", unitLabel(item?.don_vi_tinh)],
+    ["Hạn hoàn thành", formatDate(record.han_hoan_thanh)],
+    ["Nhân viên được giao", assignedText],
+    ["Người lập", creatorText],
     ["Tạo lúc", dateTime(record.created_at)],
     ["Gửi lúc", dateTime(record.gui_at)],
     ...(record.kiem_tra_lan_dau_at ? [

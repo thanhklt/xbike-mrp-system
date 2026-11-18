@@ -284,7 +284,7 @@ test("date range is validated on the form before querying", () => {
   const collection = source("../src/components/Collection.jsx");
   assert.match(
     collection,
-    /function apply\(next\) \{\s*const message = validate\?\.\(next\) \?\? null;\s*setFilterError\(message\);\s*if \(!message\) collection\.filter\(next\);/,
+    /function apply\(next\) \{\s*clearTimeout\(searchTimer\.current\);\s*const message = \(cycleFilters \? dateRangeError\(next\) : null\) \?\? validate\?\.\(next\) \?\? null;\s*setFilterError\(message\);\s*if \(!message\) collection\.filter\(next\);/,
   );
   assert.match(
     collection,

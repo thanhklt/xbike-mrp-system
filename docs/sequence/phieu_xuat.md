@@ -8,6 +8,8 @@ Nguồn: [spec](../../specs/use_cases/goods_issue/README.md),
 
 | Endpoint hiện có | UC | PNG |
 |---|---|---|
+| GET `/api/v1/phieu_xuat/theo_yeu_cau/{id}` | NV-MAIN-005 | Mermaid bên dưới |
+| GET `/api/v1/phieu_xuat/xem_truoc/{id}?loai_phieu=...` | NV-MAIN-006 | Mermaid bên dưới |
 | GET `/api/v1/phieu_xuat` | UC-40 | [Danh sách](assets/phieu_xuat/01-danh-sach.png) |
 | GET `/api/v1/phieu_xuat/{id}` | UC-40 | [Chi tiết](assets/phieu_xuat/02-chi-tiet.png) |
 | POST `/api/v1/phieu_xuat` | UC-34/37 | [Tạo nháp](assets/phieu_xuat/03-tao-nhap.png) |
@@ -15,12 +17,12 @@ Nguồn: [spec](../../specs/use_cases/goods_issue/README.md),
 | POST `/api/v1/phieu_xuat/{id}/duyet` | UC-35/38 | [Duyệt](assets/phieu_xuat/07-duyet.png) |
 | POST `/api/v1/phieu_xuat/{id}/tu_choi` | UC-36/39 | [Từ chối](assets/phieu_xuat/08-tu-choi.png) |
 
-Chỉ sáu endpoint trên được đăng ký. PATCH/DELETE `/{id}` trả 405; `/{id}/ve_nhap`
+Cả tám endpoint trên được đăng ký. PATCH/DELETE `/{id}` trả 405; `/{id}/ve_nhap`
 và các alias xuất cũ không có route. Không tạo route `gui_lai`: gửi lại dùng `/gui`.
 QLK (`quan_ly`) đọc danh sách/chi tiết, duyệt, từ chối. NV (`nhan_vien`) đọc/lập/gửi
 phiếu thuộc yêu cầu hiện được giao. QTV không được vào các endpoint này. JWT được
 kiểm tra chữ ký/hạn, tài khoản, hash phiên mật khẩu và vai trò hiện tại từ DB.
-Phần auth hiện hữu chưa được nâng sang `phien_ban_dang_nhap` v4 trong tác vụ này.
+Dependency hiện tại cũng xác minh `phien_ban_dang_nhap` theo auth của main.
 
 Thành công dùng `{data,meta}`; lỗi nghiệp vụ `{error,meta}` có `request_id`. POST tạo
 201 + Location + ETag; các thao tác và GET chi tiết 200 + ETag. Tiền là integer VND
@@ -77,6 +79,60 @@ sequenceDiagram
     R-->>C: 200, including valid empty page
     Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
 ```
+
+## GET /api/v1/phieu_xuat/cua_toi
+
+Dành riêng cho Nhân viên (`nhan_vien`). Trả về danh sách phiếu xuất kho thuộc các yêu cầu sản xuất mà nhân viên đó được phân công (`YeuCauSanXuat.nhan_vien_duoc_giao_id == actor["sub"]`).
+Bộ lọc AND: `q` (tìm kiếm mã phiếu), `loai_phieu`, `trang_thai`, `yeu_cau_san_xuat_id`, `tu_ngay`, `den_ngay`, `sort` (mặc định `-created_at`). Tuyệt đối không cho phép truyền `nhan_vien_id` (trả 422 nếu có query này).
+Page mặc định 1, size 20, tối đa 100.
+Transaction snapshot: REPEATABLE READ READ ONLY, không tạo row lock hay ghi dữ liệu.
+
+Response dùng `PhieuXuatCuaToiListResponse`. Mỗi phần tử trong `data` là
+`PhieuXuatCuaToiRead`, có thêm `ma_yeu_cau_san_xuat` lấy từ yêu cầu liên quan.
+Chi tiết phiếu và danh sách QLK dùng `PhieuXuatRead` cho dữ liệu phiếu. Trường
+`ma_yeu_cau_san_xuat` vắng mặt trong hai response đó và trong dữ liệu tính ETag.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Client Nhân viên
+    participant R as phieu_xuat.router / dependencies
+    participant A as AuthService / NhanVienService
+    participant N as SqlAlchemyNhanVienRepository
+    participant S as PhieuXuatService
+    participant P as SqlAlchemyPhieuXuatRepository
+    participant DB as PostgreSQL
+    C->>R: GET /api/v1/phieu_xuat/cua_toi + JWT + query
+    R->>A: current_payload / get_auth_identity
+    A->>N: get_credentials_by_id
+    N->>DB: Read current employee and role
+    break Missing / invalid / revoked credentials
+        R-->>C: 401
+    end
+    break Locked account or role other than nhan_vien
+        R-->>C: 403
+    end
+    R->>R: Validate query, reject repeated keys, GET body and nhan_vien_id
+    break Invalid / unknown filters, extra fields or nhan_vien_id query
+        R-->>C: 422
+    end
+    R->>S: list_my_issues(query, actor, request_id)
+    S->>S: Require nhan_vien role
+    S->>P: begin_read_snapshot
+    P->>DB: Roll back auth read TX, start REPEATABLE READ READ ONLY
+    S->>P: list_my_issues(query, actor_id)
+    P->>DB: JOIN YeuCauSanXuat by source ID, filter by assignee
+    P->>DB: COUNT with AND filters
+    P->>DB: Page headers and source codes sorted with ID tie-break
+    opt Nonempty page
+        P->>DB: Load lines for page issues
+    end
+    P-->>S: RecordPage of PhieuXuatCuaToiRead
+    S-->>R: PhieuXuatCuaToiListResponse with data and meta
+    R-->>C: 200, including valid empty page
+    Note over P,DB: No INSERT / UPDATE / DELETE or row locks, session close ends read TX
+```
+
 
 ## GET /api/v1/phieu_xuat/{id}
 
@@ -433,3 +489,65 @@ khóa yêu cầu → phiếu → MatHang → GiuHang. Cổng dùng chung session
 riêng; lỗi lịch sử/ghi dữ liệu rollback cả phiếu, giữ hàng, yêu cầu và audit.
 Luồng endpoint hủy v4 được mô tả trong `san_xuat.md`. Kiểm thử ASGI/service và SQL
 không thay thế nghiệm thu E2E hay kiểm tranh chấp PostgreSQL thật.
+
+## GET /api/v1/phieu_xuat/theo_yeu_cau/{id}
+
+Q hoặc N; ID dương, cấm query/body. Response data: [{id, ma_phieu_xuat, loai_phieu, trang_thai}], meta.request_id. Chưa có trả []; mở cả yêu cầu hoàn thành/hủy. Không mở quyền danh sách toàn bộ phiếu, không ETag.
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng được phép
+    participant R as Router và auth dependency
+    participant S as PhieuXuatService
+    participant P as Repository
+    participant DB as PostgreSQL
+    U->>R: GET /api/v1/phieu_xuat/theo_yeu_cau/{id} + Bearer
+    R->>DB: Xác minh tài khoản, role, phiên
+    alt Sai xác thực/quyền/đầu vào
+        R-->>U: 401 / 403 / 422
+    else Hợp lệ
+        R->>S: source_issues
+        S->>P: begin_read_snapshot
+        P->>DB: REPEATABLE READ READ ONLY
+        S->>P: Đọc source không khóa; kiểm Q hoặc NV được giao; đọc tham chiếu phiếu
+        P->>DB: SELECT
+        alt Không có tài nguyên hoặc ngoài phân công
+            S-->>U: 404 hoặc 403
+        else Trạng thái/phụ thuộc sai hoặc phiếu trùng khi preview
+            S-->>U: 409 (chỉ preview)
+        else Hợp lệ
+            S-->>U: 200 data + meta; ETag chỉ chi tiết phiếu
+        end
+    end
+```
+
+## GET /api/v1/phieu_xuat/xem_truoc/{id}?loai_phieu=...
+
+Chỉ N. loai_phieu bắt buộc xuat_linh_kien hoặc xuat_thanh_pham; cấm query thừa/lặp và GET body. Response data: {yeu_cau_san_xuat_id, loai_phieu, chi_tiet: [{mat_hang_id, so_luong}]}, meta.request_id. UI ghép mã/tên/đơn vị từ catalog thật. Cùng nguồn và validation với create: đang thực hiện; linh kiện có lượng cần sản xuất/nhu cầu; thành phẩm thuộc xuất giao và không cần SX hoặc có chứng từ đã duyệt. Kiểm loại mặt hàng và phiếu trùng. GET không tạo nháp/giữ hàng/audit/ETag; POST vẫn kiểm lại trong transaction.
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng được phép
+    participant R as Router và auth dependency
+    participant S as PhieuXuatService
+    participant P as Repository
+    participant DB as PostgreSQL
+    U->>R: GET /api/v1/phieu_xuat/xem_truoc/{id} + Bearer
+    R->>DB: Xác minh tài khoản, role, phiên
+    alt Sai xác thực/quyền/đầu vào
+        R-->>U: 401 / 403 / 422
+    else Hợp lệ
+        R->>S: preview
+        S->>P: begin_read_snapshot
+        P->>DB: REPEATABLE READ READ ONLY
+        S->>P: Đọc source/nhu cầu/chứng từ; kiểm phân công và trạng thái; đọc loại mặt hàng và phiếu trùng, không khóa
+        P->>DB: SELECT
+        alt Không có tài nguyên hoặc ngoài phân công
+            S-->>U: 404 hoặc 403
+        else Trạng thái/phụ thuộc sai hoặc phiếu trùng khi preview
+            S-->>U: 409 (chỉ preview)
+        else Hợp lệ
+            S-->>U: 200 data + meta; ETag chỉ chi tiết phiếu
+        end
+    end
+```

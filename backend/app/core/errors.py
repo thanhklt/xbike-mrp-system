@@ -124,6 +124,11 @@ class InvalidCredentialsException(UnauthorizedException):
     default_message = "Thông tin đăng nhập không hợp lệ"
 
 
+class InvalidCurrentPasswordException(BadRequestException):
+    code = "mat_khau_hien_tai_khong_dung"
+    default_message = "Mật khẩu hiện tại không chính xác"
+
+
 class InactiveAccountException(ForbiddenException):
     code = "tai_khoan_bi_vo_hieu_hoa"
     default_message = "Tài khoản không hoạt động"

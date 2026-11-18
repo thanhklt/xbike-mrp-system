@@ -225,7 +225,7 @@ test("admin audit history still renders when the API includes both snapshots", a
   const state = await installApi(page, { role: "quan_tri_vien" });
   await page.goto("/admin/lich-su");
   await expect(page.getByRole("heading", { name: "Lịch sử thao tác", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "hoan_tat", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /hoan_tat|Hoàn tất/ })).toBeVisible();
   expect(state.calls.filter((call) => call.path === "audit")[0].params.bo_thao_tac).toBeUndefined();
 });
 

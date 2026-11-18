@@ -16,10 +16,15 @@ from app.modules.phieu_xuat.schemas import (
     LyDoInput,
     PhieuXuatActionResponse,
     PhieuXuatCreate,
+    PhieuXuatCuaToiListResponse,
+    PhieuXuatCuaToiQuery,
     PhieuXuatErrorResponse,
     PhieuXuatListResponse,
+    PhieuXuatPreviewQuery,
+    PhieuXuatPreviewResponse,
     PhieuXuatQuery,
     PhieuXuatResponse,
+    PhieuXuatSourceResponse,
 )
 from app.modules.phieu_xuat.service import PhieuXuatService
 
@@ -75,6 +80,45 @@ async def list_issues(
     request_id: RequestId,
 ):
     return await service.list_issues(params, actor, request_id)
+
+
+@router.get(
+    "/theo_yeu_cau/{id}",
+    response_model=PhieuXuatSourceResponse,
+    dependencies=[Depends(reject_query), Depends(reject_get_body)],
+)
+async def source_issues(id: ResourceId, actor: ReadActor, service: Service, request_id: RequestId):
+    return await service.source_issues(id, actor, request_id)
+
+
+@router.get(
+    "/xem_truoc/{id}",
+    response_model=PhieuXuatPreviewResponse,
+    dependencies=[Depends(reject_repeated_query), Depends(reject_get_body)],
+)
+async def preview_issue(
+    id: ResourceId,
+    params: Annotated[PhieuXuatPreviewQuery, Query()],
+    actor: EmployeeActor,
+    service: Service,
+    request_id: RequestId,
+):
+    return await service.preview(id, params.loai_phieu, actor, request_id)
+
+
+@router.get(
+    "/cua_toi",
+    response_model=PhieuXuatCuaToiListResponse,
+    description="Scoped issues for the current employee.",
+    dependencies=[Depends(reject_repeated_query), Depends(reject_get_body)],
+)
+async def list_my_issues(
+    params: Annotated[PhieuXuatCuaToiQuery, Query()],
+    actor: EmployeeActor,
+    service: Service,
+    request_id: RequestId,
+):
+    return await service.list_my_issues(params, actor, request_id)
 
 
 @router.get(

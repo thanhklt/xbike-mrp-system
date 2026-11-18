@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import React from "react";
+import { ArrowDownUp, CalendarDays, ChevronDown, ChevronUp, Filter, LayoutGrid, Layers, Search } from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transformWithEsbuild } from "vite";
 import { completionListFilters } from "../src/features/production/completionForm.js";
@@ -85,7 +86,8 @@ function page(rows = [row]) {
   const DataTable = tableFactory(tablePorts, "DataTable");
   const Pagination = tableFactory(tablePorts, "Pagination");
   const Collection = collectionFactory({
-    React: jsx, useState, Field, Button, DataTable, Pagination, QueryState, DateInput: () => null,
+    React: jsx, useState, useEffect: () => {}, useId: React.useId, useRef: React.useRef, Field, Button, DataTable, Pagination, QueryState, DateInput: () => null,
+    ArrowDownUp, CalendarDays, ChevronDown, ChevronUp, Filter, LayoutGrid, Layers, Search,
     Card: ({ children }) => React.createElement("section", null, children),
   }, "Collection");
   const Component = pageFactory({
