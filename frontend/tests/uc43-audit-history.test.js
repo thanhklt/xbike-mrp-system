@@ -5,6 +5,7 @@ import {
   AUDIT_ACTION_OPTIONS,
   AUDIT_OBJECT_OPTIONS,
   AUDIT_SORT_OPTIONS,
+  adminAuditFilters,
   auditFilters,
   auditActorLookup,
   auditDetailEntries,
@@ -223,7 +224,7 @@ test("actor select contains all employees by ID with code and name labels", () =
 test("employee list failure shows a warning instead of silently degrading", () => {
   assert.match(
     page,
-    /\{employees\.isError && \(\s*<div className="stack">\s*<Notice tone="warning">\s*Không thể tải danh sách nhân viên\./,
+    /\{employees\.isError && \(\s*<div className="stack">\s*<Notice tone="warning">\s*\{isAdmin\s*\? "Không thể tải danh sách nhân viên\. Người thực hiện hiển thị theo ID\."\s*: "Không thể tải danh sách nhân viên\. Bộ lọc Người thực hiện tạm chỉ có Tất cả và người thực hiện hiển thị theo ID\."/,
   );
   assert.match(
     page,
@@ -232,6 +233,14 @@ test("employee list failure shows a warning instead of silently degrading", () =
 });
 
 // UC-43 AC-10: Lọc kết hợp người, đối tượng, thao tác và ngày
+test("admin history has only object type and the two shared date filters", () => {
+  const filters = adminAuditFilters();
+  assert.deepEqual(filters.map(({ name }) => name), ["loai_doi_tuong", "tu_ngay", "den_ngay"]);
+  assert.equal(filters[0], auditFilters(employees)[0]);
+  assert.equal(filters[1], dateFilters[0]);
+  assert.equal(filters[2], dateFilters[1]);
+});
+
 test("all six filters use backend names and dates match the shared UI definitions", () => {
   const filters = auditFilters(employees);
   assert.deepEqual(
@@ -255,7 +264,7 @@ test("all six filters use backend names and dates match the shared UI definition
   assert.match(resourceFields, /export \{ dateFilters \} from "\.\/filterFields\.js";/);
   assert.doesNotMatch(resourceFields, /export const dateFilters/);
   assert.doesNotMatch(history, /const dateFilters/);
-  assert.match(page, /useMemo\(\(\) => auditFilters\(employeeRows\), \[employeeRows\]\)/);
+  assert.match(page, /useMemo\(\s*\(\) => \(isAdmin \? adminAuditFilters\(\) : auditFilters\(employeeRows\)\),\s*\[isAdmin, employeeRows\],?\s*\)/);
   assert.match(page, /filters=\{filters\}/);
 });
 
@@ -275,7 +284,15 @@ test("date range is validated on the form before querying", () => {
   const collection = source("../src/components/Collection.jsx");
   assert.match(
     collection,
-    /const message = validate\?\.\(draft\) \?\? null;\s*setFilterError\(message\);\s*if \(!message\) collection\.filter\(draft\);/,
+    /function apply\(next\) \{\s*const message = validate\?\.\(next\) \?\? null;\s*setFilterError\(message\);\s*if \(!message\) collection\.filter\(next\);/,
+  );
+  assert.match(
+    collection,
+    /onSubmit=\{\(event\) => \{\s*event\.preventDefault\(\);\s*apply\(draft\);/,
+  );
+  assert.match(
+    collection,
+    /setDraft\(next\);\s*if \(field\.as === "select"\) apply\(next\);/,
   );
   assert.match(
     collection,
@@ -286,7 +303,8 @@ test("date range is validated on the form before querying", () => {
 // UC-43 AC-19: Màn chỉ đọc không có chế độ tạo mới
 test("the /moi path redirects back to the list instead of opening an empty dialog", () => {
   assert.match(page, /if \(id === "moi"\) return <Navigate to=\{base\} replace \/>;/);
-  assert.ok(page.indexOf('if (id === "moi")') > page.indexOf("useMemo(() => auditFilters"));
+  const filtersHook = page.indexOf("const filters = useMemo(");
+  assert.ok(filtersHook >= 0 && page.indexOf('if (id === "moi")') > filtersHook);
 });
 
 // UC-43 AC-10: Không có ô tìm kiếm tự do — backend chỉ tìm mã thô, dùng bộ lọc thay thế
@@ -351,7 +369,7 @@ test("both roles use the same data columns and detail component", () => {
   assert.equal((page.match(/ma_vai_tro/g) || []).length, 1);
   assert.match(
     page,
-    /const base = user\.ma_vai_tro === "quan_tri_vien" \? "\/admin\/lich-su" : "\/kho\/lich-su"/,
+    /const isAdmin = user\.ma_vai_tro === "quan_tri_vien";\s*const base = isAdmin \? "\/admin\/lich-su" : "\/kho\/lich-su"/,
   );
   assert.doesNotMatch(page, /\bmanager\b|quan_ly|chưa được hỗ trợ|không được xem snapshot/);
   assert.doesNotMatch(history, /ma_vai_tro|quan_tri_vien|quan_ly/);

@@ -147,10 +147,12 @@ export function canStartProduction(record, manager, userId) {
     && !record.started_at);
 }
 
+export const unitCell = (row) => unitLabel(row.don_vi_tinh);
+
 export const CANCEL_HOLD_COLUMNS = [
   { key: "ma_mat_hang", label: "Mã" },
   { key: "ten_mat_hang", label: "Tên" },
-  { key: "don_vi_tinh", label: "Đơn vị tính", render: (row) => unitLabel(row.don_vi_tinh) },
+  { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell },
   { key: "loai_giu", label: "Loại giữ" },
   { key: "so_luong", label: "Số lượng", numeric: true },
 ];
@@ -197,7 +199,7 @@ export function checkConfirmEntries(ketQua, loai) {
 export const CHECK_COLUMNS = [
   { key: "ma_mat_hang", label: "Mã" },
   { key: "ten_mat_hang", label: "Tên" },
-  { key: "don_vi_tinh", label: "Đơn vị tính", render: (row) => unitLabel(row.don_vi_tinh) },
+  { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell },
   { key: "so_luong_can", label: "Cần", numeric: true },
   { key: "so_luong_con_dung", label: "Còn dùng được", numeric: true },
   { key: "so_luong_thieu", label: "Thiếu", numeric: true },

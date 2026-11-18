@@ -28,6 +28,21 @@ def employee_record(user: NhanVien) -> EmployeeRecord:
     return EmployeeRecord(**values, ma_vai_tro=user.role.ma_vai_tro if user.role else None)
 
 
+def _is_duplicate_username(error: IntegrityError) -> bool:
+    original = error.orig
+    if (
+        getattr(original, "sqlstate", None) == "23505"
+        or getattr(original, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE"
+    ):
+        constraint = getattr(original, "constraint_name", None) or getattr(
+            getattr(original, "__cause__", None), "constraint_name", None
+        )
+        diagnostic = getattr(original, "diag", None)
+        constraint = constraint or getattr(diagnostic, "constraint_name", None)
+        return "ten_dang_nhap" in str(constraint or original)
+    return False
+
+
 class SqlAlchemyNhanVienRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -147,18 +162,8 @@ class SqlAlchemyNhanVienRepository:
         try:
             await self.session.flush()
         except IntegrityError as exc:
-            original = exc.orig
-            if (
-                getattr(original, "sqlstate", None) == "23505"
-                or getattr(original, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE"
-            ):
-                constraint = getattr(original, "constraint_name", None) or getattr(
-                    getattr(original, "__cause__", None), "constraint_name", None
-                )
-                diagnostic = getattr(original, "diag", None)
-                constraint = constraint or getattr(diagnostic, "constraint_name", None)
-                if "ten_dang_nhap" in str(constraint or original):
-                    raise DuplicateUsernameException() from exc
+            if _is_duplicate_username(exc):
+                raise DuplicateUsernameException() from exc
             raise
         except DBAPIError as exc:
             if getattr(exc.orig, "sqlstate", None) == "P0001" and "NV-NNNNNN" in str(exc.orig):
@@ -171,12 +176,17 @@ class SqlAlchemyNhanVienRepository:
 
     async def _update(self, employee_id: int, changes: dict[str, object]) -> EmployeeRecord:
         if changes:
-            await self.session.execute(
-                update(NhanVien)
-                .where(NhanVien.id == employee_id)
-                .values(**changes)
-                .execution_options(synchronize_session=False)
-            )
+            try:
+                await self.session.execute(
+                    update(NhanVien)
+                    .where(NhanVien.id == employee_id)
+                    .values(**changes)
+                    .execution_options(synchronize_session=False)
+                )
+            except IntegrityError as exc:
+                if _is_duplicate_username(exc):
+                    raise DuplicateUsernameException() from exc
+                raise
         # Refresh the identity map, including role, before generating response/ETag/audit.
         result = await self.get_for_update(employee_id)
         assert result is not None  # The service holds this employee's row lock.

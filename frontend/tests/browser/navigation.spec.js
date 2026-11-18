@@ -2,7 +2,14 @@ import { test, expect } from "@playwright/test";
 import { installApi } from "./api-fixture.js";
 
 const menus = {
-  quan_tri_vien: ["/admin", "/admin/tai-khoan", "/admin/vai-tro"],
+  quan_tri_vien: [
+    "/admin",
+    "/admin/tai-khoan",
+    "/admin/vai-tro",
+    "/admin/mat-hang",
+    "/admin/nha-cung-cap",
+    "/admin/lich-su",
+  ],
   quan_ly: [
     "/kho",
     "/kho/mat-hang",

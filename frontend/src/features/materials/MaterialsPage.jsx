@@ -1,54 +1,64 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCatalog, useCollection, useDetail, useWrite } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
-import { ITEM_LABELS, money, number, dateTime, unitLabel } from "../../lib/format.js";
+import {
+  ITEM_LABELS,
+  ITEM_TYPES,
+  money,
+  nullable,
+  number,
+  dateTime,
+  unitLabel,
+  colorLabel,
+  quantity,
+} from "../../lib/format.js";
 import { PageHeader } from "../../components/PageHeader.jsx";
 import { Collection } from "../../components/Collection.jsx";
 import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Field } from "../../components/Field.jsx";
-import { Badge } from "../../components/Badge.jsx";
+import { AdminStatusBadge, Badge } from "../../components/Badge.jsx";
 import { Button } from "../../components/Button.jsx";
 import { ErrorNotice, QueryState } from "../../components/QueryState.jsx";
 import { DocumentLines, newLine, itemTypeOptions } from "../../components/ResourceFields.jsx";
 import { useFeedback } from "../../components/FeedbackProvider.jsx";
-import { itemPayload, itemUnitOptions } from "./itemForm.js";
-const warehouseTypes = [
-  { value: "", label: "Tất cả" },
-  { value: "linh_kien", label: "Linh kiện" },
-  { value: "thanh_pham", label: "Thành phẩm" },
-];
-export function MaterialsPage({ readOnly = false }) {
-  const base = readOnly ? "/nv/ton-kho" : "/kho/mat-hang";
+const modes = {
+  manage: { base: "/kho/mat-hang", title: "Mặt hàng và tồn kho", showPrice: true },
+  employee: { base: "/nv/ton-kho", title: "Tra cứu tồn kho", showPrice: false },
+  admin: { base: "/admin/mat-hang", title: "Tra cứu mặt hàng", showPrice: true },
+};
+
+export function MaterialsPage({ mode = "manage" }) {
+  const { base, title, showPrice } = modes[mode];
+  const readOnly = mode !== "manage";
   const { id } = useParams();
   const collection = useCollection(API.items, { sort: readOnly ? "id" : "ma_mat_hang" });
   const detail = useDetail(API.items, id);
+  if (readOnly && id === "moi") return <Navigate to={base} replace />;
   return (
     <>
-      <PageHeader
-        title={readOnly ? "Tra cứu tồn kho" : "Mặt hàng và tồn kho"}
-        subtitle={
-          readOnly
-            ? "NVL · Linh kiện · Bán thành phẩm · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."
-            : "Quản lý linh kiện, thành phẩm và số lượng tồn, đang giữ, còn dùng. Tồn chỉ đổi qua chứng từ đã ghi sổ."
-        }
-        action={
-          !readOnly && (
-            <Link className="btn btn-primary" to={`${base}/moi`}>
-              Thêm mặt hàng
-            </Link>
-          )
-        }
-      />
+      {mode === "admin" ? (
+        <PageHeader variant="large" title={title} />
+      ) : (
+        <PageHeader
+          title={title}
+          subtitle="Linh kiện · Thành phẩm. Tồn kho chỉ thay đổi qua chứng từ đã ghi sổ."
+          action={
+            !readOnly && (
+              <Link className="btn btn-primary" to={`${base}/moi`}>
+                Thêm mặt hàng
+              </Link>
+            )
+          }
+        />
+      )}
       <div>
         <Collection
           collection={collection}
-          allowReset={!readOnly}
-          pageSizes={readOnly ? undefined : [20, 50, 100]}
-          validate={({ loai_mat_hang, is_active }) =>
-            loai_mat_hang === "linh_kien" && ["true", "false"].includes(String(is_active))
-              ? "Linh kiện không có trạng thái"
+          validate={(draft) =>
+            draft.loai_mat_hang === "linh_kien" && (draft.is_active ?? "") !== ""
+              ? "Trạng thái chỉ lọc được cho thành phẩm."
               : null
           }
           filters={[
@@ -64,8 +74,8 @@ export function MaterialsPage({ readOnly = false }) {
               as: "select",
               options: [
                 { value: "", label: "Tất cả" },
-                { value: "true", label: "Đang sử dụng" },
-                { value: "false", label: "Ngừng sử dụng" },
+                { value: "true", label: "Đang dùng" },
+                { value: "false", label: "Ngừng dùng" },
               ],
             },
             {
@@ -114,7 +124,7 @@ export function MaterialsPage({ readOnly = false }) {
                 </>
               ),
             },
-            ...(!readOnly
+            ...(showPrice
               ? [
                   {
                     key: "so_luong_dang_giu",
@@ -143,14 +153,15 @@ export function MaterialsPage({ readOnly = false }) {
             {
               key: "is_active",
               label: "Trạng thái",
-              render: (row) =>
-                row.loai_mat_hang === "linh_kien" ? (
-                  "—"
-                ) : (
-                  <Badge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
-                    {row.is_active ? "Đang dùng" : "Ngừng dùng"}
-                  </Badge>
-                ),
+              render: (row) => mode === "admin" ? (
+                <AdminStatusBadge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
+                  {row.is_active ? "Đang dùng" : "Ngừng dùng"}
+                </AdminStatusBadge>
+              ) : (
+                <Badge status={row.is_active ? "hoat_dong" : "bi_khoa"}>
+                  {row.is_active ? "Đang dùng" : "Ngừng dùng"}
+                </Badge>
+              ),
             },
             {
               key: "action",
@@ -173,7 +184,34 @@ export function MaterialsPage({ readOnly = false }) {
           title={id === "moi" ? "Thêm mặt hàng" : "Chi tiết mặt hàng"}
         >
           {(snapshot) =>
-            readOnly ? (
+            mode === "admin" ? (
+              <InfoGrid
+                entries={[
+                  ["Mã", snapshot.data.ma_mat_hang],
+                  ["Tên mặt hàng", snapshot.data.ten_mat_hang],
+                  ["Loại", ITEM_LABELS[snapshot.data.loai_mat_hang]],
+                  ["SKU", snapshot.data.sku],
+                  ["Đơn vị tính", unitLabel(snapshot.data.don_vi_tinh)],
+                  ["Đơn giá", money(snapshot.data.don_gia)],
+                  ["Màu sắc", colorLabel(snapshot.data.mau_sac)],
+                  ["Mô tả", snapshot.data.mo_ta],
+                  ["Trạng thái", snapshot.data.is_active ? "Đang dùng" : "Ngừng dùng"],
+                  [
+                    "Tồn thực tế",
+                    quantity(snapshot.data.so_luong_ton, snapshot.data.don_vi_tinh),
+                  ],
+                  [
+                    "Đang giữ",
+                    quantity(snapshot.data.so_luong_dang_giu, snapshot.data.don_vi_tinh),
+                  ],
+                  [
+                    "Còn dùng được",
+                    quantity(snapshot.data.so_luong_con_dung, snapshot.data.don_vi_tinh),
+                  ],
+                  ["Cập nhật tồn", dateTime(snapshot.data.ton_kho_updated_at)],
+                ]}
+              />
+            ) : readOnly ? (
               <InfoGrid
                 entries={[
                   ["Tên mặt hàng", snapshot?.data.ten_mat_hang],

@@ -10,6 +10,7 @@ import {
   canCheckRequest,
   canEditRequest,
   requestDetailEntries,
+  unitCell,
 } from "../src/features/production/requestForm.js";
 
 const source = readFileSync(new URL("../src/features/production/RequestsPage.jsx", import.meta.url), "utf8");
@@ -79,7 +80,7 @@ test("cancel confirmation describes every hold and affected issue without mutati
 test("cancel tables use approved headings columns and empty messages", () => {
   assert.deepEqual(CANCEL_HOLD_COLUMNS.map(({ render: _render, ...column }) => column), [
     { key: "ma_mat_hang", label: "Mã" }, { key: "ten_mat_hang", label: "Tên" },
-    { key: "don_vi_tinh", label: "Đơn vị tính" }, { key: "loai_giu", label: "Loại giữ" },
+    { key: "don_vi_tinh", label: "Đơn vị tính", render: unitCell }, { key: "loai_giu", label: "Loại giữ" },
     { key: "so_luong", label: "Số lượng", numeric: true },
   ]);
   assert.equal(CANCEL_HOLD_COLUMNS[2].render({ don_vi_tinh: "bo" }), "bộ");

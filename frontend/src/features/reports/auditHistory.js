@@ -46,15 +46,21 @@ export const AUDIT_SORT_OPTIONS = [
   { value: "id", label: "ID tăng dần" },
 ];
 
+const AUDIT_OBJECT_FILTER = {
+  name: "loai_doi_tuong",
+  label: "Loại đối tượng",
+  as: "select",
+  options: [{ value: "", label: "Tất cả" }, ...AUDIT_OBJECT_OPTIONS],
+};
+
+export function adminAuditFilters() {
+  return [AUDIT_OBJECT_FILTER, ...dateFilters];
+}
+
 // UC-43 Xem lịch sử thao tác — Main 3–4; R5: kết hợp bộ lọc (specs/use_cases/audit/UC-43.md)
 export function auditFilters(employees = []) {
   return [
-    {
-      name: "loai_doi_tuong",
-      label: "Loại đối tượng",
-      as: "select",
-      options: [{ value: "", label: "Tất cả" }, ...AUDIT_OBJECT_OPTIONS],
-    },
+    AUDIT_OBJECT_FILTER,
     { name: "doi_tuong_id", label: "ID đối tượng", type: "number", min: 1, step: 1 },
     {
       name: "nhan_vien_id",

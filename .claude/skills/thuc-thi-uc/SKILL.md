@@ -96,7 +96,7 @@ cd frontend && npx eslint <file đã sửa>
 
 Đạt khi: test của UC pass 100%; toàn backend và FE không có lỗi mới so với baseline; ruff/eslint sạch trên file đã sửa.
 
-Baseline mới nhất trên `identity_access` (sau UC-08): backend 326 pass, 22 skip (PostgreSQL), 0 fail; frontend 134 pass. Cập nhật baseline sau mỗi UC đã commit.
+Baseline mới nhất trên `production` (sau UC-30): backend 662 pass, 84 skip (PostgreSQL), 0 fail; frontend 246 pass. Cập nhật baseline sau mỗi UC đã commit.
 
 Bài học khi chạy identity_access: Codex có xu hướng gắn comment UC tràn lan vào hàm phụ trợ — trong plan hãy liệt kê **đích danh** các hàm được comment, và khi kiểm chứng gỡ comment ở hàm không thuộc luồng. Mỗi UC viết prompt Codex mới, không sửa từ prompt UC trước.
 

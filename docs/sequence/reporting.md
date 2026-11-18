@@ -146,6 +146,6 @@ sequenceDiagram
   snapshot `so_luong_ton_sau`, thời điểm ghi sổ và thông tin mặt hàng, chứng từ, nhân viên.
   Không ghi dữ liệu, không audit/commit/transaction ghi, không yêu cầu `If-Match`, không trả `ETag`.
 - UC-42 gỡ `GET /api/v1/inventory/movements` cùng ba method `list_movements` cũ;
-  gọi GET đường dẫn cũ trả 405/404. `GET /inventory/stock`, `POST /inventory/movements`,
-  writer và ORM inventory giữ nguyên. Trang `/kho/giao-dich` gọi endpoint reporting mới;
+  gọi GET đường dẫn cũ trả 405/404. Sau đó router inventory v3 (`GET /inventory/stock`,
+  `POST /inventory/movements`) và ORM legacy cũng đã gỡ; module inventory chỉ còn writer. Trang `/kho/giao-dich` gọi endpoint reporting mới;
   không liên kết chứng từ sang các trang phiếu hiện tại.

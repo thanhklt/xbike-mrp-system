@@ -213,12 +213,11 @@ async def test_forbidden_actors_never_read_ledger(api, actor, status):
     assert api.ledger.calls == []
 
 
-# UC-42 A2: Gỡ GET lịch sử cũ khỏi ứng dụng, giữ POST và stock
+# UC-42 A2: Gỡ GET lịch sử cũ khỏi ứng dụng; router inventory v3 không còn endpoint nào
 async def test_legacy_get_removed_from_real_application():
     paths = application.openapi()["paths"]
     assert set(paths[URL]) == {"get"}
-    assert set(paths["/api/v1/inventory/movements"]) == {"post"}
-    assert "get" in paths["/api/v1/inventory/stock"]
+    assert not [path for path in paths if path.startswith("/api/v1/inventory")]
     async with AsyncClient(transport=ASGITransport(app=application), base_url="http://test") as client:
         response = await client.get("/api/v1/inventory/movements")
     assert response.status_code in (404, 405)

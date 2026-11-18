@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { API } from "../../lib/api/endpoints.js";
 import { useCollection, useDetail } from "../../lib/api/useResources.js";
 import { useSave } from "../../lib/useSave.js";
@@ -9,27 +9,27 @@ import { RecordPanel, InfoGrid } from "../../components/RecordPanel.jsx";
 import { Field } from "../../components/Field.jsx";
 import { Button } from "../../components/Button.jsx";
 import { ErrorNotice } from "../../components/QueryState.jsx";
-const base = "/kho/nha-cung-cap";
-
-function supplierAddressLabel(address) {
-  return address?.replace(/\s*\(địa chỉ minh họa\)\s*$/u, "");
-}
-
-export function SuppliersPage() {
+export function SuppliersPage({ readOnly = false }) {
+  const base = readOnly ? "/admin/nha-cung-cap" : "/kho/nha-cung-cap";
   const { id } = useParams();
   const collection = useCollection(API.suppliers, { sort: "id" });
   const detail = useDetail(API.suppliers, id);
+  if (readOnly && id === "moi") return <Navigate to={base} replace />;
   return (
     <>
-      <PageHeader
-        title="Nhà cung cấp"
-        subtitle="Danh mục dùng khi lập phiếu nhập kho."
-        action={
-          <Link className="btn btn-primary" to={`${base}/moi`}>
-            Thêm nhà cung cấp
-          </Link>
-        }
-      />
+      {readOnly ? (
+        <PageHeader variant="large" title="Tra cứu nhà cung cấp" />
+      ) : (
+        <PageHeader
+          title="Nhà cung cấp"
+          subtitle="Danh mục dùng khi lập phiếu nhập kho."
+          action={
+            <Link className="btn btn-primary" to={`${base}/moi`}>
+              Thêm nhà cung cấp
+            </Link>
+          }
+        />
+      )}
       <div>
         <Collection
           collection={collection}
@@ -88,7 +88,7 @@ export function SuppliersPage() {
                 </Link>
               </div>
             ) : (
-              <SupplierForm />
+              <SupplierForm base={base} />
             )
           }
         </RecordPanel>
@@ -96,7 +96,7 @@ export function SuppliersPage() {
     </>
   );
 }
-function SupplierForm() {
+function SupplierForm({ base }) {
   const navigate = useNavigate();
   const { save, busy, error } = useSave();
   const [values, setValues] = useState({

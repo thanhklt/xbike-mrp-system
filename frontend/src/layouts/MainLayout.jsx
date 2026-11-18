@@ -25,6 +25,20 @@ function adminBreadcrumbs(pathname) {
     return [{ label: "Lịch sử thao tác", to: "/admin/lich-su" }, { label: "Chi tiết lịch sử" }];
   }
   if (pathname === "/admin/lich-su") return [{ label: "Lịch sử thao tác" }];
+  if (pathname.startsWith("/admin/mat-hang/")) {
+    return [
+      { label: "Tra cứu mặt hàng", to: "/admin/mat-hang" },
+      { label: "Chi tiết mặt hàng" },
+    ];
+  }
+  if (pathname === "/admin/mat-hang") return [{ label: "Tra cứu mặt hàng" }];
+  if (pathname.startsWith("/admin/nha-cung-cap/")) {
+    return [
+      { label: "Tra cứu nhà cung cấp", to: "/admin/nha-cung-cap" },
+      { label: "Chi tiết nhà cung cấp" },
+    ];
+  }
+  if (pathname === "/admin/nha-cung-cap") return [{ label: "Tra cứu nhà cung cấp" }];
   if (pathname === "/ho-so") return [{ label: "Hồ sơ" }];
   return [{ label: "Tổng quan" }];
 }

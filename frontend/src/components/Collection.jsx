@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card } from "./Card.jsx";
 import { Button } from "./Button.jsx";
 import { Field } from "./Field.jsx";
+import { DateInput } from "./DateInput.jsx";
 import { DataTable, Pagination } from "./DataTable.jsx";
 import { QueryState } from "./QueryState.jsx";
 export function Collection({
@@ -18,15 +19,18 @@ export function Collection({
   const [draft, setDraft] = useState(collection.params);
   const [initial] = useState(collection.params);
   const [filterError, setFilterError] = useState(null);
+  function apply(next) {
+    const message = validate?.(next) ?? null;
+    setFilterError(message);
+    if (!message) collection.filter(next);
+  }
   return (
     <Card title={title}>
       <form
         className="filters"
         onSubmit={(event) => {
           event.preventDefault();
-          const message = validate?.(draft) ?? null;
-          setFilterError(message);
-          if (!message) collection.filter(draft);
+          apply(draft);
         }}
       >
         {search && (
@@ -47,8 +51,13 @@ export function Collection({
               ...option,
               label: optionLabels[field.name]?.[option.value] ?? option.label,
             }))}
+            {...(field.type === "date" ? { as: DateInput, type: undefined } : {})}
             value={draft[field.name] ?? ""}
-            onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })}
+            onChange={(event) => {
+              const next = { ...draft, [field.name]: event.target.value };
+              setDraft(next);
+              if (field.as === "select") apply(next);
+            }}
           />
         ))}
         <div className="filter-actions">

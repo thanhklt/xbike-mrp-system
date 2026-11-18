@@ -5,6 +5,7 @@ import {
   employeeLabel,
   itemName,
   ITEM_LABELS,
+  ITEM_TYPES,
   STATUS_LABELS,
   money,
   number,
@@ -152,7 +153,7 @@ export function DocumentLines({ lines, onChange, items = [], prices = false, typ
                 )}
                 <td>
                   {unitLabel(
-                    items.find((item) => item.id === Number(line.mat_hang_id))?.don_vi_tinh || null,
+                    items.find((item) => item.id === Number(line.mat_hang_id))?.don_vi_tinh,
                   )}
                 </td>
                 <td>
@@ -233,5 +234,5 @@ export function SavedLines({ lines = [], items = [], prices = false }) {
 }
 export const itemTypeOptions = [
   { value: "", label: "Tất cả loại" },
-  ...Object.entries(ITEM_LABELS).map(([value, label]) => ({ value, label })),
+  ...ITEM_TYPES.map((value) => ({ value, label: ITEM_LABELS[value] })),
 ];

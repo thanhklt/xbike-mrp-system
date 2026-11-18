@@ -59,7 +59,7 @@ export function completionConfirmEntries(completion, record, items) {
     ["Mã chứng từ", completion.ma_phieu],
     ["Thành phẩm", itemName(items, record.mat_hang_id)],
     ["Số lượng hoàn thành", number(completion.so_luong_hoan_thanh)],
-    ["Đơn vị tính", unitLabel(item?.don_vi_tinh || null)],
+    ["Đơn vị tính", unitLabel(item?.don_vi_tinh)],
   ];
 }
 

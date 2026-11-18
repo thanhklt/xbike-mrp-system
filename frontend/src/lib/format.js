@@ -9,9 +9,41 @@ export const ITEM_LABELS = {
   ban_thanh_pham: "Bán thành phẩm",
   thanh_pham: "Thành phẩm",
 };
-const UNIT_LABELS = { cai: "cái", chiec: "chiếc", bo: "bộ", kg: "kg" };
-export const unitLabel = (value) => UNIT_LABELS[value] ?? value ?? "—";
-export const UNIT_OPTIONS = Object.entries(UNIT_LABELS).map(([value, label]) => ({ value, label }));
+export const ITEM_TYPES = ["linh_kien", "thanh_pham"];
+export const UNIT_LABELS = {
+  cai: "cái",
+  chiec: "chiếc",
+  bo: "bộ",
+  cap: "cặp",
+  cuon: "cuộn",
+  hop: "hộp",
+  goi: "gói",
+  tam: "tấm",
+  thanh: "thanh",
+  met: "mét",
+  kg: "kg",
+  lit: "lít",
+};
+export const COLOR_LABELS = {
+  den: "Đen",
+  trang: "Trắng",
+  bac: "Bạc",
+  xam: "Xám",
+  do: "Đỏ",
+  vang: "Vàng",
+  cam: "Cam",
+  hong: "Hồng",
+  tim: "Tím",
+  nau: "Nâu",
+  xanh_duong: "Xanh dương",
+  xanh_la: "Xanh lá",
+};
+function codeLabel(map, code) {
+  if (code === null || code === undefined || code === "") return "—";
+  return Object.hasOwn(map, code) ? map[code] : code.replaceAll("_", " ");
+}
+export const unitLabel = (code) => codeLabel(UNIT_LABELS, code);
+export const colorLabel = (code) => codeLabel(COLOR_LABELS, code);
 export const STATUS_LABELS = {
   nhap: "Bản nháp",
   da_gui: "Đã giao",
@@ -32,6 +64,8 @@ export const STATUS_LABELS = {
 };
 export const number = (value) =>
   value === null || value === undefined ? "—" : new Intl.NumberFormat("vi-VN").format(value);
+export const quantity = (value, unit) =>
+  unit ? `${number(value)} ${unitLabel(unit)}` : number(value);
 export const money = (value) =>
   value === null || value === undefined ? "Chưa chốt" : `${number(value)} ₫`;
 export const employeeLabel = (employee) =>
