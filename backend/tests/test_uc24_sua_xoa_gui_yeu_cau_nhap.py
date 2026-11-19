@@ -197,7 +197,11 @@ async def test_send_edited_draft_freezes_bom_and_employee_can_see(api):
     listing = await api.client.get(URL, headers=headers)
     assert listing.status_code == 200 and listing.json()["data"] == [sent.json()["data"]]
     detail = await api.client.get(f"{URL}/1", headers=headers)
-    assert detail.status_code == 200 and detail.json()["data"] == sent.json()["data"]
+    # NV detail also names the creator (UC-25 nhãn công việc), the list does not.
+    assert detail.status_code == 200 and detail.json()["data"] == {
+        **sent.json()["data"], "nguoi_lap_ho_ten": "Quản lý", "nguoi_lap_ma_nhan_vien": "NV-000010",
+    }
+    assert detail.headers["etag"] == sent.headers["etag"]
     assert_stock_untouched(api)
 
 
