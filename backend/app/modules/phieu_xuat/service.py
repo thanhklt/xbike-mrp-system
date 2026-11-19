@@ -192,12 +192,16 @@ class PhieuXuatService:
             raise PreconditionFailedException()
 
     @staticmethod
-    def _source_state(kind: str, source: IssueSource) -> None:
+    def _source_status(kind: str, source: IssueSource) -> None:
         allowed = {"dang_thuc_hien"}
         if kind == "xuat_linh_kien":
             allowed.add("cho_bo_sung_linh_kien")
         if source.trang_thai not in allowed:
             raise InvalidWorkflowState()
+
+    @staticmethod
+    def _source_state(kind: str, source: IssueSource) -> None:
+        PhieuXuatService._source_status(kind, source)
         if kind == "xuat_linh_kien":
             if not source.production_quantity or not source.demand:
                 raise IssueDependencyInvalid()
@@ -362,7 +366,8 @@ class PhieuXuatService:
             self._version(before, self._require_if_match(if_match))
             if before.trang_thai != "cho_duyet":
                 raise InvalidWorkflowState()
-            self._source_state(before.loai_phieu, source)
+            # Rejection only needs the source status; data checks must not block the escape path.
+            self._source_status(before.loai_phieu, source)
             after = await self.repository.change_state(
                 issue_id, "tu_choi", int(actor["sub"]), datetime.now(timezone.utc), reason.strip()
             )
