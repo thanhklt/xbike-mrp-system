@@ -80,6 +80,80 @@ def test_uc34_gi_ac03_input_only_source_and_kind():
     assert payload.model_dump() == {"loai_phieu": "xuat_linh_kien", "yeu_cau_san_xuat_id": 1}
 
 
+def test_component_issue_can_be_prepared_while_waiting_for_stock():
+    source = IssueSource("cho_bo_sung_linh_kien", 2, 1, {7: 7}, "xuat_giao", 7, None, None, {})
+    PhieuXuatService._source_state("xuat_linh_kien", source)
+
+
+def test_waiting_for_components_does_not_allow_finished_goods_issue():
+    from app.core.errors import InvalidWorkflowState
+
+    source = IssueSource("cho_bo_sung_linh_kien", 2, 1, {7: 7}, "xuat_giao", 7, None, None, {})
+    with pytest.raises(InvalidWorkflowState):
+        PhieuXuatService._source_state("xuat_thanh_pham", source)
+
+
+MANAGER_ACTOR = {"sub": "1", "roles": ["quan_ly"]}
+
+
+def _pending_issue(kind: str) -> PhieuXuatRead:
+    return PhieuXuatRead.model_validate({
+        "id": 1, "ma_phieu_xuat": "PX-202611-000001", "nhan_vien_id": 2, "loai_phieu": kind,
+        "yeu_cau_san_xuat_id": 5, "tong_tien": None, "trang_thai": "cho_duyet",
+        "created_at": "2026-11-18T00:00:00Z", "updated_at": "2026-11-18T00:00:00Z",
+        "gui_at": "2026-11-18T00:00:00Z", "nguoi_xu_ly_id": None, "xu_ly_at": None,
+        "ly_do_tu_choi": None, "phien_ban": 2,
+        "chi_tiet": [{"id": 1, "mat_hang_id": 7, "so_luong": 7, "don_gia_thuc": None, "tong_gia": None}],
+    })
+
+
+def _reject_service(record: PhieuXuatRead, source: IssueSource):
+    from contextlib import nullcontext
+
+    rejected = record.model_copy(update={"trang_thai": "tu_choi", "ly_do_tu_choi": "Sai"})
+    repository = SimpleNamespace(
+        lock_context=AsyncMock(return_value=(record, source)),
+        change_state=AsyncMock(return_value=rejected),
+    )
+    service = PhieuXuatService(repository, AsyncMock(), nullcontext(), None)
+    return service, repository
+
+
+@pytest.mark.parametrize("kind,source", [
+    # Inconsistent component demand blocks approval but must not block rejection.
+    ("xuat_linh_kien", IssueSource("dang_thuc_hien", 2, 5, {}, "xuat_giao", 0, None, None, {})),
+    ("xuat_linh_kien", IssueSource("cho_bo_sung_linh_kien", 2, 5, {}, "xuat_giao", 7, None, None, {})),
+    ("xuat_thanh_pham", IssueSource("dang_thuc_hien", 2, 5, {7: 7}, "xuat_giao", 7, 3, "cho_duyet", {})),
+])
+async def test_reject_only_checks_source_status_not_issue_data(kind, source):
+    record = _pending_issue(kind)
+    service, repository = _reject_service(record, source)
+    etag = PhieuXuatService.response(record, "test")[1]
+
+    response, _ = await service.reject_issue(1, MANAGER_ACTOR, etag, "test", "Sai")
+
+    assert response.data.trang_thai == "tu_choi"
+    repository.change_state.assert_awaited_once()
+
+
+@pytest.mark.parametrize("kind,state", [
+    ("xuat_linh_kien", "da_gui"),
+    ("xuat_linh_kien", "hoan_thanh"),
+    ("xuat_thanh_pham", "cho_bo_sung_linh_kien"),
+])
+async def test_reject_still_requires_active_source(kind, state):
+    from app.core.errors import InvalidWorkflowState
+
+    record = _pending_issue(kind)
+    source = IssueSource(state, 2, 5, {7: 7}, "xuat_giao", 7, None, None, {})
+    service, repository = _reject_service(record, source)
+    etag = PhieuXuatService.response(record, "test")[1]
+
+    with pytest.raises(InvalidWorkflowState):
+        await service.reject_issue(1, MANAGER_ACTOR, etag, "test", "Sai")
+    repository.change_state.assert_not_awaited()
+
+
 @pytest.mark.parametrize("roles", [["quan_ly"], ["quan_tri_vien"]])
 async def test_uc34_gi_ac01_manager_cannot_create_directly(roles):
     repository = SimpleNamespace(lock_source=AsyncMock())

@@ -34,7 +34,7 @@ const record = {
   completed_at: null,
 };
 const items = [{ id: 1, ten_mat_hang: "Mountain Pro", don_vi_tinh: "xe" }];
-const employees = [{ id: 20, ho_ten: "Nhân viên A" }, { id: 10, ho_ten: "Quản lý kho" }];
+const employees = [{ id: 20, ho_ten: "Nhân viên A" }, { id: 10, ho_ten: "Quản lý kho", ma_nhan_vien: "NV-000010" }];
 
 // UC-24 AC-1: Form sửa điền đủ năm giá trị hiện tại, body đúng kiểu và không có null
 test("edit prefill and payload preserve all five current draft values", () => {
@@ -86,7 +86,7 @@ test("read only detail contains all approved information with employee names", (
     ["Đơn vị tính", "xe"],
     ["Hạn hoàn thành", "01/12/2026"],
     ["Nhân viên được giao", "Nhân viên A"],
-    ["Người lập", "Quản lý kho"],
+    ["Người lập", "Quản lý kho — NV-000010"],
     ["Tạo lúc", dateTime(record.created_at)],
     ["Gửi lúc", "—"],
     ["Hoàn thành lúc", "—"],
@@ -94,7 +94,7 @@ test("read only detail contains all approved information with employee names", (
   const sent = { ...record, trang_thai: "da_gui", gui_at: "2026-11-17T08:00:00Z" };
   const entries = Object.fromEntries(requestDetailEntries(sent, items, []));
   assert.equal(entries["Nhân viên được giao"], "Nhân viên #20");
-  assert.equal(entries["Người lập"], "Nhân viên #10");
+  assert.equal(entries["Người lập"], "—");
   assert.equal(entries["Gửi lúc"], dateTime(sent.gui_at));
   assert.match(source, /<InfoGrid entries=\{requestDetailEntries\(record, items, employees\.data \|\| \[\]\)\} \/>/);
   assert.equal((source.match(/<InfoGrid entries=\{requestDetailEntries/g) || []).length, 1);

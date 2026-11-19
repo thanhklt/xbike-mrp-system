@@ -192,9 +192,16 @@ class PhieuXuatService:
             raise PreconditionFailedException()
 
     @staticmethod
-    def _source_state(kind: str, source: IssueSource) -> None:
-        if source.trang_thai != "dang_thuc_hien":
+    def _source_status(kind: str, source: IssueSource) -> None:
+        allowed = {"dang_thuc_hien"}
+        if kind == "xuat_linh_kien":
+            allowed.add("cho_bo_sung_linh_kien")
+        if source.trang_thai not in allowed:
             raise InvalidWorkflowState()
+
+    @staticmethod
+    def _source_state(kind: str, source: IssueSource) -> None:
+        PhieuXuatService._source_status(kind, source)
         if kind == "xuat_linh_kien":
             if not source.production_quantity or not source.demand:
                 raise IssueDependencyInvalid()
@@ -357,8 +364,10 @@ class PhieuXuatService:
         async with self.transaction:
             before, source = await self._lock(issue_id, actor)
             self._version(before, self._require_if_match(if_match))
-            if before.trang_thai != "cho_duyet" or source.trang_thai != "dang_thuc_hien":
+            if before.trang_thai != "cho_duyet":
                 raise InvalidWorkflowState()
+            # Rejection only needs the source status; data checks must not block the escape path.
+            self._source_status(before.loai_phieu, source)
             after = await self.repository.change_state(
                 issue_id, "tu_choi", int(actor["sub"]), datetime.now(timezone.utc), reason.strip()
             )
@@ -404,8 +413,27 @@ class PhieuXuatService:
                 stocks = await self.inventory.lock_issue_stock(
                     source.request_id, sorted(source.demand)
                 )
-                prices, reservations = self._stock_policy(before, source, stocks)
                 at = datetime.now(timezone.utc)
+                if source.trang_thai == "cho_bo_sung_linh_kien":
+                    if {stock.item_id for stock in stocks} != set(source.demand):
+                        raise IssueDependencyInvalid(message="Issue item missing")
+                    for stock in stocks:
+                        if any(hold.request_id == source.request_id for hold in stock.reservations):
+                            raise IssueDependencyInvalid(message="Waiting request already holds components")
+                        available = stock.stock - stock.held
+                        if available < source.demand[stock.item_id]:
+                            raise InsufficientStock(stock.item_id, source.demand[stock.item_id], available)
+                    await self.inventory.reserve_issue_stock(source.request_id, source.demand, at)
+                    stocks = await self.inventory.lock_issue_stock(source.request_id, sorted(source.demand))
+                    ready = await self.repository.ready_for_production(source.request_id, at)
+                    await self.audit.append(CreationAudit(
+                        nhan_vien_id=int(actor["sub"]), loai_doi_tuong="yeu_cau_san_xuat",
+                        doi_tuong_id=source.request_id, thao_tac="sua",
+                        trang_thai_truoc=source.trang_thai, trang_thai_sau="dang_thuc_hien",
+                        du_lieu_truoc=json.loads(json.dumps(source.values, default=str)),
+                        du_lieu_sau=json.loads(json.dumps(ready, default=str)),
+                    ))
+                prices, reservations = self._stock_policy(before, source, stocks)
                 after = await self.repository.freeze_prices(before, prices, int(actor["sub"]), at)
                 ids = await self.inventory.issue_stock(
                     [

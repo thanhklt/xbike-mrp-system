@@ -188,6 +188,7 @@ test.describe("Employee Documents & Password Workflows", () => {
     await expect(dialog.getByText("Số lượng hoàn thành")).toBeVisible();
     await expect(dialog.getByText("7")).toBeVisible();
     await expect(dialog.getByText("Đơn vị tính")).toBeVisible();
+    await expect(dialog.locator(".notice-info")).toHaveCount(0);
 
     // Confirm send
     await dialog.getByRole("button", { name: "Xác nhận", exact: true }).click();

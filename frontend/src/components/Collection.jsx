@@ -54,7 +54,7 @@ export function Collection({
     }
   }, [collection.params, syncDraftWithParams, cycleFilters]);
   useEffect(() => () => clearTimeout(searchTimer.current), []);
-  const icons = { trang_thai: Layers, loai_yeu_cau: LayoutGrid, sort: ArrowDownUp, tu_ngay: CalendarDays, den_ngay: CalendarDays };
+  const icons = { trang_thai: Layers, trang_thai_cong_viec: Layers, loai_yeu_cau: LayoutGrid, sort: ArrowDownUp, tu_ngay: CalendarDays, den_ngay: CalendarDays };
   function apply(next) {
     clearTimeout(searchTimer.current);
     const message = (cycleFilters ? dateRangeError(next) : null) ?? validate?.(next) ?? null;
@@ -188,11 +188,11 @@ export function Collection({
           <>
             <div className="employee-filter-primary">
               {searchField}
-              {filters.filter((field) => field.name === "trang_thai").map(renderFilter)}
+              {filters.filter((field) => ["trang_thai", "trang_thai_cong_viec"].includes(field.name)).map(renderFilter)}
               {filterAction}
             </div>
             <div id={advancedId} className="employee-filter-advanced" hidden={!expanded}>
-              {filters.filter((field) => field.name !== "trang_thai").map(renderFilter)}
+              {filters.filter((field) => !["trang_thai", "trang_thai_cong_viec"].includes(field.name)).map(renderFilter)}
             </div>
             <div className="employee-filter-toggle">
               <button type="button" aria-expanded={expanded} aria-controls={advancedId} onClick={() => setExpanded(!expanded)}>

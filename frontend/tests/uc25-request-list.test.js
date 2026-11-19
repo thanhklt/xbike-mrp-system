@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   REQUEST_SORT_OPTIONS,
+  REQUEST_WORK_STATUSES,
+  requestWorkStatus,
   requestDetailEntries,
   requestListFilters,
 } from "../src/features/production/requestForm.js";
@@ -63,19 +65,24 @@ test("request list leaves default ordering to backend and omits blank sort", () 
 });
 
 // UC-25 AC-5: NV bỏ Nháp, QLK đủ sáu trạng thái; nhãn dùng STATUS_LABELS
-test("status filter hides drafts only for employees and keeps approved labels", () => {
+test("manager keeps business states and employees filter by work steps without draft labels", () => {
   const states = ["nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"];
   for (const manager of [true, false]) {
     assert.deepEqual(requestListFilters(manager)[0], {
-      name: "trang_thai",
+      name: manager ? "trang_thai" : "trang_thai_cong_viec",
       label: "Trạng thái",
       as: "select",
       options: [
         { value: "", label: "Tất cả" },
-        ...(manager ? states : states.slice(1)).map((value) => ({ value, label: STATUS_LABELS[value] })),
+        ...(manager ? states.map((value) => ({ value, label: STATUS_LABELS[value] }))
+          : REQUEST_WORK_STATUSES.map(({ value, label }) => ({ value, label }))),
       ],
     });
   }
+  assert.equal(REQUEST_WORK_STATUSES.length, 9);
+  assert.equal(REQUEST_WORK_STATUSES.some(({ label }) => /nháp|Chờ gửi/.test(label)), false);
+  assert.equal(requestWorkStatus({ trang_thai_cong_viec: "cho_duyet_xuat_linh_kien" }).tone, "work-issue");
+  assert.equal(requestWorkStatus({ trang_thai_cong_viec: null }), undefined);
 });
 
 // UC-25 A3: Bộ lọc đúng thứ tự trạng thái, loại, sort, ngày; giữ cấu hình Collection
@@ -83,7 +90,7 @@ test("collection filters preserve the approved order and existing date fields", 
   for (const manager of [true, false]) {
     const filters = requestListFilters(manager);
     assert.deepEqual(filters.map(({ name }) => name), [
-      "trang_thai", "loai_yeu_cau", "sort", "tu_ngay", "den_ngay",
+      manager ? "trang_thai" : "trang_thai_cong_viec", "loai_yeu_cau", "sort", "tu_ngay", "den_ngay",
     ]);
     assert.deepEqual(filters.slice(3), [
       { name: "tu_ngay", label: "Từ ngày", type: "date" },
@@ -97,7 +104,7 @@ test("collection filters preserve the approved order and existing date fields", 
 // UC-25 AC-1: D5 tiêu đề/phụ đề theo vai trò; cột Số lượng cần dạng số và đủ loại/hạn/trạng thái
 test("request page uses approved role headings and ordered list columns", () => {
   assert.match(page, /<PageHeader\s+title=\{manager \? "Yêu cầu sản xuất" : "Yêu cầu được giao"\}/);
-  assert.match(page, /subtitle=\{manager\s*\?\s*"Lập yêu cầu sản xuất và gửi cho nhân viên được giao\."\s*:\s*"Yêu cầu sản xuất được giao cho bạn, từ khi đã gửi\."\}/);
+  assert.match(page, /subtitle=\{manager\s*\?\s*"Lập yêu cầu sản xuất và gửi cho nhân viên được giao\."\s*:\s*undefined\}/);
   assert.deepEqual([...columns.matchAll(/key: "([^"]+)"/g)].map(([, key]) => key), [
     "ma_yeu_cau_san_xuat", "mat_hang_id", "loai_yeu_cau", "han_hoan_thanh", "so_luong", "trang_thai", "action",
   ]);
@@ -107,7 +114,7 @@ test("request page uses approved role headings and ordered list columns", () => 
   assert.match(columns, /\{ key: "so_luong", label: "Số lượng cần", numeric: true \}/);
   assert.match(columns, /render: \(row\) => REQUEST_TYPE_LABELS\[row\.loai_yeu_cau\]/);
   assert.match(columns, /render: \(row\) => formatDate\(row\.han_hoan_thanh\)/);
-  assert.match(columns, /render: \(row\) => <Badge status=\{row\.trang_thai\} \/>/);
+  assert.match(columns, /render: \(row\) => <RequestStatusBadge record=\{row\} manager=\{manager\} \/>/);
 });
 
 // UC-25 D6: Bỏ cột/dòng tiến độ xuất ở danh sách và chi tiết, giữ thông tin yêu cầu
@@ -119,7 +126,7 @@ test("list and detail remove export progress while retaining request information
     created_at: null, gui_at: null, completed_at: null,
     so_luong_da_xuat: 7, so_luong_con_phai_xuat: 3,
   }, [{ id: 1, ten_mat_hang: "Mountain Pro", don_vi_tinh: "xe" }], [
-    { id: 20, ho_ten: "Nhân viên A" }, { id: 10, ho_ten: "Quản lý kho" },
+    { id: 20, ho_ten: "Nhân viên A" }, { id: 10, ho_ten: "Quản lý kho", ma_nhan_vien: "NV-000010" },
   ]);
   assert.deepEqual(entries, [
     ["Loại yêu cầu", "Sản xuất nhập kho"],
@@ -128,7 +135,7 @@ test("list and detail remove export progress while retaining request information
     ["Đơn vị tính", "xe"],
     ["Hạn hoàn thành", "01/12/2026"],
     ["Nhân viên được giao", "Nhân viên A"],
-    ["Người lập", "Quản lý kho"],
+    ["Người lập", "Quản lý kho — NV-000010"],
     ["Tạo lúc", "—"],
     ["Gửi lúc", "—"],
     ["Hoàn thành lúc", "—"],

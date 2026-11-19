@@ -204,7 +204,7 @@ function EmployeeCompletionDetail({ snapshot, items }) {
           entries={completionConfirmEntries(completion, sourceRecord, items, true)}
         />
       ),
-      impact: "Chưa cộng tồn thành phẩm; Quản lý kho sẽ duyệt để ghi sổ.",
+      hideImpact: true,
       onConfirm: async () => {
         await mutation.mutateAsync({
           path: `${API.completions}/${completion.id}/gui`,

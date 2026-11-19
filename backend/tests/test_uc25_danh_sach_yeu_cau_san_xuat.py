@@ -20,6 +20,15 @@ EMPLOYEE_HEADERS = {"x-role": "nhan_vien", "x-actor": "20"}
 STATES = ["nhap", "da_gui", "cho_bo_sung_linh_kien", "dang_thuc_hien", "hoan_thanh", "da_huy"]
 
 
+@pytest.mark.parametrize("headers,status", [({}, 403), (EMPLOYEE_HEADERS, 422)])
+async def test_work_filter_checks_role_and_enum_before_repository(api, headers, status):
+    response = await api.client.get(URL, headers=headers, params={
+        "trang_thai_cong_viec": "da_giao" if status == 403 else "unknown",
+    })
+    assert response.status_code == status
+    api.repo.list_entries.assert_not_awaited()
+
+
 @pytest.fixture
 def listing_api(api):
     # Insertion order differs from both creation time and deadline; IDs 2/8 tie on both.
@@ -266,7 +275,11 @@ async def test_list_and_detail_remove_export_progress_without_issue_calls(listin
         assert removed.isdisjoint(row)
     detail = await listing_api.client.get(f"{URL}/2", headers=headers)
     assert detail.status_code == 200
-    assert detail.json()["data"] == listing_api.stored[2].model_dump(mode="json")
+    expected = listing_api.stored[2].model_dump(mode="json")
+    if headers == EMPLOYEE_HEADERS:
+        expected["nguoi_lap_ho_ten"] = "Quản lý"
+        expected["nguoi_lap_ma_nhan_vien"] = "NV-000010"
+    assert detail.json()["data"] == expected
     assert removed.isdisjoint(detail.json()["data"])
     assert detail.headers["etag"] == generate_yeu_cau_etag(listing_api.stored[2])
     assert listing_api.issues.mock_calls == []

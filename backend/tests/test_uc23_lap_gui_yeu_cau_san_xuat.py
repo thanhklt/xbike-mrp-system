@@ -68,6 +68,10 @@ async def api():
     }
     boms = {1: {"id": 102, "phien_ban": 2}, 3: {"id": 301, "phien_ban": 1}}
     repo = AsyncMock(spec=YeuCauSanXuatRepository)
+    repo.work_statuses.return_value = {}
+    repo.creator_identity.side_effect = lambda employee_id: (
+        employees[employee_id].ho_ten, f"NV-{employee_id:06d}",
+    )
     audit, session = AsyncMock(spec=AuditWriter), AsyncMock(spec=AsyncSession)
     item_repo = AsyncMock(spec=MatHangRepository)
     item_repo.inventory = inventory

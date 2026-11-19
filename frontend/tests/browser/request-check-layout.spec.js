@@ -47,8 +47,8 @@ test("reload and reopening show current shortage without changing the request", 
   await detail.getByRole("button", { name: "Đóng", exact: true }).click();
   missing = 0;
   await page.getByRole("link", { name: record.ma_yeu_cau_san_xuat }).click();
-  await expect(detail.getByText("Đã đủ linh kiện, chờ xác nhận")).toBeVisible();
-  await expect(detail.getByText("Chờ bổ sung linh kiện", { exact: true })).toBeVisible();
+  await expect(detail.getByText("Đã đủ linh kiện")).toBeVisible();
+  await expect(detail.getByText("Đã giao", { exact: true })).toBeVisible();
   await expect(shortage).toHaveCount(0);
   expect(previewCalls().map(({ method }) => method)).toEqual(["GET", "GET", "GET"]);
   expect(state.calls.every(({ method }) => method === "GET")).toBe(true);
@@ -58,8 +58,8 @@ test("reload and reopening show current shortage without changing the request", 
   record.trang_thai = "dang_thuc_hien";
   state.versions["yeu_cau_san_xuat/1"] = 2;
   await page.getByRole("link", { name: record.ma_yeu_cau_san_xuat }).click();
-  await expect(detail.getByText("Đang thực hiện", { exact: true })).toBeVisible();
-  await expect(detail.getByText("Đã đủ linh kiện, chờ xác nhận")).toHaveCount(0);
+  await expect(detail.getByText("Đã giao", { exact: true })).toBeVisible();
+  await expect(detail.getByText("Đã đủ linh kiện")).toHaveCount(0);
   expect(previewCalls().map(({ method }) => method)).toEqual(["GET", "GET", "GET"]);
 });
 
@@ -91,12 +91,13 @@ test("confirmation fetches fresh data, posts the reviewed ETag, and refreshes el
   missing = 0;
   await check.click();
   await expect(confirmation.getByText("Đủ", { exact: true })).toBeVisible();
+  await expect(confirmation.locator(".notice-info")).toHaveCount(0);
   await confirmation.getByRole("button", { name: "Hủy", exact: true }).click();
   expect(previewCalls().map(({ method }) => method)).toEqual(["GET", "GET"]);
 
   await check.click();
   await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect(page.getByText("Vẫn thiếu linh kiện.")).toBeVisible();
+  await expect(page.getByText("Đã kiểm tra yêu cầu.")).toBeVisible();
   await expect(shortage.getByRole("cell").last()).toHaveText("3");
   expect(previewCalls().map(({ method }) => method)).toEqual(["GET", "GET", "GET", "POST", "GET"]);
 
@@ -104,8 +105,8 @@ test("confirmation fetches fresh data, posts the reviewed ETag, and refreshes el
   actualMissing = 0;
   await check.click();
   await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
-  await expect(detail.getByText("Đang thực hiện", { exact: true })).toBeVisible();
-  await expect(detail.getByText("Đã đủ linh kiện, chờ xác nhận")).toHaveCount(0);
+  await expect(detail.getByText("Đã giao", { exact: true })).toBeVisible();
+  await expect(detail.getByText("Đã đủ linh kiện")).toHaveCount(0);
   await expect(check).toHaveCount(0);
   expect(previewCalls().map(({ method }) => method)).toEqual(["GET", "GET", "GET", "POST", "GET", "GET", "POST"]);
   const writes = previewCalls().filter(({ method }) => method === "POST");
@@ -125,7 +126,7 @@ test("preview failure keeps detail readable and a retry can show sufficient fini
   await page.goto("/nv/yeu-cau/1");
   await expect(detail.getByRole("alert")).toHaveText("Không tải được tồn khả dụng");
   await expect(detail.getByText("Đã giao", { exact: true })).toBeVisible();
-  await expect(detail.getByText("Đã đủ linh kiện, chờ xác nhận")).toHaveCount(0);
+  await expect(detail.getByText("Đã đủ linh kiện")).toHaveCount(0);
   payload = { json: { data: null } };
   await detail.getByRole("button", { name: "Tải lại", exact: true }).click();
   await expect(detail.getByRole("alert")).toHaveText("Không tải được tình trạng linh kiện.");
@@ -160,7 +161,7 @@ test("switching requests while availability is loading keeps results scoped to t
     await expect.poll(() => state.calls.some((call) => call.path === checkPath)).toBe(true);
     await detail.getByRole("button", { name: "Đóng", exact: true }).click();
     await page.getByRole("link", { name: second.ma_yeu_cau_san_xuat }).click();
-    await expect(detail.getByText("Đã đủ linh kiện, chờ xác nhận")).toBeVisible();
+    await expect(detail.getByText("Đã đủ linh kiện")).toBeVisible();
     await expect(detail.getByRole("heading", { name: second.ma_yeu_cau_san_xuat })).toBeVisible();
   } finally {
     releaseFirst();

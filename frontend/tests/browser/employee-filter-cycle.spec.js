@@ -4,13 +4,17 @@ import { installApi } from "./api-fixture.js";
 test("employee status dropdown selects any choice directly and supports the keyboard", async ({ page }) => {
   const state = await installApi(page, { role: "nhan_vien" });
   await page.goto("/nv/yeu-cau");
-  const status = page.locator("#filter-trang_thai");
+  const status = page.locator("#filter-trang_thai_cong_viec");
   const choices = [
     ["Hoàn thành", "hoan_thanh"],
-    ["Đã giao", "da_gui"],
+    ["Đã giao", "da_giao"],
     ["Đã hủy", "da_huy"],
-    ["Chờ bổ sung linh kiện", "cho_bo_sung_linh_kien"],
-    ["Đang thực hiện", "dang_thuc_hien"],
+    ["Chờ duyệt phiếu xuất linh kiện", "cho_duyet_xuat_linh_kien"],
+    ["Sẵn sàng sản xuất", "san_sang_san_xuat"],
+    ["Đang sản xuất", "dang_san_xuat"],
+    ["Chờ duyệt chứng từ hoàn thành", "cho_duyet_hoan_thanh"],
+    ["Chờ lập phiếu xuất", "cho_lap_phieu_xuat"],
+    ["Chờ duyệt phiếu xuất", "cho_duyet_phieu_xuat"],
     ["Tất cả", ""],
   ];
   await expect(page.getByRole("combobox", { name: "Trạng thái", exact: true })).toBeVisible();
@@ -18,11 +22,11 @@ test("employee status dropdown selects any choice directly and supports the keyb
     await status.selectOption(value);
     await expect(status.locator("option:checked")).toHaveText(label);
     await expect.poll(() => state.calls.filter((call) => call.path === "yeu_cau_san_xuat")
-      .at(-1)?.params.trang_thai).toBe(value || undefined);
+      .at(-1)?.params.trang_thai_cong_viec).toBe(value || undefined);
   }
   await status.focus();
   await page.keyboard.press("ArrowDown");
-  await expect(status).toHaveValue("da_gui");
+  await expect(status).toHaveValue("da_giao");
   await page.keyboard.press("End");
   await expect(status).toHaveValue("da_huy");
   await expect(status).toBeFocused();

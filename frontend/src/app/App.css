@@ -3754,6 +3754,36 @@ html[data-employee-theme="true"] .toast {
   color: #f87171;
 }
 
+.employee-shell .badge-work-assigned {
+  background: #172554;
+  color: #bfdbfe;
+}
+
+.employee-shell .badge-work-issue {
+  background: #2e1065;
+  color: #ddd6fe;
+}
+
+.employee-shell .badge-work-production {
+  background: #083344;
+  color: #a5f3fc;
+}
+
+.employee-shell .badge-work-completion {
+  background: #451a03;
+  color: #fde68a;
+}
+
+.employee-shell .badge-work-completed {
+  background: #052e16;
+  color: #bbf7d0;
+}
+
+.employee-shell .badge-work-cancelled {
+  background: #450a0a;
+  color: #fecaca;
+}
+
 .employee-shell .table-scroll td {
   min-width: 0;
 }

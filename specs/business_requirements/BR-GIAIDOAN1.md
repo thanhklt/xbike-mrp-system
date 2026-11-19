@@ -273,11 +273,12 @@ Linh kiện chỉ rời kho khi Quản lý kho duyệt, và xuất đúng đủ 
 - issue_quantity_mismatch = 0 (lượng xuất luôn bằng nhu cầu đã chốt)
 
 ## In Scope (Giai đoạn 1)
-- Nhân viên được giao lập phiếu xuất khi yêu cầu Đang thực hiện và cần sản xuất
+- Nhân viên được giao lập/gửi phiếu xuất linh kiện khi yêu cầu Đang thực hiện hoặc Chờ bổ sung linh kiện, đã chốt nhu cầu và cần sản xuất (dev cập nhật 18/11/2026)
+- Thiếu hàng vẫn được lưu nháp/gửi; chỉ duyệt xuất khi đủ toàn bộ lượng còn dùng được sau phần giữ của yêu cầu khác. Nếu chưa giữ linh kiện, QLK giữ đủ nhu cầu và chuyển yêu cầu Đang thực hiện trong cùng transaction duyệt; không bắt NV kiểm tra lại và không tự duyệt khi nhập bổ sung
 - Mỗi yêu cầu một phiếu, xuất đủ toàn bộ nhu cầu; nội dung phiếu lấy đúng nhu cầu đã chốt, nhân viên không sửa
 - Gửi phiếu cần xác nhận, chưa trừ tồn
 - Quản lý kho duyệt (có xác nhận): trừ tồn, ghi giá xuất theo đơn giá mặt hàng tại lúc duyệt, kết thúc giữ linh kiện
-- Quản lý kho từ chối phải ghi lý do; tồn không đổi, linh kiện vẫn được giữ; nhân viên gửi lại phiếu ngay từ trạng thái bị từ chối, không qua nháp
+- Quản lý kho từ chối phải ghi lý do; tồn và phần giữ hiện có không đổi; nhân viên gửi lại phiếu ngay từ trạng thái bị từ chối, không qua nháp
 - Quản lý kho không lập phiếu xuất; Nhân viên không duyệt
 - Quản lý kho có màn hình danh sách phiếu xuất riêng, gồm cả phiếu xuất linh kiện và phiếu xuất thành phẩm, mở từ đó để duyệt hoặc từ chối
 

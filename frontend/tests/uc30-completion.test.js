@@ -80,14 +80,14 @@ function section({ completion = null, record = row, manager = false, userId = 20
 }
 
 // UC-30 AC-1: Form lập chỉ đọc đúng số cần sản xuất, không có ô nhập số lượng hoặc thời điểm
-test("create form shows fixed quantity with notice and approved save/discard actions", () => {
+test("create form keeps fixed quantity and save/discard without a technical notice", () => {
   const ui = section();
   assert.match(ui.render(), /<h3>Chứng từ hoàn thành sản xuất<\/h3>/);
   assert.deepEqual([...ui.state.buttons.keys()], ["Lập chứng từ hoàn thành"]);
   ui.click("Lập chứng từ hoàn thành");
   const html = ui.render();
   assert.match(html, /<dt>Số lượng hoàn thành<\/dt><dd>7<\/dd>/);
-  assert.match(html, /Thời điểm hoàn thành do hệ thống ghi khi bạn xác nhận gửi\./);
+  assert.doesNotMatch(html, /Thời điểm hoàn thành do hệ thống ghi khi bạn xác nhận gửi\./);
   assert.doesNotMatch(html, /<input|<select|<textarea/);
   assert.match(html, /data-variant="secondary">Bỏ/);
   assert.deepEqual([...ui.state.buttons.keys()], ["Bỏ", "Lưu"]);
@@ -154,8 +154,8 @@ test("creation and send permissions enforce all role scope and state conditions"
   }
 });
 
-// UC-30 AC-2: AC-3 xác nhận đủ bốn thông tin/cảnh báo, POST body rỗng với ETag đã xem
-test("send confirmation contains document product quantity unit and stock impact", async () => {
+// UC-30 AC-2: AC-3 xác nhận đủ bốn thông tin, POST body rỗng với ETag đã xem
+test("send confirmation contains document product quantity and unit without an explanatory notice", async () => {
   const ui = section({ completion: draft });
   ui.render();
   ui.click("Gửi");
@@ -164,7 +164,7 @@ test("send confirmation contains document product quantity unit and stock impact
   const options = ui.state.confirmations[0];
   assert.equal(options.title, "Gửi chứng từ hoàn thành");
   assert.equal(options.description, draft.ma_phieu);
-  assert.equal(options.impact, "Chưa cộng tồn thành phẩm.");
+  assert.equal(options.hideImpact, true);
   assert.deepEqual(options.content.props.entries, [
     ["Mã chứng từ", draft.ma_phieu], ["Thành phẩm", "Xe đạp — MH-000005"],
     ["Số lượng hoàn thành", "7"], ["Đơn vị tính", "xe"],
@@ -204,7 +204,7 @@ test("rejected completion shows rejection and resends directly through the same 
   const options = ui.state.confirmations[0];
   assert.equal(options.title, "Gửi lại chứng từ hoàn thành");
   assert.equal(options.description, completion.ma_phieu);
-  assert.equal(options.impact, "Chưa cộng tồn thành phẩm.");
+  assert.equal(options.hideImpact, true);
   assert.deepEqual(options.content.props.entries, completionConfirmEntries(draft, row, items, true));
   await options.onConfirm();
   assert.deepEqual(ui.state.writes, [{ path: "/chung_tu_hoan_thanh_sx/12/gui", body: {}, etag: '"completion-reviewed"' }]);

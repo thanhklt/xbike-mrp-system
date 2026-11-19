@@ -19,6 +19,7 @@ test("assigned employee creates source-only component issue, then confirms send 
   const confirmation = page.locator("dialog.confirmation");
   await expect(confirmation).toContainText("8 cái");
   await expect(confirmation).toContainText("YCSX #2");
+  await expect(confirmation.locator(".notice-info")).toHaveCount(0);
   await confirmation.getByRole("button", { name: "Hủy", exact: true }).click();
   expect(state.calls.filter((c) => c.path === "phieu_xuat/1/gui")).toHaveLength(0);
   await dialog.getByRole("button", { name: "Gửi", exact: true }).click();

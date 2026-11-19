@@ -107,6 +107,23 @@ class SqlAlchemyInventoryRepository:
             for item in items
         ]
 
+    async def reserve_issue_stock(
+        self, request_id: int, demand: dict[int, int], at: datetime,
+    ) -> None:
+        # The issue service locks and validates the entire demand before writing any hold.
+        for item_id, quantity in sorted(demand.items()):
+            await self.session.execute(
+                text('''INSERT INTO "GiuHang" (yeu_cau_san_xuat_id,mat_hang_id,loai_giu,
+                    so_luong,trang_thai,created_at)
+                    VALUES (:request,:item,'linh_kien',:quantity,'dang_giu',:at)'''),
+                {"request": request_id, "item": item_id, "quantity": quantity, "at": at},
+            )
+            await self.session.execute(
+                text('''UPDATE "MatHang" SET so_luong_dang_giu=so_luong_dang_giu+:quantity
+                    WHERE id=:item'''), {"item": item_id, "quantity": quantity},
+            )
+        await self.session.flush()
+
     async def issue_stock(
         self,
         lines: list[StockIssueLine],
