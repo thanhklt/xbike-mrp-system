@@ -75,6 +75,68 @@ test("product issue requires zero production or approved completion and stays so
   expect(state.resources.phieu_xuat[0].chi_tiet[0].so_luong).toBe(20);
 });
 
+test("manager creates, sends and approves a finished-goods issue from the delivery request", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_ly" });
+  state.resources.phieu_xuat = [];
+  const source = state.resources.yeu_cau_san_xuat[1];
+  source.so_luong_can_san_xuat = 0;
+
+  await page.goto("/kho/yeu-cau/2");
+  const request = page.getByRole("dialog", { name: "Chi tiết yêu cầu" });
+  await request.getByRole("button", { name: "Tạo phiếu xuất thành phẩm", exact: true }).click();
+  const confirmation = page.locator("dialog.confirmation");
+  await expect(confirmation).toContainText("YCSX-202611-000002");
+  await confirmation.getByRole("button", { name: "Lưu nháp", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/kho\/phieu-xuat\/1$/);
+  const issue = page.getByRole("dialog", { name: "Chi tiết phiếu xuất" });
+  await expect(issue.getByText("Bản nháp", { exact: true })).toBeVisible();
+  const create = state.calls.find((call) => call.method === "POST" && call.path === "phieu_xuat");
+  expect(create.body).toEqual({ loai_phieu: "xuat_thanh_pham", yeu_cau_san_xuat_id: 2 });
+  expect(source.trang_thai).toBe("dang_thuc_hien");
+
+  await issue.getByRole("button", { name: "Gửi duyệt", exact: true }).click();
+  await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(issue.getByText("Chờ duyệt", { exact: true })).toBeVisible();
+  expect(source.trang_thai).toBe("dang_thuc_hien");
+
+  await issue.getByRole("button", { name: "Duyệt phiếu xuất", exact: true }).click();
+  await confirmation.getByRole("button", { name: "Xác nhận", exact: true }).click();
+  await expect(issue.getByText("Đã duyệt", { exact: true })).toBeVisible();
+  await issue.getByRole("link", { name: "YCSX-202611-000002", exact: true }).click();
+  await expect(request.getByText("Hoàn thành", { exact: true })).toBeVisible();
+  await expect(request.getByRole("link", { name: "Xem phiếu xuất thành phẩm" })).toBeVisible();
+  await expect(request.getByRole("button", { name: "Tạo phiếu xuất thành phẩm" })).toHaveCount(0);
+});
+
+test("manager can create an issue only for an eligible delivery request", async ({ page }) => {
+  const state = await installApi(page, { role: "quan_ly" });
+  state.resources.phieu_xuat = [];
+  const source = state.resources.yeu_cau_san_xuat[1];
+  source.started_at = "2026-11-05T01:00:00Z";
+  const completion = {
+    id: 1, ma_phieu: "HTSX-202611-000001", yeu_cau_san_xuat_id: 2,
+    so_luong_hoan_thanh: 8, trang_thai: "cho_duyet", finish_time: source.started_at,
+  };
+  state.resources.chung_tu_hoan_thanh_sx.push(completion);
+
+  await page.goto("/kho/yeu-cau/2");
+  const request = page.getByRole("dialog", { name: "Chi tiết yêu cầu" });
+  const create = request.getByRole("button", { name: "Tạo phiếu xuất thành phẩm", exact: true });
+  await expect(request.getByText(completion.ma_phieu)).toBeVisible();
+  await expect(create).toHaveCount(0);
+
+  completion.trang_thai = "da_duyet";
+  await page.reload();
+  await expect(create).toBeVisible();
+
+  source.loai_yeu_cau = "nhap_kho";
+  await page.reload();
+  await expect(request.getByText(completion.ma_phieu)).toBeVisible();
+  await expect(create).toHaveCount(0);
+  await expect(request.getByRole("link", { name: "Xem phiếu xuất thành phẩm" })).toHaveCount(0);
+});
+
 test("manager sees issue list and approval but cannot create or edit; other employee cannot send", async ({ page }) => {
   const manager = await installApi(page, { role: "quan_ly" });
   await page.goto("/kho/phieu-xuat/1");

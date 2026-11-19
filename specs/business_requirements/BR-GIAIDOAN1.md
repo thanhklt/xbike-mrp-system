@@ -279,7 +279,7 @@ Linh kiện chỉ rời kho khi Quản lý kho duyệt, và xuất đúng đủ 
 - Gửi phiếu cần xác nhận, chưa trừ tồn
 - Quản lý kho duyệt (có xác nhận): trừ tồn, ghi giá xuất theo đơn giá mặt hàng tại lúc duyệt, kết thúc giữ linh kiện
 - Quản lý kho từ chối phải ghi lý do; tồn và phần giữ hiện có không đổi; nhân viên gửi lại phiếu ngay từ trạng thái bị từ chối, không qua nháp
-- Quản lý kho không lập phiếu xuất; Nhân viên không duyệt
+- Quản lý kho không lập hoặc gửi phiếu xuất linh kiện. Nhân viên không duyệt
 - Quản lý kho có màn hình danh sách phiếu xuất riêng, gồm cả phiếu xuất linh kiện và phiếu xuất thành phẩm, mở từ đó để duyệt hoặc từ chối
 
 ## Out of Scope
@@ -328,11 +328,11 @@ Yêu cầu sản xuất để xuất giao chỉ được đóng khi toàn bộ s
 
 ## In Scope (Giai đoạn 1)
 - Chỉ áp dụng cho yêu cầu xuất giao; yêu cầu sản xuất nhập kho không có phiếu xuất thành phẩm (BR-007, BR-011)
-- Nhân viên lập phiếu xuất thành phẩm khi: yêu cầu không cần sản xuất (đủ thành phẩm từ đầu), hoặc chứng từ hoàn thành đã được duyệt
-- Mỗi yêu cầu một phiếu, đúng số lượng yêu cầu, nhân viên không sửa
+- Nhân viên được giao hoặc Quản lý kho lập và gửi phiếu xuất thành phẩm từ yêu cầu Đang thực hiện, khi yêu cầu không cần sản xuất hoặc chứng từ hoàn thành đã được duyệt
+- Mỗi yêu cầu một phiếu cho toàn bộ số lượng yêu cầu. Hệ thống lấy nội dung từ yêu cầu đã chốt
 - Gửi phiếu cần xác nhận, chưa trừ tồn
 - Quản lý kho duyệt: trừ thành phẩm, ghi giá xuất, kết thúc giữ thành phẩm, yêu cầu chuyển Hoàn thành
-- Từ chối và gửi lại như BR-010
+- Quản lý kho có thể duyệt phiếu xuất thành phẩm do mình lập. Khi phiếu bị từ chối, người có quyền gửi có thể gửi lại trực tiếp
 
 ## Out of Scope
 - Xuất thành phẩm từng phần

@@ -221,6 +221,12 @@ async def test_uc34_uc40_gi_ac01_02_db_auth_scope(
             json={"loai_phieu": "xuat_linh_kien", "yeu_cau_san_xuat_id": source},
         )
         assert result.status_code == 403
+    manager_send = await client.post(
+        path + "/gui",
+        headers={**auth(1), "If-Match": created.headers["etag"]},
+        json={},
+    )
+    assert manager_send.status_code == 403
     # Role is read from DB even when the signed token claims admin.
     assert (
         await client.post(
@@ -229,6 +235,60 @@ async def test_uc34_uc40_gi_ac01_02_db_auth_scope(
             json={},
         )
     ).status_code == 403
+
+
+@pytest.mark.parametrize("production,available", [(0, 10), (7, 3)])
+async def test_uc37_uc38_manager_creates_sends_and_approves_finished_goods(
+    goods_issue_client,
+    goods_issue_auth,
+    goods_issue_scenario,
+    production,
+    available,
+):
+    client, auth, scenario = goods_issue_client, goods_issue_auth, goods_issue_scenario
+    source = await scenario.source(production=production, available=available)
+    await scenario.hold(source, scenario.output_id, available, "thanh_pham_co_san")
+    payload = {"loai_phieu": "xuat_thanh_pham", "yeu_cau_san_xuat_id": source}
+    if production:
+        premature = await client.post(BASE, headers=auth(1), json=payload)
+        assert premature.status_code == 409
+        completion = await scenario.completion(source, production)
+        await scenario.hold(source, scenario.output_id, production, "thanh_pham_san_xuat", completion)
+
+    assert (await client.post(BASE, headers=auth(4), json=payload)).status_code == 403
+    assert (await client.post(BASE, headers=auth(3), json=payload)).status_code == 403
+    initial = await scenario.snapshot()
+    created = await client.post(BASE, headers=auth(1), json=payload)
+    assert created.status_code == 201, created.text
+    path = created.headers["location"]
+    draft = created.json()["data"]
+    assert draft["nhan_vien_id"] == 1 and draft["trang_thai"] == "nhap"
+    assert draft["chi_tiet"][0]["so_luong"] == 10
+    assert (await client.post(BASE, headers=auth(1), json=payload)).status_code == 409
+    assert (await client.post(path + "/gui", headers=auth(1), json={})).status_code == 428
+
+    sent = await client.post(
+        path + "/gui", headers={**auth(1), "If-Match": created.headers["etag"]}, json={}
+    )
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["data"]["trang_thai"] == "cho_duyet"
+    pending = await scenario.snapshot()
+    for table in ("MatHang", "GiuHang", "GiaoDichKho", "YeuCauSanXuat"):
+        assert pending[table] == initial[table]
+
+    approved = await client.post(
+        path + "/duyet", headers={**auth(1), "If-Match": sent.headers["etag"]}, json={}
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["data"]["trang_thai"] == "da_duyet"
+    after = await scenario.snapshot()
+    assert after["MatHang"][-1]["so_luong_ton"] == 90
+    assert after["MatHang"][-1]["so_luong_dang_giu"] == 0
+    request = next(row for row in after["YeuCauSanXuat"] if row["id"] == source)
+    assert request["trang_thai"] == "hoan_thanh" and request["completed_at"] is not None
+    assert len(after["GiaoDichKho"]) == len(initial["GiaoDichKho"]) + 1
+    assert after["GiaoDichKho"][-1]["so_luong_bien_dong"] == -10
+    assert [row["thao_tac"] for row in after["LichSuThaoTac"]] == ["tao", "gui", "hoan_tat", "duyet"]
 
 
 @pytest.mark.parametrize(

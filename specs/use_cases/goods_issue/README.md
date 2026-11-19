@@ -112,12 +112,12 @@ tại; không nhận actor/role/người xử lý từ body. Kiểm tra quyền 
 | UC-34 | NV được giao lưu/gửi/gửi lại phiếu LK | Yêu cầu dang_thuc_hien, so_luong_can_san_xuat > 0, nhu cầu chốt và giữ LK hợp lệ |
 | UC-35 | QLK xác nhận duyệt LK | Phiếu cho_duyet, nguồn vẫn hợp lệ, đủ tồn và đúng phần giữ của yêu cầu |
 | UC-36 | QLK từ chối LK | Phiếu cho_duyet, lý do không trắng |
-| UC-37 | NV được giao lưu/gửi/gửi lại phiếu TP | Yêu cầu xuat_giao đang thực hiện; không cần sản xuất hoặc chứng từ hoàn thành đã duyệt; đủ phần TP giữ cho yêu cầu |
+| UC-37 | NV được giao hoặc QLK lưu/gửi/gửi lại phiếu TP | Yêu cầu xuat_giao đang thực hiện; không cần sản xuất hoặc chứng từ hoàn thành đã duyệt; đủ phần TP giữ khi duyệt |
 | UC-38 | QLK xác nhận duyệt TP | Phiếu cho_duyet, xuất toàn bộ số yêu cầu, đủ tồn và giữ TP của đúng yêu cầu |
 | UC-39 | QLK từ chối TP | Phiếu cho_duyet, lý do không trắng |
 | UC-40 | QLK xem/lọc danh sách, mở chi tiết | Không tạo tác động ghi dữ liệu |
 
-- QLK không lập/gửi phiếu; NV không duyệt/từ chối. QTV không truy cập phiếu xuất.
+- QLK được lập/gửi phiếu thành phẩm, duyệt và từ chối. Lập/gửi phiếu linh kiện thuộc NV được giao. QTV không truy cập phiếu xuất.
 - NV không vào danh sách QLK. NV chỉ đọc chi tiết và lập/gửi phiếu thuộc yêu cầu
   hiện được giao cho mình; không chỉ so actor với nhan_vien_id người lập phiếu.
 - Yêu cầu đã hủy/hoàn thành không được tiếp tục tạo/gửi/duyệt mới. Riêng replay
@@ -160,16 +160,16 @@ tại; không nhận actor/role/người xử lý từ body. Kiểm tra quyền 
 
 **UC-37 — Lập và gửi thành phẩm**
 
-1. NV mở yêu cầu xuat_giao được giao đang thực hiện; cấm nguồn nhap_kho.
+1. NV mở yêu cầu xuat_giao được giao đang thực hiện hoặc QLK mở chi tiết yêu cầu xuat_giao đang thực hiện; cấm nguồn nhap_kho.
 2. Kiểm tra không cần sản xuất, hoặc ChungTuHoanThanhSx của đúng yêu cầu đã da_duyet.
 3. Hệ thống tạo nháp một dòng TP bằng đúng YeuCauSanXuat.so_luong; không chỉ xuất
    phần sản xuất thêm. Nguồn giữ có thể gồm TP có sẵn và TP vừa sản xuất cho yêu cầu.
-4. NV xác nhận gửi/gửi lại như UC-34. Chưa trừ tồn, chưa kết thúc giữ, chưa hoàn thành
+4. NV được giao hoặc QLK xác nhận gửi/gửi lại. Chưa trừ tồn, chưa kết thúc giữ, chưa hoàn thành
    yêu cầu; giữ một phiếu cho yêu cầu/loại, không xuất từng phần.
 
 **UC-38 — Duyệt thành phẩm**
 
-1. QLK mở phiếu TP cho_duyet, xem và xác nhận tác động kho.
+1. QLK mở phiếu TP cho_duyet, kể cả phiếu do mình lập, xem và xác nhận tác động kho.
 2. Kiểm tra lại nguồn xuat_giao, toàn bộ lượng yêu cầu, điều kiện hoàn thành sản xuất,
    tồn và các khoản giữ TP đúng yêu cầu.
 3. Chốt giá, trừ đúng toàn bộ TP, kết thúc các khoản giữ tương ứng; ghi ledger âm
@@ -181,7 +181,7 @@ tại; không nhận actor/role/người xử lý từ body. Kiểm tra quyền 
 
 1. QLK nhập lý do cho phiếu TP cho_duyet.
 2. Kiểm tra quyền/phiên bản/trạng thái/lý do; chuyển tu_choi và ghi metadata/audit.
-3. Tồn và giữ TP không đổi; yêu cầu chưa hoàn thành; NV gửi lại trực tiếp theo UC-37.
+3. Tồn và giữ TP không đổi; yêu cầu chưa hoàn thành; NV được giao hoặc QLK gửi lại trực tiếp theo UC-37.
 
 **UC-40 — Tra cứu**
 
@@ -346,7 +346,7 @@ tác xác nhận/nút/màn hình và E2E API sản xuất gốc tiếp tục ho�
 | [UC-35](UC-35.md) | POST /{id}/duyet → approve | AC-1–3; GI-AC-08/12–17/21 | A `component_lifecycle`, P `two_sessions_one_posting`, `all_writes_rollback`, `replay_validates_format_and_performs_no_write` |
 | UC-35 | Port hủy → co_phieu_da_ghi_so/huy_phieu_chua_ghi_so | AC-4; GI-AC-22 | P `internal_cancel_ports`, `internal_cancel_joins_parent_rollback`; E2E hủy v4 hoãn, chưa báo toàn AC đạt |
 | [UC-36](UC-36.md) | POST /{id}/tu_choi, GET /{id}, POST /{id}/gui → reject_issue/get_issue/submit_issue | AC-1–3; GI-AC-07/10/11/16 | A `reject_resubmit[xuat_linh_kien]`, P `reject_vs_submit_or_replay`; UI hoãn |
-| [UC-37](UC-37.md) | POST collection, POST /{id}/gui → create_issue/submit_issue | AC-1–4; GI-AC-02/04/05/07/20 | A `finished_goods`, P `source_eligibility`, `inactive_output_before_creation` |
+| [UC-37](UC-37.md) | POST collection, POST /{id}/gui → create_issue/submit_issue | AC-1–6; GI-AC-02/04/05/07/20 | A `finished_goods`, `manager_creates_sends_and_approves_finished_goods`, `db_auth_scope`; P `source_eligibility`, `inactive_output_before_creation`; UI `issue-main-flow.spec.js` |
 | [UC-38](UC-38.md) | POST /{id}/duyet → approve, repository.update_progress | AC-1–3; GI-AC-09/12–17 | A `finished_goods`, P `all_writes_rollback[after_progress]`; E2E thực hiện sản xuất hoãn |
 | [UC-39](UC-39.md) | POST /{id}/tu_choi, GET /{id}, POST /{id}/gui → reject_issue/get_issue/submit_issue | AC-1–2; GI-AC-07/10/11 | A `reject_resubmit[xuat_thanh_pham]`; nút UI hoãn |
 | [UC-40](UC-40.md) | GET collection, GET /{id} → list_issues/get_issue | AC-1–3; GI-AC-01/18/19 | A `http_contract`, `db_auth_scope`, P `filter_dates_ties_and_readonly`; UI hoãn |

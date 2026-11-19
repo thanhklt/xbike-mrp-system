@@ -19,7 +19,8 @@ Nguồn: [spec](../../specs/use_cases/goods_issue/README.md),
 
 Cả tám endpoint trên được đăng ký. PATCH/DELETE `/{id}` trả 405; `/{id}/ve_nhap`
 và các alias xuất cũ không có route. Không tạo route `gui_lai`: gửi lại dùng `/gui`.
-QLK (`quan_ly`) đọc danh sách/chi tiết, duyệt, từ chối. NV (`nhan_vien`) đọc/lập/gửi
+QLK (`quan_ly`) đọc danh sách/chi tiết, lập và gửi phiếu thành phẩm, duyệt và từ chối.
+NV (`nhan_vien`) đọc/lập/gửi
 phiếu thuộc yêu cầu hiện được giao. QTV không được vào các endpoint này. JWT được
 kiểm tra chữ ký/hạn, tài khoản, hash phiên mật khẩu và vai trò hiện tại từ DB.
 Dependency hiện tại cũng xác minh `phien_ban_dang_nhap` theo auth của main.
@@ -184,7 +185,8 @@ sequenceDiagram
 ## POST /api/v1/phieu_xuat
 
 Input chỉ `{loai_phieu, yeu_cau_san_xuat_id}`. Loại `xuat_linh_kien` hoặc
-`xuat_thanh_pham`. Source giao đúng NV; LK cho phép `dang_thuc_hien` hoặc
+`xuat_thanh_pham`. NV phải được giao yêu cầu. QLK chỉ lập được phiếu thành phẩm.
+LK cho phép `dang_thuc_hien` hoặc
 `cho_bo_sung_linh_kien`, TP chỉ `dang_thuc_hien`. LK lấy đúng đủ
 NhuCauLinhKien đã chốt, cần lượng sản xuất > 0. TP chỉ `xuat_giao`, lượng toàn bộ yêu
 cầu; nếu cần sản xuất thì chứng từ hoàn thành của nguồn phải `da_duyet`. Không tính
@@ -193,7 +195,7 @@ lại BOM; TP đã ngừng vẫn được hoàn tất yêu cầu đã gửi hợ
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Assigned NV
+    actor C as NV duoc giao / QLK
     participant R as phieu_xuat.router / dependencies
     participant A as AuthService / NhanVienService
     participant N as SqlAlchemyNhanVienRepository
@@ -207,7 +209,7 @@ sequenceDiagram
     R->>A: current_payload / get_auth_identity
     A->>N: get_credentials_by_id
     N->>DB: Current employee and role
-    break Invalid credentials / not active NV
+    break Invalid credentials / actor outside QLK or NV
         R-->>C: 401 / 403
     end
     R->>R: Strict positive source ID, type, forbid extras and query
@@ -215,6 +217,9 @@ sequenceDiagram
         R-->>C: 422
     end
     R->>S: create_issue
+    break QLK attempts component issue
+        S-->>C: 403
+    end
     S->>T: Enter shared session transaction
     S->>P: lock_source(type, request_id)
     P->>DB: YCSX FOR UPDATE, frozen demand and completion projection
@@ -253,14 +258,15 @@ LK cho phép nguồn Đang thực hiện hoặc Chờ bổ sung linh kiện, đ�
 TP giữ điều kiện Đang thực hiện và đủ điều kiện xuất thành phẩm. Gửi không trừ tồn
 hoặc bổ sung phần giữ; nguồn thiếu hàng vẫn được gửi và phiếu chờ QLK duyệt khi đủ.
 
-Body bắt buộc `{}`. NV đúng nguồn gửi nháp hoặc gửi lại từ chối trực tiếp sang
+Body bắt buộc `{}`. NV đúng nguồn gửi cả hai loại. QLK chỉ gửi phiếu thành phẩm.
+Người có quyền gửi nháp hoặc gửi lại từ chối trực tiếp sang
 `cho_duyet`; giữ nguyên ID/chi tiết. Tăng phiên bản, cập nhật gui_at/updated_at,
 xóa metadata xử lý/lý do trên resource khi gửi lại; lý do cũ vẫn trong audit.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Assigned NV
+    actor C as NV duoc giao / QLK
     participant R as phieu_xuat.router / dependencies
     participant A as AuthService / NhanVienService
     participant N as SqlAlchemyNhanVienRepository
@@ -274,7 +280,7 @@ sequenceDiagram
     R->>A: current_payload / get_auth_identity
     A->>N: get_credentials_by_id
     N->>DB: Current account and role
-    break Invalid credentials / not active NV
+    break Invalid credentials / actor outside QLK or NV
         R-->>C: 401 / 403
     end
     R->>R: Validate ID, required empty body, no query, preserve all If-Match headers
@@ -285,7 +291,7 @@ sequenceDiagram
     S->>T: Enter transaction
     S->>P: lock_context
     P->>DB: Lock YCSX then PhieuXuat, ordered lines, completion if present
-    break Missing issue / wrong assignment
+    break Missing issue / wrong assignment / QLK sending component issue
         S->>T: Roll back
         S-->>C: 404 / 403
     end
@@ -314,7 +320,8 @@ sequenceDiagram
 
 ## POST /api/v1/phieu_xuat/{id}/duyet
 
-Body bắt buộc `{}`, QLK-only. Thứ tự khóa: nguồn YCSX → phiếu/chi tiết → chứng từ
+Body bắt buộc `{}`, QLK-only. QLK có thể duyệt phiếu thành phẩm do mình lập.
+Thứ tự khóa: nguồn YCSX → phiếu/chi tiết → chứng từ
 hoàn thành nếu có → MatHang tăng dần ID → GiuHang tăng dần item/ID. Nhu cầu đã chốt
 bất biến; chứng từ hoàn thành đã duyệt bất biến. Service kiểm tra lượng đúng đủ,
 giữ nguồn/loại/lượng/chứng từ đúng, tổng giữ khớp các khoản đang giữ, tồn khớp tổng

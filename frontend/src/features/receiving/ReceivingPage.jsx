@@ -399,11 +399,6 @@ function ReceiptEditor({
             ]}
           />
           <SavedLines lines={record.chi_tiet} items={items} prices />
-          <div className="actions">
-            <Link className="btn btn-primary" to={`/kho/dieu-chinh/moi?phieu_nhap_id=${record.id}`}>
-              Tạo phiếu điều chỉnh
-            </Link>
-          </div>
         </>
       )}
       {record && editable && (

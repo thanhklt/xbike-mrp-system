@@ -146,7 +146,7 @@ async def get_issue(
 )
 async def create_issue(
     payload: PhieuXuatCreate,
-    actor: EmployeeActor,
+    actor: ReadActor,
     service: Service,
     request_id: RequestId,
     request: Request,
@@ -168,7 +168,7 @@ async def create_issue(
 async def submit_issue(
     id: ResourceId,
     payload: EmptyInput,
-    actor: EmployeeActor,
+    actor: ReadActor,
     service: Service,
     if_match: IfMatch,
     request_id: RequestId,

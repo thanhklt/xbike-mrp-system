@@ -221,6 +221,9 @@ class PhieuXuatService:
         if source.assigned_id != int(actor["sub"]):
             raise ForbiddenException()
 
+    def _require_authoring_role(self, kind: str, actor: dict) -> None:
+        self._role(actor, "nhan_vien" if kind == "xuat_linh_kien" else None)
+
     async def _validate(
         self, kind: str, source: IssueSource, *, lock: bool = True
     ) -> list[IssuePart]:
@@ -320,12 +323,13 @@ class PhieuXuatService:
         self, payload: PhieuXuatCreate, actor: dict, request_id: str
     ) -> tuple[PhieuXuatResponse, str]:
         """UC-34/37: create exactly the request's frozen demand, without stock writes."""
-        self._role(actor, "nhan_vien")
+        self._require_authoring_role(payload.loai_phieu, actor)
         async with self.transaction:
             source = await self.repository.lock_source(
                 payload.loai_phieu, payload.yeu_cau_san_xuat_id
             )
-            self._assigned(source, actor)
+            if "quan_ly" not in actor["roles"]:
+                self._assigned(source, actor)
             await self._validate(payload.loai_phieu, source)
             if await self.repository.exists_for_source(source.request_id, payload.loai_phieu):
                 raise ConflictException(message="Issue already exists for this request and type")
@@ -337,10 +341,12 @@ class PhieuXuatService:
         self, issue_id: int, actor: dict, if_match: str | None, request_id: str
     ) -> tuple[PhieuXuatResponse, str]:
         """UC-34/37: submit or resubmit the same issue; rejected content is immutable."""
-        self._role(actor, "nhan_vien")
+        self._role(actor)
         async with self.transaction:
             before, source = await self._lock(issue_id, actor)
-            self._assigned(source, actor)
+            self._require_authoring_role(before.loai_phieu, actor)
+            if "quan_ly" not in actor["roles"]:
+                self._assigned(source, actor)
             self._version(before, self._require_if_match(if_match))
             if before.trang_thai not in {"nhap", "tu_choi"}:
                 raise InvalidWorkflowState()

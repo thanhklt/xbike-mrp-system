@@ -39,7 +39,7 @@ function ManagerIssuePage({ id }) {
     <>
       <PageHeader
         title="Phiếu xuất kho"
-        subtitle="Theo dõi, duyệt và từ chối phiếu xuất linh kiện, thành phẩm. Chỉ duyệt mới trừ tồn; nhân viên được giao lập phiếu từ yêu cầu."
+        subtitle="Theo dõi và duyệt phiếu xuất linh kiện, thành phẩm. Quản lý kho có thể lập phiếu xuất thành phẩm từ chi tiết yêu cầu."
       />
       <Collection
         collection={collection}
@@ -129,6 +129,9 @@ function ManagerIssueDetail({ snapshot, items }) {
         snapshot={snapshot}
         items={items}
         allowedActions={{
+          send: record.loai_phieu === "xuat_thanh_pham"
+            && ["nhap", "tu_choi"].includes(record.trang_thai)
+            && source.data?.data.trang_thai === "dang_thuc_hien",
           approve: record.trang_thai === "cho_duyet",
           reject: record.trang_thai === "cho_duyet",
         }}
