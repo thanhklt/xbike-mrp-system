@@ -79,7 +79,7 @@ Nguồn "Đề xuất khi lập UC (chưa xác nhận)" đánh dấu quy tắc c
 | [UC-34](goods_issue/UC-34.md) | Lập và gửi phiếu xuất linh kiện | NV | BR-010, BR-015, BR-016 |
 | [UC-35](goods_issue/UC-35.md) | Duyệt phiếu xuất linh kiện | QLK | BR-010, BR-013, BR-015, BR-016 |
 | [UC-36](goods_issue/UC-36.md) | Từ chối phiếu xuất linh kiện | QLK | BR-010, BR-015, BR-016 |
-| [UC-37](goods_issue/UC-37.md) | Lập và gửi phiếu xuất thành phẩm | NV | BR-012, BR-010, BR-015, BR-016 |
+| [UC-37](goods_issue/UC-37.md) | Lập và gửi phiếu xuất thành phẩm | NV được giao, QLK | BR-012, BR-010, BR-015, BR-016 |
 | [UC-38](goods_issue/UC-38.md) | Duyệt phiếu xuất thành phẩm | QLK | BR-012, BR-015, BR-016 |
 | [UC-39](goods_issue/UC-39.md) | Từ chối phiếu xuất thành phẩm | QLK | BR-012, BR-010, BR-015, BR-016 |
 | [UC-40](goods_issue/UC-40.md) | Xem danh sách phiếu xuất | QLK | BR-010, BR-012 |

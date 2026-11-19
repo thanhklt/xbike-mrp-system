@@ -769,8 +769,11 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
       if (["PATCH", "DELETE", "PUT"].includes(method) || action === "ve_nhap")
         return respond({ error: { message: "Không có thao tác này" } }, 405);
       if (!rawId && method === "POST") {
-        if (role !== "nhan_vien" || source?.nhan_vien_duoc_giao_id !== user.id)
+        const canCreate = (role === "quan_ly" && body.loai_phieu === "xuat_thanh_pham")
+          || (role === "nhan_vien" && source?.nhan_vien_duoc_giao_id === user.id);
+        if (!canCreate)
           return respond({ error: { message: "Không có quyền" } }, 403);
+        if (!source) return respond({ error: { message: "Không tìm thấy" } }, 404);
         if (Object.keys(body).sort().join(",") !== "loai_phieu,yeu_cau_san_xuat_id" ||
           !["xuat_linh_kien", "xuat_thanh_pham"].includes(body.loai_phieu))
           return respond({ error: { message: "Payload không đúng hợp đồng" } }, 422);
@@ -791,7 +794,9 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         return respond({ data: created, meta: {} }, 201, { etag: '"v1"' });
       }
       if (method === "POST" && action) {
-        if ((action === "gui" && role !== "nhan_vien") || (["duyet", "tu_choi"].includes(action) && role !== "quan_ly"))
+        const canSend = role === "nhan_vien"
+          || (role === "quan_ly" && record?.loai_phieu === "xuat_thanh_pham");
+        if ((action === "gui" && !canSend) || (["duyet", "tu_choi"].includes(action) && role !== "quan_ly"))
           return respond({ error: { message: "Không có quyền" } }, 403);
         if (action === "gui" && (Object.keys(body).length || !["nhap", "tu_choi"].includes(record?.trang_thai)))
           return respond({ error: { message: "Trạng thái hoặc payload không hợp lệ" } }, 409);
@@ -970,6 +975,10 @@ export async function installApi(page, { role = "quan_ly", authenticated = true,
         action === "gui" && resource === "yeu_cau_san_xuat"
           ? "da_gui"
           : transitions[action];
+    if (resource === "phieu_xuat" && action === "duyet" && record.loai_phieu === "xuat_thanh_pham") {
+      const source = state.resources.yeu_cau_san_xuat.find((entry) => entry.id === record.yeu_cau_san_xuat_id);
+      if (source) Object.assign(source, { trang_thai: "hoan_thanh", completed_at: now });
+    }
     if (action === "nhan_xu_ly") record.nguoi_xu_ly_id = user.id;
     if (action === "giai_quyet") Object.assign(record, body);
     if (resource === "bom") record.is_active = method !== "DELETE";

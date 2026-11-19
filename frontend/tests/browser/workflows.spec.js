@@ -196,7 +196,8 @@ test("supplier, completed receipt and BOM details omit removed controls and note
   await expect(detail.getByText("Chưa có API xóa nhà cung cấp.")).toHaveCount(0);
 
   await page.goto("/kho/phieu-nhap/2");
-  await expect(detail.getByRole("link", { name: "Tạo phiếu điều chỉnh", exact: true })).toBeVisible();
+  await expect(detail.getByText("Hoàn thành", { exact: true })).toBeVisible();
+  await expect(detail.getByRole("link", { name: "Tạo phiếu điều chỉnh", exact: true })).toHaveCount(0);
   await expect(detail.getByRole("button", { name: "Tạo ticket sự cố", exact: true })).toHaveCount(0);
   await expect(detail.getByText(/Ticket chỉ được sinh|Phiếu đã hoàn tất, nội dung bất biến/)).toHaveCount(0);
 

@@ -57,7 +57,7 @@ import {
   completionConfirmEntries,
   completionSendLabel,
 } from "./completionForm.js";
-import { canCreateIssue } from "../material-issuing/issueForm.js";
+import { canCreateIssue, isReadyForFinishedIssue } from "../material-issuing/issueForm.js";
 
 // UC-25 Xem danh sách yêu cầu sản xuất — Main 1–4; A1, A3 (specs/use_cases/production/UC-25.md)
 export function RequestsPage() {
@@ -364,7 +364,7 @@ function RequestEditor({ snapshot, items, employees, manager, base, userId, refr
           </div>
           <InfoGrid entries={requestDetailEntries(record, items, employees.data || [])} />
           <CompletionSection record={record} items={items} manager={manager} userId={userId} />
-          {!manager && <IssueLinks record={record} userId={userId} />}
+          {manager ? <FinishedIssueActions record={record} items={items} /> : <IssueLinks record={record} userId={userId} />}
         </>
       )}
       <ErrorNotice error={(showForm && error) || mutation.error} />
@@ -547,6 +547,69 @@ function RequestCheckCards({ rows }) {
         <InfoGrid entries={CHECK_COLUMNS.map((column) => [column.label, line[column.key]])} />
       </section>) : <Notice>Chưa có dữ liệu phù hợp.</Notice>}
     </div>;
+}
+
+// UC-37 — QLK lập phiếu thành phẩm từ yêu cầu xuất giao đủ điều kiện.
+function FinishedIssueActions({ record, items }) {
+  const canTrack = record.loai_yeu_cau === "xuat_giao"
+    && ["dang_thuc_hien", "hoan_thanh", "da_huy"].includes(record.trang_thai);
+  const trackingOptions = { staleTime: 0, refetchOnWindowFocus: true };
+  const issues = useResource(`${API.issues}/theo_yeu_cau/${record.id}`, {}, canTrack, trackingOptions);
+  const completion = useResource(`${API.requests}/${record.id}/chung_tu_hoan_thanh`, {},
+    Boolean(canTrack && record.started_at && record.so_luong_can_san_xuat > 0),
+    trackingOptions);
+  const mutation = useWrite();
+  const { confirm, notify } = useFeedback();
+  const navigate = useNavigate();
+
+  if (!canTrack) return null;
+  const finishedIssue = issues.data?.data.find((issue) => issue.loai_phieu === "xuat_thanh_pham");
+  const canCreate = !issues.isFetching && !completion.isFetching
+    && isReadyForFinishedIssue(record, completion.data?.data);
+
+  function createDraft() {
+    confirm({
+      title: "Tạo phiếu xuất thành phẩm",
+      description: record.ma_yeu_cau_san_xuat,
+      label: "Lưu nháp",
+      content: <InfoGrid entries={[
+        ["Thành phẩm", itemName(items, record.mat_hang_id)],
+        ["Số lượng xuất", number(record.so_luong)],
+      ]} />,
+      impact: "Tồn kho chỉ thay đổi khi duyệt phiếu xuất.",
+      onConfirm: async () => {
+        try {
+          const result = await mutation.mutateAsync({
+            path: API.issues,
+            body: { loai_phieu: "xuat_thanh_pham", yeu_cau_san_xuat_id: record.id },
+            versioned: false,
+          });
+          notify("Đã lưu nháp phiếu xuất thành phẩm.");
+          navigate(`/kho/phieu-xuat/${result.data.id}`);
+        } catch (error) {
+          if (error.status === 409) void issues.refetch();
+          throw error;
+        }
+      },
+    });
+  }
+
+  return (
+    <QueryState query={issues}>
+      {finishedIssue ? (
+        <div className="actions">
+          <Link className="btn btn-secondary" to={`/kho/phieu-xuat/${finishedIssue.id}`}>
+            Xem phiếu xuất thành phẩm
+          </Link>
+          <Badge status={finishedIssue.trang_thai} />
+        </div>
+      ) : canCreate && (
+        <div className="actions actions-end">
+          <Button onClick={createDraft} disabled={mutation.isPending}>Tạo phiếu xuất thành phẩm</Button>
+        </div>
+      )}
+    </QueryState>
+  );
 }
 
 function IssueLinks({ record, userId }) {
